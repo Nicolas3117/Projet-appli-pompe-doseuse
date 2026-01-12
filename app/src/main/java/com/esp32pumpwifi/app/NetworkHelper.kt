@@ -67,7 +67,8 @@ object NetworkHelper {
     fun sendProgram(
         context: Context,
         ip: String,
-        message: String
+        message: String,
+        onSuccess: () -> Unit = {}
     ) {
 
         // 🔒 SÉCURITÉ ABSOLUE
@@ -122,6 +123,7 @@ object NetworkHelper {
                         context,
                         "Programmation envoyée à l’ESP32"
                     )
+                    onSuccess()
                 }
 
             } catch (e: Exception) {

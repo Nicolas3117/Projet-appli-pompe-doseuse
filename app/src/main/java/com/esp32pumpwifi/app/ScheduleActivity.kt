@@ -16,20 +16,14 @@ import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.*
-import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
 class ScheduleActivity : AppCompatActivity() {
 
     private lateinit var viewPager: ViewPager2
     private lateinit var tabLayout: TabLayout
     private lateinit var adapter: PumpPagerAdapter
-    private val client = OkHttpClient()
-
     // ✅ Empreinte de la programmation envoyée / chargée
     private var lastProgramHash: String? = null
 
@@ -148,66 +142,26 @@ class ScheduleActivity : AppCompatActivity() {
     private fun sendSchedulesToESP32(active: EspModule) {
 
         val message = ProgramStore.buildMessage(this)
+        Log.i("SCHEDULE_SEND", "➡️ Envoi programmation via NetworkHelper")
 
-        val encoded = URLEncoder.encode(
-            message,
-            StandardCharsets.UTF_8.toString()
-        )
+        NetworkHelper.sendProgram(this, active.ip, message) {
+            // ✅ RESET DU CURSEUR : ON PART DE MAINTENANT
+            val now = System.currentTimeMillis()
+            val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
 
-        val url = "http://${active.ip}/program?message=$encoded"
-        Log.i("SCHEDULE_SEND", "➡️ $url")
+            for (pumpNum in 1..4) {
+                prefs.edit()
+                    .putLong(
+                        "esp_${active.id}_pump${pumpNum}_last_processed_time",
+                        now
+                    )
+                    .apply()
+            }
 
-        client.newCall(Request.Builder().url(url).get().build())
-            .enqueue(object : Callback {
-
-                override fun onFailure(call: Call, e: IOException) {
-                    runOnUiThread {
-                        Toast.makeText(
-                            this@ScheduleActivity,
-                            "Erreur d’envoi : ${e.message}",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-
-                override fun onResponse(call: Call, response: Response) {
-
-                    if (!response.isSuccessful) {
-                        runOnUiThread {
-                            Toast.makeText(
-                                this@ScheduleActivity,
-                                "Erreur ESP32 (${response.code})",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                        return
-                    }
-
-                    // ✅ RESET DU CURSEUR : ON PART DE MAINTENANT
-                    val now = System.currentTimeMillis()
-                    val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
-
-                    for (pumpNum in 1..4) {
-                        prefs.edit()
-                            .putLong(
-                                "esp_${active.id}_pump${pumpNum}_last_processed_time",
-                                now
-                            )
-                            .apply()
-                    }
-
-                    // ✅ La programmation envoyée devient la référence
-                    lastProgramHash =
-                        ProgramStore.buildMessage(this@ScheduleActivity)
-
-                    runOnUiThread {
-                        NetworkHelper.showSuccessToast(
-                            this@ScheduleActivity,
-                            "Programmation envoyée"
-                        )
-                    }
-                }
-            })
+            // ✅ La programmation envoyée devient la référence
+            lastProgramHash =
+                ProgramStore.buildMessage(this@ScheduleActivity)
+        }
     }
 
     // ------------------------------------------------------------
