@@ -6,6 +6,7 @@ import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -24,6 +25,7 @@ class ScheduleActivity : AppCompatActivity() {
     private lateinit var viewPager: ViewPager2
     private lateinit var tabLayout: TabLayout
     private lateinit var adapter: PumpPagerAdapter
+
     // ✅ Empreinte de la programmation envoyée / chargée
     private var lastProgramHash: String? = null
 
@@ -57,6 +59,39 @@ class ScheduleActivity : AppCompatActivity() {
 
         // ✅ Référence de départ
         lastProgramHash = ProgramStore.buildMessage(this)
+
+        // ✅ Remplacement de onBackPressed() (deprecated) par OnBackPressedDispatcher
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+
+                    val currentHash = ProgramStore.buildMessage(this@ScheduleActivity)
+                    val reallyModified =
+                        lastProgramHash != null && lastProgramHash != currentHash
+
+                    if (!reallyModified) {
+                        // Rien n'a changé → on quitte comme avant
+                        finish()
+                        return
+                    }
+
+                    AlertDialog.Builder(this@ScheduleActivity)
+                        .setTitle("Programmation non envoyée")
+                        .setMessage(
+                            "Vous avez modifié la programmation.\n" +
+                                    "Pensez à l’envoyer avant de quitter."
+                        )
+                        .setPositiveButton("Rester") { dialog, _ ->
+                            dialog.dismiss()
+                        }
+                        .setNegativeButton("Quitter") { _, _ ->
+                            finish()
+                        }
+                        .show()
+                }
+            }
+        )
     }
 
     // ------------------------------------------------------------
@@ -74,39 +109,6 @@ class ScheduleActivity : AppCompatActivity() {
         } else {
             super.onOptionsItemSelected(item)
         }
-    }
-
-    // ------------------------------------------------------------
-    // ⬅️ RETOUR PROTÉGÉ
-    // ------------------------------------------------------------
-    override fun onBackPressed() {
-        handleExit()
-    }
-
-    private fun handleExit() {
-
-        val currentHash = ProgramStore.buildMessage(this)
-        val reallyModified =
-            lastProgramHash != null && lastProgramHash != currentHash
-
-        if (!reallyModified) {
-            finish()
-            return
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("Programmation non envoyée")
-            .setMessage(
-                "Vous avez modifié la programmation.\n" +
-                        "Pensez à l’envoyer avant de quitter."
-            )
-            .setPositiveButton("Rester") { dialog, _ ->
-                dialog.dismiss()
-            }
-            .setNegativeButton("Quitter") { _, _ ->
-                finish()
-            }
-            .show()
     }
 
     // ------------------------------------------------------------
@@ -159,8 +161,7 @@ class ScheduleActivity : AppCompatActivity() {
             }
 
             // ✅ La programmation envoyée devient la référence
-            lastProgramHash =
-                ProgramStore.buildMessage(this@ScheduleActivity)
+            lastProgramHash = ProgramStore.buildMessage(this@ScheduleActivity)
         }
     }
 

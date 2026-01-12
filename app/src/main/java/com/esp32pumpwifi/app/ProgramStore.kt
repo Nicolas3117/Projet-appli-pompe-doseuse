@@ -237,7 +237,9 @@ object ProgramStore {
     // ---------------------------------------------------------------------
     fun buildMessage(context: Context): String {
 
-        val sb = StringBuilder(48 * 9)
+        // 4 pompes * 12 lignes * 9 chars = 432 chars
+        val totalLines = PUMP_COUNT * MAX_LINES_PER_PUMP
+        val sb = StringBuilder(totalLines * PLACEHOLDER.length)
 
         Log.e("PROGRAM_BUILD", "================ BUILD /program ================")
 

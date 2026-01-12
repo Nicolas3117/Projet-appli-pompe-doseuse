@@ -31,14 +31,14 @@ object NetworkHelper {
         Log.e("ESP32_MANUAL", "➡️ $urlString")
 
         CoroutineScope(Dispatchers.IO).launch {
+            var conn: HttpURLConnection? = null
             try {
-                val conn = URL(urlString).openConnection() as HttpURLConnection
+                conn = URL(urlString).openConnection() as HttpURLConnection
                 conn.requestMethod = "GET"
                 conn.connectTimeout = 1500
                 conn.readTimeout = 1500
 
                 conn.inputStream.bufferedReader().readText()
-                conn.disconnect()
 
                 withContext(Dispatchers.Main) {
                     showSuccessToast(
@@ -56,6 +56,11 @@ object NetworkHelper {
                         "⚠️ Aucun retour du module",
                         Toast.LENGTH_LONG
                     ).show()
+                }
+            } finally {
+                try {
+                    conn?.disconnect()
+                } catch (_: Exception) {
                 }
             }
         }
@@ -96,25 +101,27 @@ object NetworkHelper {
         Log.e("ESP32_PROGRAM", "LENGTH   = ${message.length}")
         Log.e("ESP32_PROGRAM", "URL LEN  = ${urlString.length}")
 
-        for (i in 0 until message.length step 9) {
-            val line = message.substring(i, i + 9)
-            Log.e(
-                "ESP32_PROGRAM",
-                "L${(i / 9) + 1}. '$line'"
-            )
+        // log par blocs de 9 chars, sans risque de crash
+        var idx = 0
+        var lineNum = 1
+        while (idx + 9 <= message.length) {
+            val line = message.substring(idx, idx + 9)
+            Log.e("ESP32_PROGRAM", "L$lineNum. '$line'")
+            idx += 9
+            lineNum += 1
         }
 
         Log.e("ESP32_PROGRAM", "================================================")
 
         CoroutineScope(Dispatchers.IO).launch {
+            var conn: HttpURLConnection? = null
             try {
-                val conn = URL(urlString).openConnection() as HttpURLConnection
+                conn = URL(urlString).openConnection() as HttpURLConnection
                 conn.requestMethod = "GET"
                 conn.connectTimeout = 3000
                 conn.readTimeout = 3000
 
                 val response = conn.inputStream.bufferedReader().readText()
-                conn.disconnect()
 
                 Log.e("ESP32_PROGRAM", "ESP32 RESPONSE = '$response'")
 
@@ -135,6 +142,11 @@ object NetworkHelper {
                         "Erreur réseau (programmation)",
                         Toast.LENGTH_LONG
                     ).show()
+                }
+            } finally {
+                try {
+                    conn?.disconnect()
+                } catch (_: Exception) {
                 }
             }
         }
