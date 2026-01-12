@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Thème clair, Material3, sans ActionBar -->
+    <style name="Theme.ESP32PumpControl" parent="Theme.Material3.Light.NoActionBar">
+
+        <!-- Couleurs principales -->
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorPrimaryContainer">@color/primaryContainer</item>
+        <item name="colorSecondary">@color/secondary</item>
+        <item name="colorSecondaryContainer">@color/secondaryContainer</item>
+
+        <!-- Fond -->
+        <item name="android:colorBackground">@color/background</item>
+
+        <!-- Texte global -->
+        <item name="android:textColorPrimary">@color/textPrimary</item>
+        <item name="android:textColorSecondary">@color/textSecondary</item>
+
+        <!-- Barres système -->
+        <item name="android:statusBarColor">@color/primary</item>
+        <item name="android:navigationBarColor">@color/background</item>
+
+        <!-- Forcer le texte noir dans les boutons -->
+        <item name="materialButtonStyle">@style/CustomButton</item>
+    </style>
+
+    <!-- Style personnalisé pour les boutons -->
+    <style name="CustomButton" parent="Widget.Material3.Button">
+        <item name="android:textColor">@color/textPrimary</item> <!-- Noir -->
+        <item name="backgroundTint">@color/primary</item> <!-- Gris foncé -->
+    </style>
+</resources>

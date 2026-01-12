@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- ================= BARRE SUPÉRIEURE ================= -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/tv_materiels_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Matériels"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:paddingBottom="8dp" />
+
+        <!-- 📊 Planning -->
+        <Button
+            android:id="@+id/btn_open_planning"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📊 Planning"
+            android:minHeight="48dp"
+            android:layout_marginEnd="8dp" />
+
+        <!-- ➕ Ajouter module -->
+        <Button
+            android:id="@+id/btn_add_module"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="+"
+            android:textSize="22sp"
+            android:minWidth="48dp"
+            android:minHeight="48dp" />
+    </LinearLayout>
+
+    <!-- ================= LISTE DES MODULES ESP32 ================= -->
+    <ListView
+        android:id="@+id/list_modules"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:divider="?android:attr/listDivider"
+        android:dividerHeight="1dp" />
+
+    <!-- ================= BOUTON ACCÈS POMPES ================= -->
+    <Button
+        android:id="@+id/btn_open_pumps"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Accéder aux pompes"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="12dp" />
+
+    <!-- ================= SÉPARATEUR ================= -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#CCCCCC"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="12dp" />
+
+    <!-- ================= TOGGLE ALERTES TELEGRAM ================= -->
+    <LinearLayout
+        android:id="@+id/layout_telegram_toggle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <ImageView
+            android:id="@+id/icon_telegram_toggle"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_expand_more"
+            android:rotation="-90" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="Alertes Telegram"
+            android:textStyle="bold"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <!-- ================= CONTENU TELEGRAM (CACHÉ) ================= -->
+    <LinearLayout
+        android:id="@+id/layout_telegram_content"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp">
+
+        <EditText
+            android:id="@+id/edit_telegram_token"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Token du bot Telegram"
+            android:inputType="text"
+            android:layout_marginTop="6dp" />
+
+        <EditText
+            android:id="@+id/edit_telegram_chat_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Chat ID Telegram"
+            android:inputType="text"
+            android:layout_marginTop="6dp" />
+
+        <TextView
+            android:id="@+id/tv_telegram_info"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Ces informations permettent l’envoi automatique des alertes (niveau bas, réservoir vide) vers Telegram."
+            android:textSize="12sp"
+            android:textColor="#666666"
+            android:layout_marginTop="4dp" />
+
+        <Button
+            android:id="@+id/btn_save_telegram"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Enregistrer Telegram"
+            android:layout_marginTop="8dp" />
+
+        <Button
+            android:id="@+id/btn_clear_telegram"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Effacer la configuration Telegram"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="#D32F2F"
+            android:textColor="@android:color/white" />
+    </LinearLayout>
+
+</LinearLayout>

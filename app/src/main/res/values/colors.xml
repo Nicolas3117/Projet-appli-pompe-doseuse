@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ================= COULEURS PRINCIPALES UI ================= -->
+
+    <color name="primary">#A0A0A0</color>
+    <color name="primaryContainer">#C0C0C0</color>
+    <color name="secondary">#FF1A1A</color>
+    <color name="secondaryContainer">#F0F0F0</color>
+
+    <!-- ================= FOND ================= -->
+
+    <color name="background">#D9D9D9</color>
+
+    <!-- ================= TEXTE ================= -->
+
+    <color name="textPrimary">#000000</color>
+    <color name="textSecondary">#444444</color>
+
+    <!-- ================= SWITCH ================= -->
+
+    <color name="switch_thumb_on">#003366</color>
+    <color name="switch_thumb_off">#CCCCCC</color>
+    <color name="switch_track_on">#99CCFF</color>
+    <color name="switch_track_off">#EEEEEE</color>
+
+    <!-- ================= JAUGES BIDONS ================= -->
+
+    <color name="tank_green">#4CAF50</color>
+    <color name="tank_orange">#FF9800</color>
+    <color name="tank_red">#F44336</color>
+
+    <!-- ================= PLANNING — COULEURS POMPES ================= -->
+    <!-- Utilisées par PlanningView -->
+
+    <color name="pump_1">#4CAF50</color>   <!-- Vert -->
+    <color name="pump_2">#2196F3</color>   <!-- Bleu -->
+    <color name="pump_3">#FF9800</color>   <!-- Orange -->
+    <color name="pump_4">#9C27B0</color>   <!-- Violet -->
+
+    <!-- ================= COULEURS UTILITAIRES ================= -->
+
+    <color name="black">#000000</color>
+    <color name="white">#FFFFFF</color>
+
+</resources>

@@ -1,0 +1,49 @@
+package com.esp32pumpwifi.app
+
+import android.content.Context
+import androidx.appcompat.app.AppCompatActivity
+import androidx.fragment.app.Fragment
+import androidx.viewpager2.adapter.FragmentStateAdapter
+
+class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activity) {
+
+    private val context = activity
+
+    // 🔵 Création des 4 fragments (1 par pompe)
+    private val fragments = List(4) { index ->
+        val pumpNumber = index + 1
+        PumpScheduleFragment.newInstance(pumpNumber)
+    }
+
+    override fun getItemCount(): Int = fragments.size
+
+    override fun createFragment(position: Int): Fragment = fragments[position]
+
+    // 🔵 Récupère toutes les programmations de toutes les pompes
+    fun getAllSchedules(): List<List<PumpSchedule>> {
+        return fragments.map { fragment ->
+            fragment.getSchedules()
+        }
+    }
+
+    // 🔵 Renvoie le nom personnalisé d'une pompe (pour les onglets)
+    fun getPumpName(position: Int): String {
+
+        val pumpNumber = position + 1
+        val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+
+        // 🔑 ESP actif obligatoire
+        val activeModule = Esp32Manager
+            .getAll(context)
+            .firstOrNull { it.isActive }
+
+        return if (activeModule != null) {
+            prefs.getString(
+                "esp_${activeModule.id}_pump${pumpNumber}_name",
+                "Pompe $pumpNumber"
+            ) ?: "Pompe $pumpNumber"
+        } else {
+            "Pompe $pumpNumber"
+        }
+    }
+}

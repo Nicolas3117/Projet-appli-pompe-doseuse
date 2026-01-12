@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="#E0E0E0"
+    android:layout_marginBottom="16dp">
+
+    <TextView
+        android:id="@+id/tv_title4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Pompe 4"
+        android:textStyle="bold"
+        android:textSize="18sp"
+        android:gravity="center"
+        android:layout_marginBottom="8dp" />
+
+    <EditText
+        android:id="@+id/edit_duration4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Durée (s)"
+        android:inputType="numberDecimal" />
+
+    <EditText
+        android:id="@+id/edit_volume4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Volume (mL)"
+        android:inputType="numberDecimal" />
+
+    <Button
+        android:id="@+id/btn_start4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Démarrer" />
+
+    <Button
+        android:id="@+id/btn_calc4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Calculer" />
+
+    <TextView
+        android:id="@+id/tv_result4"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:id="@+id/tv_tank_level4"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Restant : -- %" />
+
+    <EditText
+        android:id="@+id/edit_tank_capacity4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Volume du réservoir plein (mL)"
+        android:inputType="number" />
+
+    <EditText
+        android:id="@+id/edit_tank_alert4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Seuil d’alerte (%)"
+        android:inputType="number" />
+
+    <Button
+        android:id="@+id/btn_tank_reset4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Réservoir rechargé" />
+
+</LinearLayout>

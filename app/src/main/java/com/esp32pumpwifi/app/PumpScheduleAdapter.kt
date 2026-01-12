@@ -1,0 +1,178 @@
+package com.esp32pumpwifi.app
+
+import android.content.Context
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.*
+import androidx.appcompat.app.AlertDialog
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import kotlin.math.roundToInt
+
+class PumpScheduleAdapter(
+    private val context: Context,
+    private val schedules: MutableList<PumpSchedule>,
+    private val onScheduleChanged: () -> Unit
+) : BaseAdapter() {
+
+    private val gson = Gson()
+
+    override fun getCount(): Int = schedules.size
+    override fun getItem(position: Int): Any = schedules[position]
+
+    // ✅ FIX : Long obligatoire
+    override fun getItemId(position: Int): Long = position.toLong()
+
+    override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+
+        val view = convertView ?: LayoutInflater.from(context)
+            .inflate(R.layout.item_schedule, parent, false)
+
+        if (position !in schedules.indices) return view
+
+        val schedule = schedules[position]
+
+        val tvPump = view.findViewById<TextView>(R.id.tv_pump)
+        val tvTime = view.findViewById<TextView>(R.id.tv_time)
+        val tvQty = view.findViewById<TextView>(R.id.tv_quantity)
+        val swEnabled = view.findViewById<Switch>(R.id.sw_enabled)
+        val btnEdit = view.findViewById<Button>(R.id.btn_edit)
+        val btnDelete = view.findViewById<Button>(R.id.btn_delete)
+
+        // --- Affichage ---
+        tvPump.text = "Pompe ${schedule.pumpNumber}"
+        tvTime.text = schedule.time
+        tvQty.text = "${schedule.quantity} mL"
+
+        // --- Switch ON/OFF ---
+        swEnabled.setOnCheckedChangeListener(null)
+        swEnabled.isChecked = schedule.enabled
+        swEnabled.setOnCheckedChangeListener { _, checked ->
+            schedule.enabled = checked
+            onScheduleChanged()
+        }
+
+        // -----------------------------------------------------------------
+        // ✏ MODIFIER (AVEC CONTRÔLE CONFLITS)
+        // -----------------------------------------------------------------
+        btnEdit.setOnClickListener {
+
+            val dialogView = LayoutInflater.from(context)
+                .inflate(R.layout.dialog_add_schedule, null)
+
+            val etTime = dialogView.findViewById<EditText>(R.id.et_time)
+            val etQty = dialogView.findViewById<EditText>(R.id.et_quantity)
+
+            etTime.setText(schedule.time)
+            etQty.setText(schedule.quantity.toString())
+
+            AlertDialog.Builder(context)
+                .setTitle("Modifier la programmation")
+                .setView(dialogView)
+                .setPositiveButton("Enregistrer") { _, _ ->
+
+                    val newTime = etTime.text.toString().trim()
+                    val newQty = etQty.text.toString().toIntOrNull()
+
+                    if (!newTime.matches(Regex("""\d{2}:\d{2}""")) ||
+                        newQty == null || newQty <= 0
+                    ) {
+                        Toast.makeText(context, "Format invalide", Toast.LENGTH_SHORT).show()
+                        return@setPositiveButton
+                    }
+
+                    val conflict = detectConflict(
+                        pumpNumber = schedule.pumpNumber,
+                        newTime = newTime,
+                        newQty = newQty,
+                        editedIndex = position
+                    )
+
+                    if (conflict != null) {
+                        Toast.makeText(context, conflict, Toast.LENGTH_LONG).show()
+                        return@setPositiveButton
+                    }
+
+                    schedule.time = newTime
+                    schedule.quantity = newQty
+                    notifyDataSetChanged()
+                    onScheduleChanged()
+                }
+                .setNegativeButton("Annuler", null)
+                .show()
+        }
+
+        // -----------------------------------------------------------------
+        // 🗑 SUPPRIMER
+        // -----------------------------------------------------------------
+        btnDelete.setOnClickListener {
+            schedules.removeAt(position)
+            notifyDataSetChanged()
+            onScheduleChanged()
+        }
+
+        return view
+    }
+
+    // ---------------------------------------------------------------------
+    // 🔍 DÉTECTION CONFLITS + MINUIT
+    // ---------------------------------------------------------------------
+    private fun detectConflict(
+        pumpNumber: Int,
+        newTime: String,
+        newQty: Int,
+        editedIndex: Int
+    ): String? {
+
+        val active = Esp32Manager.getActive(context) ?: return null
+        val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+
+        val (h, m) = newTime.split(":").map { it.toInt() }
+        val startSec = h * 3600 + m * 60
+
+        val flowKey = "esp_${active.id}_pump${pumpNumber}_flow"
+        val flow = prefs.getFloat(flowKey, 0f)
+        if (flow <= 0f) return "Pompe $pumpNumber non calibrée"
+
+        val durationSec = (newQty / flow).roundToInt()
+        val endSec = startSec + durationSec
+
+        if (endSec >= 86400) {
+            return "La distribution dépasse minuit (00:00)"
+        }
+
+        for (p in 1..4) {
+
+            val json = context
+                .getSharedPreferences("schedules", Context.MODE_PRIVATE)
+                .getString("esp_${active.id}_pump$p", null)
+                ?: continue
+
+            val type = object : TypeToken<MutableList<PumpSchedule>>() {}.type
+            val list: MutableList<PumpSchedule> = gson.fromJson(json, type)
+
+            for ((index, s) in list.withIndex()) {
+
+                if (p == pumpNumber && index == editedIndex) continue
+                if (!s.enabled) continue
+
+                val (hh, mm) = s.time.split(":").map { it.toInt() }
+                val sStart = hh * 3600 + mm * 60
+
+                val flowOther =
+                    prefs.getFloat("esp_${active.id}_pump${p}_flow", flow)
+
+                val sDuration = (s.quantity / flowOther).roundToInt()
+                val sEnd = sStart + sDuration
+
+                if (startSec < sEnd && endSec > sStart) {
+                    val conflictTime = "%02d:%02d".format(hh, mm)
+                    return "Conflit avec Pompe $p à $conflictTime"
+                }
+            }
+        }
+
+        return null
+    }
+}

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 🟢 Vert doux, agréable -->
+    <solid android:color="#A5D6A7" />
+
+    <!-- Coins arrondis -->
+    <corners android:radius="20dp" />
+
+    <!-- Padding interne -->
+    <padding
+        android:left="16dp"
+        android:top="10dp"
+        android:right="16dp"
+        android:bottom="10dp" />
+
+</shape>

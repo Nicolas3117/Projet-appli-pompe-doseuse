@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:padding="16dp"
+    android:background="#ECECEC">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- ================= ÉTALONNAGE & RÉSERVOIRS ================= -->
+
+        <!-- ================= POMPE 1 ================= -->
+        <include
+            layout="@layout/block_pump_calibration_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp" />
+
+        <!-- ================= POMPE 2 ================= -->
+        <include
+            layout="@layout/block_pump_calibration_2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp" />
+
+        <!-- ================= POMPE 3 ================= -->
+        <include
+            layout="@layout/block_pump_calibration_3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp" />
+
+        <!-- ================= POMPE 4 ================= -->
+        <include
+            layout="@layout/block_pump_calibration_4"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp" />
+
+        <!-- ================= RENOMMAGE (EN BAS) ================= -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Renommer les pompes"
+            android:textStyle="bold"
+            android:textSize="20sp"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/edit_name1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Nom pompe 1"
+            android:inputType="textCapWords"
+            android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/edit_name2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Nom pompe 2"
+            android:inputType="textCapWords"
+            android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/edit_name3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Nom pompe 3"
+            android:inputType="textCapWords"
+            android:layout_marginBottom="6dp" />
+
+        <EditText
+            android:id="@+id/edit_name4"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Nom pompe 4"
+            android:inputType="textCapWords"
+            android:layout_marginBottom="10dp" />
+
+        <Button
+            android:id="@+id/btn_save_names"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Enregistrer les noms" />
+
+    </LinearLayout>
+</ScrollView>

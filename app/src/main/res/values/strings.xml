@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Nom de l'application -->
+    <string name="app_name">Pompes Doseuses</string>
+
+    <!-- Libellés pompes -->
+    <string name="pump_label">Pompe %1$d</string>
+    <string name="default_pump_name">Pompe %1$d</string>
+
+    <!-- Dosage manuel -->
+    <string name="manual_dose_button">Dosage manuel : %1$s</string>
+    <string name="manual_dose_pump1">Dosage manuel pompe 1</string>
+    <string name="manual_dose_pump2">Dosage manuel pompe 2</string>
+    <string name="manual_dose_pump3">Dosage manuel pompe 3</string>
+    <string name="manual_dose_pump4">Dosage manuel pompe 4</string>
+    <string name="start_dose">Démarrer le dosage</string>
+
+    <!-- Débit / Volume -->
+    <string name="volume_hint">Volume (mL)</string>
+    <string name="flow_result">Débit mesuré : %.1f mL/s</string>
+    <string name="flow_saved">Débit sauvegardé : %.1f mL/s</string>
+
+    <!-- Messages pompe -->
+    <string name="pump_start">Pompe %1$d : %2$.1f mL (~%3$d s)</string>
+    <string name="pump_start_calib">Pompe %1$d lancée pour %2$d s</string>
+
+    <!-- Titres / navigation -->
+    <string name="title_control_pumps">Contrôle des pompes</string>
+    <string name="btn_change_esp">Changer d’ESP32</string>
+    <string name="btn_schedule_pumps">Programmation des pompes</string>
+    <string name="btn_calibration">Réglages des pompes</string>
+    <string name="btn_materials">Matériels</string>
+
+    <!-- Messages d'erreur -->
+    <string name="error_invalid_volume">Erreur : veuillez entrer un volume valide (mL)</string>
+    <string name="error_no_ip">Erreur : adresse IP non définie</string>
+    <string name="error_not_calibrated">Erreur : Pompe %1$d non calibrée</string>
+    <string name="error_invalid_duration">Erreur : durée calculée invalide</string>
+    <string name="error_invalid_duration_input">Erreur : saisissez une durée supérieure à 0</string>
+
+    <!-- ✅ Module sélectionné -->
+    <string name="active_module_label">Sélectionné : %1$s</string>
+
+</resources>
