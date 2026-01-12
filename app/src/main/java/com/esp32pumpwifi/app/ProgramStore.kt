@@ -14,16 +14,24 @@ private const val PLACEHOLDER = "000000000"
 object ProgramStore {
 
     // ---------------------------------------------------------------------
-    // 🔑 Clé prefs pour UNE pompe (1..4)
+    // 🔑 Clés prefs
     // ---------------------------------------------------------------------
     private fun legacyKey(pump: Int) = "pump${pump}_program"
-
     private fun keyForEsp(espId: Long, pump: Int) = "esp_${espId}_pump${pump}_program"
 
+    /**
+     * Clé basée sur le module actif.
+     * ✅ Inclut la migration legacy -> espKey (une seule fois) :
+     * - si legacy existe et espKey vide, on copie legacy -> espKey
+     * - puis on supprime legacy
+     */
     private fun key(context: Context, pump: Int): String {
         val active = Esp32Manager.getActive(context) ?: return legacyKey(pump)
-        val espKey = keyForEsp(active.id, pump)
+
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val espKey = keyForEsp(active.id, pump)
+
+        // Migration douce depuis l'ancien stockage global (mono-ESP)
         val legacy = legacyKey(pump)
         val legacyValue = prefs.getString(legacy, null)
         if (!legacyValue.isNullOrBlank()) {
@@ -34,12 +42,23 @@ object ProgramStore {
             editor.remove(legacy)
             editor.apply()
         }
+
         return espKey
+    }
+
+    /**
+     * Clé explicite par espId.
+     * ⚠️ IMPORTANT : ici on NE MIGRE PAS le legacy.
+     * Le recalcul multi-modules doit lire EXACTEMENT la clé du module demandé
+     * sans dépendre du module actif ni déplacer des données legacy au mauvais moment.
+     */
+    private fun key(context: Context, espId: Long, pump: Int): String {
+        return keyForEsp(espId, pump)
     }
 
     // ---------------------------------------------------------------------
     // 🔤 NOM PERSONNALISÉ POMPE (par ESP32)
-    // Convention utilisée ailleurs : esp_${espId}_pump${pump}_name
+    // Convention : esp_${espId}_pump${pump}_name
     // Fallback : "Pompe X"
     // ---------------------------------------------------------------------
     private fun getPumpName(
@@ -53,10 +72,9 @@ object ProgramStore {
     }
 
     // ---------------------------------------------------------------------
-    // 📥 Chargement lignes encodées (9 chars EXACTS)
+    // 📥 Chargement lignes encodées (9 chars EXACTS) — module actif
     // ---------------------------------------------------------------------
     fun loadEncodedLines(context: Context, pump: Int): MutableList<String> {
-
         val raw = context
             .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(key(context, pump), "")
@@ -71,7 +89,29 @@ object ProgramStore {
     }
 
     // ---------------------------------------------------------------------
-    // 💾 Sauvegarde lignes encodées
+    // 📥 Chargement lignes encodées (9 chars EXACTS) — espId explicite
+    // (utilisé pour recalcul multi-modules)
+    // ---------------------------------------------------------------------
+    fun loadEncodedLines(
+        context: Context,
+        espId: Long,
+        pump: Int
+    ): MutableList<String> {
+        val raw = context
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(key(context, espId, pump), "")
+            ?: ""
+
+        if (raw.isBlank()) return mutableListOf()
+
+        return raw.split(';')
+            .map { it.trim() }
+            .filter { it.length == 9 && it.all(Char::isDigit) }
+            .toMutableList()
+    }
+
+    // ---------------------------------------------------------------------
+    // 💾 Sauvegarde lignes encodées — module actif
     // ---------------------------------------------------------------------
     private fun saveEncodedLines(
         context: Context,
@@ -92,7 +132,6 @@ object ProgramStore {
         pump: Int,
         line: ProgramLine
     ): Boolean {
-
         val list = loadEncodedLines(context, pump)
         if (list.size >= MAX_LINES_PER_PUMP) return false
 
@@ -113,7 +152,6 @@ object ProgramStore {
         pump: Int,
         index: Int
     ): Boolean {
-
         val list = loadEncodedLines(context, pump)
         if (index !in list.indices) return false
 
@@ -149,14 +187,12 @@ object ProgramStore {
 
     // ---------------------------------------------------------------------
     // 🔒 SÉCURITÉ 1 — INTERDICTION même pompe (BLOQUANT)
-    // (ancienne version conservée)
     // ---------------------------------------------------------------------
     fun hasBlockingConflict(
         context: Context,
         pump: Int,
         newLine: ProgramLine
     ): String? {
-
         val newEncoded = newLine.toEsp9()
         val newStart = decodeStartMinutes(newEncoded)
         val newEnd = newStart + decodeDurationMinutes(newEncoded)
@@ -178,8 +214,7 @@ object ProgramStore {
     }
 
     // ---------------------------------------------------------------------
-    // 🔒 SÉCURITÉ 1 — INTERDICTION même pompe (BLOQUANT)
-    // (nouvelle version : renvoie un message avec nom personnalisé)
+    // 🔒 SÉCURITÉ 1 — message prêt (nom personnalisé)
     // ---------------------------------------------------------------------
     fun getBlockingConflictMessage(
         context: Context,
@@ -187,24 +222,19 @@ object ProgramStore {
         pump: Int,
         newLine: ProgramLine
     ): String? {
-
         val conflictLine = hasBlockingConflict(context, pump, newLine) ?: return null
         val pumpName = getPumpName(context, espId, pump)
-
-        // On peut garder simple : le message est prêt pour Toast
         return "Distribution simultanée détectée sur $pumpName"
     }
 
     // ---------------------------------------------------------------------
     // ⚠️ SÉCURITÉ 2 — AVERTISSEMENT autres pompes
-    // (ancienne version conservée)
     // ---------------------------------------------------------------------
     fun getCrossPumpConflicts(
         context: Context,
         pump: Int,
         newLine: ProgramLine
     ): List<Pair<Int, String>> {
-
         val conflicts = mutableListOf<Pair<Int, String>>()
 
         val newEncoded = newLine.toEsp9()
@@ -212,11 +242,9 @@ object ProgramStore {
         val newEnd = newStart + decodeDurationMinutes(newEncoded)
 
         for (p in 1..PUMP_COUNT) {
-
             if (p == pump) continue
 
             val lines = loadEncodedLines(context, p)
-
             for (line in lines) {
                 if (line == PLACEHOLDER) continue
 
@@ -233,8 +261,7 @@ object ProgramStore {
     }
 
     // ---------------------------------------------------------------------
-    // ⚠️ SÉCURITÉ 2 — AVERTISSEMENT autres pompes
-    // (nouvelle version : renvoie liste des pompes en conflit avec noms)
+    // ⚠️ SÉCURITÉ 2 — noms uniques des pompes en conflit
     // ---------------------------------------------------------------------
     fun getCrossPumpConflictNames(
         context: Context,
@@ -242,20 +269,17 @@ object ProgramStore {
         pump: Int,
         newLine: ProgramLine
     ): List<String> {
-
         val raw = getCrossPumpConflicts(context, pump, newLine)
         if (raw.isEmpty()) return emptyList()
 
-        // noms uniques (si plusieurs overlaps sur même pompe)
         return raw.map { (p, _) -> getPumpName(context, espId, p) }
             .distinct()
     }
 
     // ---------------------------------------------------------------------
-    // 🚀 CONSTRUCTION MESSAGE FINAL POUR /program (INCHANGÉ)
+    // 🚀 CONSTRUCTION MESSAGE FINAL POUR /program (module actif)
     // ---------------------------------------------------------------------
     fun buildMessage(context: Context): String {
-
         // 4 pompes * 12 lignes * 9 chars = 432 chars
         val totalLines = PUMP_COUNT * MAX_LINES_PER_PUMP
         val sb = StringBuilder(totalLines * PLACEHOLDER.length)
@@ -291,7 +315,7 @@ object ProgramStore {
     }
 
     // ---------------------------------------------------------------------
-    // 🧹 Effacement total (toutes pompes)
+    // 🧹 Effacement total (toutes pompes) — module actif
     // ---------------------------------------------------------------------
     fun clearAll(context: Context) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

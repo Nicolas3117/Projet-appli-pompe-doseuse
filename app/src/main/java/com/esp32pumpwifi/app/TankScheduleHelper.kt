@@ -6,6 +6,8 @@ import kotlin.math.max
 
 object TankScheduleHelper {
 
+    private const val PLACEHOLDER = "000000000"
+
     // ------------------------------------------------------------------
     // 📊 CONSOMMATION JOURNALIÈRE
     // ------------------------------------------------------------------
@@ -17,22 +19,20 @@ object TankScheduleHelper {
 
         val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
-        val flow =
-            prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
-
+        val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
         if (flow <= 0f) return 0f
 
         var totalMl = 0f
 
-        val encodedLines =
-            ProgramStore.loadEncodedLines(context, pumpNum)
+        // ✅ IMPORTANT : lecture par espId explicite (multi-modules safe)
+        val encodedLines = ProgramStore.loadEncodedLines(context, espId, pumpNum)
 
         for (line in encodedLines) {
-            if (line == "000000000") continue
-            if (line[0] != '1') continue
+            if (line == PLACEHOLDER) continue
+            if (line.isEmpty() || line[0] != '1') continue
 
-            val durationSeconds =
-                line.substring(6, 9).toIntOrNull() ?: continue
+            val durationSeconds = line.substring(6, 9).toIntOrNull() ?: continue
+            if (durationSeconds <= 0) continue
 
             totalMl += durationSeconds * flow
         }
@@ -41,7 +41,7 @@ object TankScheduleHelper {
     }
 
     // ------------------------------------------------------------------
-    // 🔄 RECALCUL GLOBAL (SAFE)
+    // 🔄 RECALCUL GLOBAL (SAFE multi-modules)
     // ------------------------------------------------------------------
     fun recalculateFromLastTime(
         context: Context,
@@ -53,29 +53,24 @@ object TankScheduleHelper {
 
         for (pumpNum in 1..4) {
 
-            val flow =
-                prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
-
+            val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
             if (flow <= 0f) continue
 
-            val lastKey =
-                "esp_${espId}_pump${pumpNum}_last_processed_time"
+            val lastKey = "esp_${espId}_pump${pumpNum}_last_processed_time"
 
-            var lastProcessed =
-                prefs.getLong(lastKey, 0L)
-
+            var lastProcessed = prefs.getLong(lastKey, 0L)
             if (lastProcessed == 0L) {
                 prefs.edit().putLong(lastKey, now).apply()
                 continue
             }
 
-            val encodedLines =
-                ProgramStore.loadEncodedLines(context, pumpNum)
+            // ✅ IMPORTANT : lecture par espId explicite (multi-modules safe)
+            val encodedLines = ProgramStore.loadEncodedLines(context, espId, pumpNum)
 
             for (line in encodedLines) {
 
-                if (line == "000000000") continue
-                if (line[0] != '1') continue
+                if (line == PLACEHOLDER) continue
+                if (line.isEmpty() || line[0] != '1') continue
 
                 val hh = line.substring(2, 4).toInt()
                 val mm = line.substring(4, 6).toInt()
@@ -101,8 +96,7 @@ object TankScheduleHelper {
                             set(Calendar.MINUTE, mm)
                         }
 
-                    val endMillis =
-                        start.timeInMillis + durationSeconds * 1000L
+                    val endMillis = start.timeInMillis + durationSeconds * 1000L
 
                     if (endMillis > lastProcessed && endMillis <= now) {
 
@@ -125,20 +119,17 @@ object TankScheduleHelper {
             // =====================================================
             // 🔔 UNE SEULE ALERTE — ÉTAT FINAL
             // =====================================================
-            val level =
-                TankManager.getTankLevel(context, espId, pumpNum)
+            val level = TankManager.getTankLevel(context, espId, pumpNum)
 
+            // ✅ Compat : lit d'abord alert_threshold, sinon low_threshold, sinon 20
             val threshold =
                 prefs.getInt(
                     "esp_${espId}_pump${pumpNum}_alert_threshold",
-                    20
+                    prefs.getInt("esp_${espId}_pump${pumpNum}_low_threshold", 20)
                 )
 
-            val lowAlertKey =
-                "esp_${espId}_pump${pumpNum}_low_alert_sent"
-
-            val emptyAlertKey =
-                "esp_${espId}_pump${pumpNum}_empty_alert_sent"
+            val lowAlertKey = "esp_${espId}_pump${pumpNum}_low_alert_sent"
+            val emptyAlertKey = "esp_${espId}_pump${pumpNum}_empty_alert_sent"
 
             val (newLow, newEmpty) =
                 TankAlertManager.checkAndNotify(
