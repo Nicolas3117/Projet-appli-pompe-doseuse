@@ -16,7 +16,26 @@ object ProgramStore {
     // ---------------------------------------------------------------------
     // 🔑 Clé prefs pour UNE pompe (1..4)
     // ---------------------------------------------------------------------
-    private fun key(pump: Int) = "pump${pump}_program"
+    private fun legacyKey(pump: Int) = "pump${pump}_program"
+
+    private fun keyForEsp(espId: Long, pump: Int) = "esp_${espId}_pump${pump}_program"
+
+    private fun key(context: Context, pump: Int): String {
+        val active = Esp32Manager.getActive(context) ?: return legacyKey(pump)
+        val espKey = keyForEsp(active.id, pump)
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val legacy = legacyKey(pump)
+        val legacyValue = prefs.getString(legacy, null)
+        if (!legacyValue.isNullOrBlank()) {
+            val editor = prefs.edit()
+            if (prefs.getString(espKey, null).isNullOrBlank()) {
+                editor.putString(espKey, legacyValue)
+            }
+            editor.remove(legacy)
+            editor.apply()
+        }
+        return espKey
+    }
 
     // ---------------------------------------------------------------------
     // 🔤 NOM PERSONNALISÉ POMPE (par ESP32)
@@ -40,7 +59,7 @@ object ProgramStore {
 
         val raw = context
             .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(key(pump), "")
+            .getString(key(context, pump), "")
             ?: ""
 
         if (raw.isBlank()) return mutableListOf()
@@ -61,7 +80,7 @@ object ProgramStore {
     ) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
-            .putString(key(pump), lines.joinToString(";"))
+            .putString(key(context, pump), lines.joinToString(";"))
             .apply()
     }
 
@@ -278,7 +297,7 @@ object ProgramStore {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val editor = prefs.edit()
         for (p in 1..PUMP_COUNT) {
-            editor.putString(key(p), "")
+            editor.putString(key(context, p), "")
         }
         editor.apply()
 
