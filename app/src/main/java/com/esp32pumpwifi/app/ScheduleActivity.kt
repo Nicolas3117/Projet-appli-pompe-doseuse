@@ -35,6 +35,13 @@ class ScheduleActivity : AppCompatActivity() {
 
         setSupportActionBar(findViewById<MaterialToolbar>(R.id.toolbar))
 
+        val activeModule = Esp32Manager.getActive(this)
+        if (activeModule == null) {
+            Toast.makeText(this, "Veuillez sélectionner un module", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+
         viewPager = findViewById(R.id.viewPager)
         tabLayout = findViewById(R.id.tabLayout)
 
@@ -42,19 +49,13 @@ class ScheduleActivity : AppCompatActivity() {
         viewPager.adapter = adapter
 
         val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
-        val activeModule = Esp32Manager.getActive(this)
-        val moduleId = activeModule?.id
+        val moduleId = activeModule.id
 
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
-            tab.text =
-                if (moduleId != null) {
-                    prefs.getString(
-                        "esp_${moduleId}_pump${position + 1}_name",
-                        "Pompe ${position + 1}"
-                    )
-                } else {
-                    "Pompe ${position + 1}"
-                }
+            tab.text = prefs.getString(
+                "esp_${moduleId}_pump${position + 1}_name",
+                "Pompe ${position + 1}"
+            )
         }.attach()
 
         // ✅ Référence de départ
