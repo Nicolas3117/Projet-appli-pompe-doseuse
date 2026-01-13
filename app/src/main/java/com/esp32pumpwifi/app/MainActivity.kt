@@ -5,11 +5,13 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -35,6 +37,8 @@ class MainActivity : AppCompatActivity() {
 
     // ✅ AJOUT : rafraîchissement UI périodique
     private var uiRefreshJob: Job? = null
+
+    private var hasShownNotFoundPopup = false
 
     private val pumpButtons by lazy {
         listOf(
@@ -171,10 +175,15 @@ class MainActivity : AppCompatActivity() {
 
         connectionJob = lifecycleScope.launch {
             while (true) {
-                val connected = testConnection(module)
-                updateConnectionUi(connected)
-                setManualButtonsEnabled(connected)
-                if (connected) break
+                val result = testConnectionWithFallback(module)
+                updateConnectionUi(result.connected)
+                setManualButtonsEnabled(result.connected)
+                if (result.connected) {
+                    hasShownNotFoundPopup = false
+                }
+                if (result.fallbackAttempted && !result.fallbackSucceeded) {
+                    maybeShowEsp32NotFoundPopup()
+                }
                 delay(2000)
             }
         }
@@ -185,21 +194,74 @@ class MainActivity : AppCompatActivity() {
         connectionJob = null
     }
 
-    private suspend fun testConnection(module: EspModule): Boolean =
+    private suspend fun testConnectionWithFallback(
+        module: EspModule
+    ): ConnectionCheckResult =
         withContext(Dispatchers.IO) {
-            try {
-                val url = URL("http://${module.ip}/id")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 800
-                    readTimeout = 800
-                }
-                val response = conn.inputStream.bufferedReader().readText()
-                conn.disconnect()
-                response.startsWith("POMPE_NAME=")
-            } catch (_: Exception) {
-                false
+            val primaryConnected = testConnectionForIp(module.ip)
+            if (primaryConnected) {
+                return@withContext ConnectionCheckResult(true, false, false)
             }
+
+            val fallbackIp = "192.168.4.1"
+            if (module.ip == fallbackIp) {
+                return@withContext ConnectionCheckResult(false, true, false)
+            }
+            val fallbackConnected = testConnectionForIp(fallbackIp)
+            if (fallbackConnected) {
+                if (module.ip != fallbackIp) {
+                    module.ip = fallbackIp
+                    Esp32Manager.update(this@MainActivity, module)
+                }
+                return@withContext ConnectionCheckResult(true, true, true)
+            }
+
+            ConnectionCheckResult(false, true, false)
         }
+
+    private fun testConnectionForIp(ip: String): Boolean {
+        return try {
+            val url = URL("http://$ip/id")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 800
+                readTimeout = 800
+            }
+            val response = conn.inputStream.bufferedReader().readText()
+            conn.disconnect()
+            response.startsWith("POMPE_NAME=")
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun maybeShowEsp32NotFoundPopup() {
+        if (hasShownNotFoundPopup) return
+        hasShownNotFoundPopup = true
+
+        AlertDialog.Builder(this)
+            .setTitle("ESP32 non trouvé")
+            .setMessage(
+                "Vérifie que ton téléphone est connecté au bon Wi-Fi " +
+                    "(box ou réseau pompe-XXXX)."
+            )
+            .setPositiveButton("Rafraîchir") { _, _ ->
+                startActivity(
+                    Intent(this, MaterielsActivity::class.java)
+                        .putExtra(MaterielsActivity.EXTRA_AUTO_SCAN, true)
+                )
+            }
+            .setNegativeButton("Annuler", null)
+            .setNeutralButton("Paramètres Wi-Fi") { _, _ ->
+                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+            }
+            .show()
+    }
+
+    private data class ConnectionCheckResult(
+        val connected: Boolean,
+        val fallbackAttempted: Boolean,
+        val fallbackSucceeded: Boolean
+    )
 
     // ---------------------------------------------------------
     // UI connexion

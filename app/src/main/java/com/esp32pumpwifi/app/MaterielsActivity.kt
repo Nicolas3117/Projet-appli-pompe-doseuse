@@ -14,6 +14,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class MaterielsActivity : AppCompatActivity() {
+    companion object {
+        const val EXTRA_AUTO_SCAN = "extra_auto_scan"
+    }
 
     private lateinit var listView: ListView
     private lateinit var adapter: EspModuleAdapter
@@ -99,6 +102,10 @@ class MaterielsActivity : AppCompatActivity() {
 
         btnSaveTelegram.setOnClickListener { saveTelegramConfig() }
         btnClearTelegram.setOnClickListener { clearTelegramConfigWithConfirm() }
+
+        if (intent.getBooleanExtra(EXTRA_AUTO_SCAN, false)) {
+            scanForEsp32()
+        }
     }
 
     override fun onResume() {
