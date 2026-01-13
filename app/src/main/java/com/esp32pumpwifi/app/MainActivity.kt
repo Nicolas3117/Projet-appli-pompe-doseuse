@@ -41,6 +41,10 @@ class MainActivity : AppCompatActivity() {
     private var uiRefreshJob: Job? = null
     private var hasShownNotFoundPopup = false
 
+    // pour tenter un retour STA automatique sans appuyer sur "+"
+    private var lastStaProbeMs = 0L
+    private val STA_PROBE_INTERVAL_MS = 10_000L
+
     private val pumpButtons by lazy {
         listOf(
             findViewById<Button>(R.id.btn_pump1),
@@ -58,9 +62,9 @@ class MainActivity : AppCompatActivity() {
         tvConnectionStatus = findViewById(R.id.tv_connection_status)
         tankSummaryContainer = findViewById(R.id.layout_tank_summary)
 
-        // 🔔 Permission notifications (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
+            if (
+                ContextCompat.checkSelfPermission(
                     this,
                     Manifest.permission.POST_NOTIFICATIONS
                 ) != PackageManager.PERMISSION_GRANTED
@@ -73,7 +77,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 🔁 Worker global (background / app fermée)
         val periodicWork =
             PeriodicWorkRequestBuilder<TankRecalcWorker>(15, TimeUnit.MINUTES)
                 .addTag("tank_recalc")
@@ -86,7 +89,6 @@ class MainActivity : AppCompatActivity() {
                 periodicWork
             )
 
-        // Navigation
         findViewById<Button>(R.id.btn_materials).setOnClickListener {
             startActivity(Intent(this, MaterielsActivity::class.java))
         }
@@ -122,15 +124,13 @@ class MainActivity : AppCompatActivity() {
         tvActiveModule.text = "Sélectionné : ${activeModule.displayName}"
         updatePumpButtons(activeModule)
 
-        // Recalcul + UI
         TankScheduleHelper.recalculateFromLastTime(this, activeModule.id)
         updateTankSummary(activeModule)
 
         updateConnectionUi(null)
         setManualButtonsEnabled(false)
-        startConnectionWatcher(activeModule)
+        startConnectionWatcher()
 
-        // ✅ rafraîchissement UI périodique pendant que l’écran reste ouvert
         uiRefreshJob?.cancel()
         uiRefreshJob = lifecycleScope.launch {
             while (true) {
@@ -150,32 +150,30 @@ class MainActivity : AppCompatActivity() {
         uiRefreshJob = null
     }
 
-    // ---------------------------------------------------------
-    // 🔁 Surveillance connexion (sécurisée multi-modules)
-    // ---------------------------------------------------------
-    private fun startConnectionWatcher(module: EspModule) {
+    // ================== WATCHER (corrigé) ==================
+    // IMPORTANT : ne capture plus un "module" figé.
+    // On relit le module actif à chaque boucle => pas de faux statuts pour d'autres modules.
+    private fun startConnectionWatcher() {
         if (connectionJob?.isActive == true) return
 
         connectionJob = lifecycleScope.launch {
             while (true) {
 
-                // ✅ IMPORTANT : n’update l’UI que si ce module est encore le module actif
                 val active = Esp32Manager.getActive(this@MainActivity)
-                if (active == null || active.id != module.id) {
+                if (active == null) {
                     updateConnectionUi(false)
                     setManualButtonsEnabled(false)
                     delay(2000)
                     continue
                 }
 
-                // ✅ anti-concurrence
                 if (!isCheckingConnection.compareAndSet(false, true)) {
                     delay(2000)
                     continue
                 }
 
                 try {
-                    val result = testConnectionWithFallback(module)
+                    val result = testConnectionWithFallbackAndStaReturn(active)
 
                     if (result.connected) {
                         consecutiveFailures = 0
@@ -205,22 +203,52 @@ class MainActivity : AppCompatActivity() {
         connectionJob?.cancel()
         connectionJob = null
         consecutiveFailures = 0
+        lastStaProbeMs = 0L
     }
 
-    // ---------------------------------------------------------
-    // 🌐 Réseau : STA IP + fallback AP sécurisé par identité
-    // ---------------------------------------------------------
-    private suspend fun testConnectionWithFallback(module: EspModule): ConnectionCheckResult =
+    // ================== RÉSEAU ==================
+    /**
+     * Règle :
+     * - Connecté = /id répond ET POMPE_NAME == module.internalName
+     * - Fallback AP = test 192.168.4.1 avec identité
+     * - Retour STA auto = si on est en AP, tester périodiquement le dernier IP STA connu
+     */
+    private suspend fun testConnectionWithFallbackAndStaReturn(module: EspModule): ConnectionCheckResult =
         withContext(Dispatchers.IO) {
-            if (testConnectionForIp(module.ip)) {
+
+            // 1) test sur IP actuelle (STA ou AP) avec identité stricte
+            val primaryPumpName = fetchPumpNameForIp(module.ip)
+            if (primaryPumpName == module.internalName) {
+
+                // mémorise last STA IP si on est en STA (pas 192.168.4.1)
+                if (module.ip != "192.168.4.1") {
+                    saveLastStaIp(module.id, module.ip)
+                } else {
+                    // on est en AP : tenter un retour STA automatique (sans scan +)
+                    val now = System.currentTimeMillis()
+                    if (now - lastStaProbeMs >= STA_PROBE_INTERVAL_MS) {
+                        lastStaProbeMs = now
+                        val lastSta = loadLastStaIp(module.id)
+                        if (!lastSta.isNullOrBlank() && lastSta != "192.168.4.1") {
+                            val staName = fetchPumpNameForIp(lastSta)
+                            if (staName == module.internalName) {
+                                module.ip = lastSta
+                                Esp32Manager.update(this@MainActivity, module)
+                                saveLastStaIp(module.id, lastSta)
+                                return@withContext ConnectionCheckResult(true, false, false)
+                            }
+                        }
+                    }
+                }
+
                 return@withContext ConnectionCheckResult(true, false, false)
             }
 
+            // 2) fallback AP
             val fallbackIp = "192.168.4.1"
-            val pumpName = fetchPumpNameForIp(fallbackIp)
+            val fallbackPumpName = fetchPumpNameForIp(fallbackIp)
 
-            // ✅ N’assigner 192.168.4.1 QUE si le /id correspond au module
-            if (pumpName == module.internalName) {
+            if (fallbackPumpName == module.internalName) {
                 if (module.ip != fallbackIp) {
                     module.ip = fallbackIp
                     Esp32Manager.update(this@MainActivity, module)
@@ -228,6 +256,7 @@ class MainActivity : AppCompatActivity() {
                 return@withContext ConnectionCheckResult(true, true, true)
             }
 
+            // 3) rien trouvé pour CE module
             ConnectionCheckResult(false, true, false)
         }
 
@@ -257,51 +286,45 @@ class MainActivity : AppCompatActivity() {
         val prefix = "POMPE_NAME="
         val index = response.indexOf(prefix)
         if (index == -1) return null
-        return response.substring(index + prefix.length).trim().ifEmpty { null }
+        val start = index + prefix.length
+        val end = response.indexOf('\n', start).let { if (it == -1) response.length else it }
+        return response.substring(start, end).trim().ifEmpty { null }
     }
 
-    private fun testConnectionForIp(ip: String): Boolean {
-        var conn: HttpURLConnection? = null
-        return try {
-            val url = URL("http://$ip/id")
-            conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 800
-                readTimeout = 800
-                useCaches = false
-                setRequestProperty("Connection", "close")
-            }
-            conn.inputStream.bufferedReader().use { it.readText() }
-                .startsWith("POMPE_NAME=")
-        } catch (_: Exception) {
-            false
-        } finally {
-            try {
-                conn?.disconnect()
-            } catch (_: Exception) {
-            }
-        }
+    private fun saveLastStaIp(moduleId: Long, ip: String) {
+        getSharedPreferences("prefs", MODE_PRIVATE)
+            .edit()
+            .putString("esp_${moduleId}_last_sta_ip", ip)
+            .apply()
     }
 
-    // ---------------------------------------------------------
-    // UI
-    // ---------------------------------------------------------
+    private fun loadLastStaIp(moduleId: Long): String? {
+        return getSharedPreferences("prefs", MODE_PRIVATE)
+            .getString("esp_${moduleId}_last_sta_ip", null)
+    }
+
+    // ================== UI ==================
     private fun maybeShowEsp32NotFoundPopup() {
         if (hasShownNotFoundPopup) return
         hasShownNotFoundPopup = true
 
         AlertDialog.Builder(this)
-            .setTitle("ESP32 non trouvé")
-            .setMessage("Vérifie le Wi-Fi (box ou pompe-XXXX).")
+            .setTitle("Pompe doseuse non trouvée")
+            .setMessage(
+                "La pompe n’est pas joignable.\n\n" +
+                        "Connecte-toi au Wi-Fi pompe-XXXX (mode AP) et appuie sur Rafraîchir, ou\n\n" +
+                        "Reviens sur le Wi-Fi de ta box, puis appuie sur Rafraîchir."
+            )
             .setPositiveButton("Rafraîchir") { _, _ ->
                 startActivity(
                     Intent(this, MaterielsActivity::class.java)
                         .putExtra(MaterielsActivity.EXTRA_AUTO_SCAN, true)
                 )
             }
-            .setNegativeButton("Annuler", null)
-            .setNeutralButton("Paramètres Wi-Fi") { _, _ ->
+            .setNeutralButton("Paramètre Wi-Fi") { _, _ ->
                 startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
             }
+            .setNegativeButton("Annuler", null)
             .show()
     }
 
@@ -311,7 +334,7 @@ class MainActivity : AppCompatActivity() {
         val fallbackSucceeded: Boolean
     )
 
-    // ✅ Couleurs restaurées (gris / vert / rouge)
+    // ✅ Couleurs OK
     private fun updateConnectionUi(connected: Boolean?) {
         when (connected) {
             null -> {
@@ -340,9 +363,6 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    // ---------------------------------------------------------
-    // 🏷️ Boutons pompes
-    // ---------------------------------------------------------
     private fun updatePumpButtons(activeModule: EspModule) {
         val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
         for (pumpNum in 1..4) {
@@ -359,9 +379,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------------------------------------------------
-    // 🟢 Résumé réservoirs
-    // ---------------------------------------------------------
     private fun updateTankSummary(activeModule: EspModule) {
         tankSummaryContainer.visibility = View.VISIBLE
         for (pumpNum in 1..4) updateOneTank(activeModule.id, pumpNum)
@@ -371,6 +388,8 @@ class MainActivity : AppCompatActivity() {
         val nameId = resources.getIdentifier("tv_tank_name_$pumpNum", "id", packageName)
         val progressId = resources.getIdentifier("pb_tank_$pumpNum", "id", packageName)
         val daysId = resources.getIdentifier("tv_tank_days_$pumpNum", "id", packageName)
+        val percentId = resources.getIdentifier("tv_tank_percent_$pumpNum", "id", packageName)
+        val mlId = resources.getIdentifier("tv_tank_ml_$pumpNum", "id", packageName)
 
         if (nameId == 0 || progressId == 0 || daysId == 0) return
 
@@ -381,8 +400,8 @@ class MainActivity : AppCompatActivity() {
             tvName = findViewById(nameId),
             progress = findViewById(progressId),
             tvDays = findViewById(daysId),
-            tvPercent = null,
-            tvMl = null
+            tvPercent = if (percentId != 0) findViewById(percentId) else null,
+            tvMl = if (mlId != 0) findViewById(mlId) else null
         )
     }
 }
