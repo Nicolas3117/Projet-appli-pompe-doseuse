@@ -1,9 +1,11 @@
 package com.esp32pumpwifi.app
 
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Bundle
-import android.widget.CheckBox
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.checkbox.MaterialCheckBox
 
 class PlanningActivity : AppCompatActivity() {
 
@@ -23,7 +25,7 @@ class PlanningActivity : AppCompatActivity() {
         setupEspSelector()
     }
 
-    // ================= ESP CHECKBOX =================
+    // ================= ESP CHECKBOX (Material) =================
 
     private fun setupEspSelector() {
 
@@ -34,10 +36,18 @@ class PlanningActivity : AppCompatActivity() {
 
         allModules.forEach { esp ->
 
-            val checkBox = CheckBox(this).apply {
+            val checkBox = MaterialCheckBox(this).apply {
                 text = esp.displayName
                 isChecked = esp.isActive
-                textSize = 14f
+                textSize = 15f
+
+                // ✅ Couleur du check (style Material)
+                buttonTintList = ColorStateList.valueOf(
+                    Color.parseColor("#2196F3")
+                )
+
+                // ✅ Un peu plus d’air (lisible)
+                setPadding(32, 16, 32, 16)
 
                 setOnCheckedChangeListener { _, checked ->
                     if (checked) {
