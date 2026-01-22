@@ -67,14 +67,27 @@ object TankScheduleHelper {
             // ✅ IMPORTANT : lecture par espId explicite (multi-modules safe)
             val encodedLines = ProgramStore.loadEncodedLines(context, espId, pumpNum)
 
-            for (line in encodedLines) {
+            // ✅ FIX: trie par heure/minute (évite de “sauter” des doses si l’ordre n’est pas garanti)
+            val sortedLines =
+                encodedLines
+                    .filter { it != PLACEHOLDER && it.isNotEmpty() && it[0] == '1' && it.length >= 9 }
+                    .sortedWith(
+                        compareBy(
+                            { it.substring(2, 4).toIntOrNull() ?: -1 },
+                            { it.substring(4, 6).toIntOrNull() ?: -1 }
+                        )
+                    )
 
+            for (line in sortedLines) {
+
+                // (garde-fous)
                 if (line == PLACEHOLDER) continue
                 if (line.isEmpty() || line[0] != '1') continue
+                if (line.length < 9) continue
 
-                val hh = line.substring(2, 4).toInt()
-                val mm = line.substring(4, 6).toInt()
-                val durationSeconds = line.substring(6, 9).toInt()
+                val hh = line.substring(2, 4).toIntOrNull() ?: continue
+                val mm = line.substring(4, 6).toIntOrNull() ?: continue
+                val durationSeconds = line.substring(6, 9).toIntOrNull() ?: continue
                 if (durationSeconds <= 0) continue
 
                 val volumeMl = durationSeconds * flow
