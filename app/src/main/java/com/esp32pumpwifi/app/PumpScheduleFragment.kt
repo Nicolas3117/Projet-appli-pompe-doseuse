@@ -1,4 +1,3 @@
-// PumpScheduleFragment.kt
 package com.esp32pumpwifi.app
 
 import android.content.Context
@@ -432,10 +431,15 @@ class PumpScheduleFragment : Fragment() {
 
         val minMl = flow
 
+        var ignoredCount = 0
+
         for (s in schedules) {
 
             if (!s.enabled) continue
-            if (s.quantity.toFloat() < minMl) continue
+            if (s.quantity.toFloat() < minMl) {
+                ignoredCount++
+                continue
+            }
 
             val (hh, mm) =
                 s.time.split(":").map { it.toInt() }
@@ -443,8 +447,14 @@ class PumpScheduleFragment : Fragment() {
             val seconds =
                 (s.quantity.toFloat() / flow).roundToInt()
 
-            if (seconds < 1) continue
-            if (seconds > MAX_PUMP_DURATION_SEC) continue
+            if (seconds < 1) {
+                ignoredCount++
+                continue
+            }
+            if (seconds > MAX_PUMP_DURATION_SEC) {
+                ignoredCount++
+                continue
+            }
 
             val line =
                 ProgramLine(
@@ -460,6 +470,14 @@ class PumpScheduleFragment : Fragment() {
                 pumpNumber,
                 line
             )
+        }
+
+        if (ignoredCount > 0) {
+            Toast.makeText(
+                requireContext(),
+                "⚠️ $ignoredCount programmation(s) ignorée(s) (quantité trop faible ou trop longue)",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 

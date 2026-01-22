@@ -1,4 +1,3 @@
-// PumpScheduleAdapter.kt
 package com.esp32pumpwifi.app
 
 import android.content.Context
@@ -16,6 +15,10 @@ class PumpScheduleAdapter(
     private val schedules: MutableList<PumpSchedule>,
     private val onScheduleChanged: () -> Unit
 ) : BaseAdapter() {
+
+    companion object {
+        const val MAX_PUMP_DURATION_SEC = 600
+    }
 
     private val gson = Gson()
 
@@ -95,19 +98,35 @@ class PumpScheduleAdapter(
                         editedIndex = sourceIndex
                     )
 
-                    if (conflict != null) {
+                    if (conflict.blockingMessage != null) {
                         // ✅ popup seulement pour "Quantité trop faible" ou "Durée trop longue"
-                        if (conflict.startsWith("Quantité trop faible") ||
-                            conflict.startsWith("Durée trop longue")
+                        if (conflict.blockingMessage.startsWith("Quantité trop faible") ||
+                            conflict.blockingMessage.startsWith("Durée trop longue")
                         ) {
                             AlertDialog.Builder(context)
                                 .setTitle("Impossible")
-                                .setMessage(conflict)
+                                .setMessage(conflict.blockingMessage)
                                 .setPositiveButton("OK", null)
                                 .show()
                         } else {
-                            Toast.makeText(context, conflict, Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, conflict.blockingMessage, Toast.LENGTH_LONG)
+                                .show()
                         }
+                        return@setPositiveButton
+                    }
+
+                    if (conflict.warningMessage != null) {
+                        AlertDialog.Builder(context)
+                            .setTitle("Chevauchement détecté")
+                            .setMessage(conflict.warningMessage)
+                            .setPositiveButton("Oui") { _, _ ->
+                                schedule.time = newTime
+                                schedule.quantity = newQty
+                                notifyDataSetChanged()
+                                onScheduleChanged()
+                            }
+                            .setNegativeButton("Non", null)
+                            .show()
                         return@setPositiveButton
                     }
 
@@ -140,9 +159,9 @@ class PumpScheduleAdapter(
         newTime: String,
         newQty: Int,
         editedIndex: Int
-    ): String? {
+    ): ConflictResult {
 
-        val active = Esp32Manager.getActive(context) ?: return null
+        val active = Esp32Manager.getActive(context) ?: return ConflictResult()
         val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
         val (h, m) = newTime.split(":").map { it.toInt() }
@@ -150,33 +169,44 @@ class PumpScheduleAdapter(
 
         val flowKey = "esp_${active.id}_pump${pumpNumber}_flow"
         val flow = prefs.getFloat(flowKey, 0f)
-        if (flow <= 0f) return "Pompe non calibrée"
+        if (flow <= 0f) return ConflictResult(blockingMessage = "Pompe non calibrée")
 
         // ✅ Règle : on bloque si qty < flow (1 seconde)
         val minMl = flow
         if (newQty.toFloat() < minMl) {
-            return "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
-                    "Débit actuel : ${"%.1f".format(flow)} mL/s"
+            return ConflictResult(
+                blockingMessage =
+                    "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
+                            "Débit actuel : ${"%.1f".format(flow)} mL/s"
+            )
         }
 
         val durationSec = (newQty.toFloat() / flow).roundToInt()
 
         if (durationSec < 1) {
-            return "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
-                    "Débit actuel : ${"%.1f".format(flow)} mL/s"
+            return ConflictResult(
+                blockingMessage =
+                    "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
+                            "Débit actuel : ${"%.1f".format(flow)} mL/s"
+            )
         }
 
         // ✅ limite firmware 600s en édition aussi (sinon surprise ESP32)
-        if (durationSec > PumpScheduleFragment.MAX_PUMP_DURATION_SEC) {
-            return "Durée trop longue : maximum ${PumpScheduleFragment.MAX_PUMP_DURATION_SEC}s\n" +
-                    "Réduis la quantité ou recalibre le débit."
+        if (durationSec > MAX_PUMP_DURATION_SEC) {
+            return ConflictResult(
+                blockingMessage =
+                    "Durée trop longue : maximum ${MAX_PUMP_DURATION_SEC}s\n" +
+                            "Réduis la quantité ou recalibre le débit."
+            )
         }
 
         val endSec = startSec + durationSec
 
         if (endSec >= 86400) {
-            return "La distribution dépasse minuit (00:00)"
+            return ConflictResult(blockingMessage = "La distribution dépasse minuit (00:00)")
         }
+
+        val overlappingPumps = mutableSetOf<String>()
 
         for (p in 1..4) {
 
@@ -204,17 +234,49 @@ class PumpScheduleAdapter(
 
                 val sDuration = (s.quantity.toFloat() / flowOther).roundToInt()
                 if (sDuration < 1) continue
-                if (sDuration > PumpScheduleFragment.MAX_PUMP_DURATION_SEC) continue
+                if (sDuration > MAX_PUMP_DURATION_SEC) continue
 
                 val sEnd = sStart + sDuration
 
                 if (startSec < sEnd && endSec > sStart) {
-                    val conflictTime = "%02d:%02d".format(hh, mm)
-                    return "Conflit avec Pompe $p à $conflictTime"
+                    // ✅ même pompe = bloquant (message cohérent)
+                    if (p == pumpNumber) {
+                        return ConflictResult(
+                            blockingMessage =
+                                "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}"
+                        )
+                    }
+                    overlappingPumps.add(getPumpName(p))
                 }
             }
         }
 
-        return null
+        if (overlappingPumps.isNotEmpty()) {
+            return ConflictResult(
+                warningMessage =
+                    "La distribution chevauche les pompes suivantes :\n" +
+                            overlappingPumps.joinToString(
+                                separator = "\n• ",
+                                prefix = "• "
+                            ) +
+                            "\n\nVoulez-vous continuer ?"
+            )
+        }
+
+        return ConflictResult()
     }
+
+    private fun getPumpName(pump: Int): String {
+        val active = Esp32Manager.getActive(context) ?: return "Pompe $pump"
+        val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        return prefs.getString(
+            "esp_${active.id}_pump${pump}_name",
+            "Pompe $pump"
+        ) ?: "Pompe $pump"
+    }
+
+    data class ConflictResult(
+        val blockingMessage: String? = null,
+        val warningMessage: String? = null
+    )
 }
