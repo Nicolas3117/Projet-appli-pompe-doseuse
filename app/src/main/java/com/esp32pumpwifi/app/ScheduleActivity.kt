@@ -32,6 +32,9 @@ class ScheduleActivity : AppCompatActivity() {
     // ✅ /read : 48 lignes de 9 chiffres
     private val line9DigitsRegex = Regex("""\d{9}""")
 
+    // ✅ Auto-check : 1 fois par ouverture d’activité
+    private var didAutoCheckOnResume = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_schedule)
@@ -75,7 +78,6 @@ class ScheduleActivity : AppCompatActivity() {
                         lastProgramHash != null && lastProgramHash != currentHash
 
                     if (!reallyModified) {
-                        // Rien n'a changé → on quitte comme avant
                         finish()
                         return
                     }
@@ -90,12 +92,25 @@ class ScheduleActivity : AppCompatActivity() {
                             dialog.dismiss()
                         }
                         .setNegativeButton("Quitter") { _, _ ->
-                            finish()
+                            // ✅ Dernier check uniquement si connecté, puis on quitte
+                            finalCheckOnExitThenFinish()
                         }
                         .show()
                 }
             }
         )
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        if (didAutoCheckOnResume) return
+        didAutoCheckOnResume = true
+
+        // ✅ Auto-check silencieux à l’ouverture :
+        // - identique => rien
+        // - différent => popup détaillée
+        autoCheckProgramOnOpen()
     }
 
     // ------------------------------------------------------------
@@ -148,7 +163,7 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------
-    // 1️⃣ bis : Vérification ESP32 puis lecture /read + comparaison
+    // 1️⃣ bis : Vérification ESP32 puis lecture /read + comparaison (manuel via bouton)
     // ------------------------------------------------------------
     private fun verifyIpThenReadAndCompare() {
 
@@ -189,8 +204,62 @@ class ScheduleActivity : AppCompatActivity() {
                     Toast.LENGTH_LONG
                 ).show()
             } else {
-                val diffIndex = firstDiffIndex(localProgram, espProgram)
-                showProgramDiffDialog(localProgram, espProgram, diffIndex)
+                val diffs = computeAllDiffs(localProgram, espProgram)
+                showAllDiffsDialog(diffs)
+            }
+        }
+    }
+
+    // ------------------------------------------------------------
+    // ✅ Auto-check à l’ouverture (silencieux si identique)
+    // ------------------------------------------------------------
+    private fun autoCheckProgramOnOpen() {
+        val active = Esp32Manager.getActive(this) ?: return
+
+        lifecycleScope.launch {
+            val ok = verifyEsp32Connection(active)
+            if (!ok) return@launch
+
+            val espProgram = fetchProgramFromEsp(active.ip) ?: return@launch
+            val localProgram = ProgramStore.buildMessage(this@ScheduleActivity)
+
+            if (espProgram != localProgram) {
+                val diffs = computeAllDiffs(localProgram, espProgram)
+                showAllDiffsDialog(diffs)
+            }
+        }
+    }
+
+    // ------------------------------------------------------------
+    // ✅ Dernier check quand l’utilisateur quitte malgré “non envoyée”
+    // - identique => rien + finish()
+    // - différent => popup courte + finish()
+    // ------------------------------------------------------------
+    private fun finalCheckOnExitThenFinish() {
+        val active = Esp32Manager.getActive(this)
+        if (active == null) {
+            finish()
+            return
+        }
+
+        lifecycleScope.launch {
+            val ok = verifyEsp32Connection(active)
+            if (!ok) {
+                finish()
+                return@launch
+            }
+
+            val espProgram = fetchProgramFromEsp(active.ip)
+            val localProgram = ProgramStore.buildMessage(this@ScheduleActivity)
+
+            if (espProgram != null && espProgram != localProgram) {
+                AlertDialog.Builder(this@ScheduleActivity)
+                    .setTitle("Programmation différente")
+                    .setMessage("⚠️ Programmation différente entre l'appli et la pompe.")
+                    .setPositiveButton("OK") { _, _ -> finish() }
+                    .show()
+            } else {
+                finish()
             }
         }
     }
@@ -204,7 +273,6 @@ class ScheduleActivity : AppCompatActivity() {
         Log.i("SCHEDULE_SEND", "➡️ Envoi programmation via NetworkHelper")
 
         NetworkHelper.sendProgram(this, active.ip, message) {
-            // ✅ RESET DU CURSEUR : ON PART DE MAINTENANT
             val now = System.currentTimeMillis()
             val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
 
@@ -217,7 +285,6 @@ class ScheduleActivity : AppCompatActivity() {
                     .apply()
             }
 
-            // ✅ La programmation envoyée devient la référence
             lastProgramHash = ProgramStore.buildMessage(this@ScheduleActivity)
         }
     }
@@ -292,7 +359,6 @@ class ScheduleActivity : AppCompatActivity() {
             .filter { it.matches(line9DigitsRegex) }
             .toList()
 
-        // 4 pompes * 12 lignes = 48 lignes (format strict confirmé)
         if (lines.size != 48) return null
 
         val joined = lines.joinToString(separator = "")
@@ -300,27 +366,117 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------
-    // 🔎 Index première différence
+    // 🔎 Décodage ligne 9 chiffres (protocole ESP)
+    // [0]=type(1), [1]=pump(1..4), [2..3]=HH, [4..5]=MM, [6..8]=secs(001..600)
     // ------------------------------------------------------------
-    private fun firstDiffIndex(a: String, b: String): Int {
-        val n = minOf(a.length, b.length)
-        for (i in 0 until n) {
-            if (a[i] != b[i]) return i
+    private fun decodePumpFromLine9(line9: String): Int? {
+        if (line9.length != 9 || line9 == "000000000") return null
+        val pump = line9.substring(1, 2).toIntOrNull() ?: return null
+        return if (pump in 1..4) pump else null
+    }
+
+    private fun decodeTimeFromLine9(line9: String): String? {
+        if (line9.length != 9 || line9 == "000000000") return null
+        return try {
+            val hh = line9.substring(2, 4).toInt()
+            val mm = line9.substring(4, 6).toInt()
+            if (hh !in 0..23 || mm !in 0..59) null else "%02d:%02d".format(hh, mm)
+        } catch (_: Exception) {
+            null
         }
-        return if (a.length == b.length) -1 else n
+    }
+
+    private fun decodeSecsFromLine9(line9: String): Int? {
+        if (line9.length != 9 || line9 == "000000000") return null
+        val secs = line9.substring(6, 9).toIntOrNull() ?: return null
+        return if (secs in 1..600) secs else null
+    }
+
+    private fun estimateVolumeMl(pump: Int, secs: Int): Int? {
+        val active = Esp32Manager.getActive(this) ?: return null
+        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
+        val flow = prefs.getFloat("esp_${active.id}_pump${pump}_flow", 0f) // mL/s
+        if (flow <= 0f) return null
+        return (flow * secs).toInt()
+    }
+
+    private fun formatReadableLine(line9: String): String {
+        if (line9.length != 9 || line9 == "000000000") return "Aucune programmation"
+
+        val pump = decodePumpFromLine9(line9) ?: return "Programmation invalide"
+        val time = decodeTimeFromLine9(line9) ?: "—"
+        val secs = decodeSecsFromLine9(line9)
+
+        val volume = if (secs != null) estimateVolumeMl(pump, secs) else null
+
+        // ✅ IMPORTANT : on renvoie le numéro SEUL (pas "Pompe 2")
+        return when {
+            secs == null -> "$pump  Heure $time"
+            volume != null -> "$pump  Heure $time  Volume: ${volume} mL"
+            else -> "$pump  Heure $time  Durée: ${secs} s"
+        }
     }
 
     // ------------------------------------------------------------
-    // 🪟 Popup si différent
+    // ✅ Toutes les différences (48 lignes)
     // ------------------------------------------------------------
-    private fun showProgramDiffDialog(local: String, esp: String, diffIndex: Int) {
+    private data class LineDiff(
+        val globalLine: Int,   // 0..47
+        val localLine9: String,
+        val espLine9: String
+    )
+
+    private fun computeAllDiffs(local: String, esp: String): List<LineDiff> {
+        val a = local.padEnd(432, '0').take(432)
+        val b = esp.padEnd(432, '0').take(432)
+
+        val diffs = mutableListOf<LineDiff>()
+        for (line in 0 until 48) {
+            val start = line * 9
+            val la = a.substring(start, start + 9)
+            val lb = b.substring(start, start + 9)
+            if (la != lb) {
+                diffs.add(LineDiff(line, la, lb))
+            }
+        }
+        return diffs
+    }
+
+    // ------------------------------------------------------------
+    // 🪟 Popup : affiche toutes les différences (détaillée)
+    // ------------------------------------------------------------
+    private fun showAllDiffsDialog(diffs: List<LineDiff>) {
+        if (diffs.isEmpty()) return
+
+        val maxToShow = 30
+        val shown = diffs.take(maxToShow)
+
         val msg = buildString {
-            append("⚠️ Programme différent.\n")
-            if (diffIndex >= 0) append("Première différence à l’index : $diffIndex\n\n")
-            append("ESP32 (/read) :\n")
-            append(esp)
-            append("\n\nAppli (buildMessage) :\n")
-            append(local)
+            append("⚠️ Programme différent\n")
+            append("Différences : ${diffs.size}\n\n")
+
+            for (d in shown) {
+                val localReadable = if (d.localLine9 == "000000000") {
+                    "Aucune programmation"
+                } else {
+                    // ✅ Appli : on veut "Pompe: 2 ..." (pas "Pompe Pompe 2 ...")
+                    "Pompe: " + formatReadableLine(d.localLine9)
+                }
+
+                val espReadable = if (d.espLine9 == "000000000") {
+                    "Aucune programmation"
+                } else {
+                    // ✅ ESP : "Pompe: 2 ..." (pas "Pompe Pompe 2 ...")
+                    "Pompe: " + formatReadableLine(d.espLine9)
+                }
+
+                append("➡️ Appli : $localReadable\n")
+                append("➡️ Pompe : $espReadable\n\n")
+            }
+
+            if (diffs.size > maxToShow) {
+                append("… +${diffs.size - maxToShow} autre(s) différence(s)\n")
+            }
         }
 
         AlertDialog.Builder(this)
