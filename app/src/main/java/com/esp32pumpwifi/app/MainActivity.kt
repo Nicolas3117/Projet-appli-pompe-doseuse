@@ -265,8 +265,8 @@ class MainActivity : AppCompatActivity() {
         return try {
             val url = URL("http://$ip/id")
             conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 800
-                readTimeout = 800
+                connectTimeout = 2000
+                readTimeout = 2000
                 useCaches = false
                 setRequestProperty("Connection", "close")
             }

@@ -20,8 +20,6 @@ class PumpScheduleAdapter(
 
     override fun getCount(): Int = schedules.size
     override fun getItem(position: Int): Any = schedules[position]
-
-    // ✅ FIX : Long obligatoire
     override fun getItemId(position: Int): Long = position.toLong()
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
@@ -29,9 +27,16 @@ class PumpScheduleAdapter(
         val view = convertView ?: LayoutInflater.from(context)
             .inflate(R.layout.item_schedule, parent, false)
 
-        if (position !in schedules.indices) return view
+        // 🔹 LISTE TRIÉE POUR L’AFFICHAGE UNIQUEMENT
+        val displaySchedules = schedules.sortedBy { timeToMinutes(it.time) }
 
-        val schedule = schedules[position]
+        if (position !in displaySchedules.indices) return view
+
+        val schedule = displaySchedules[position]
+
+        // 🔹 index réel dans la liste source (non triée)
+        val sourceIndex = schedules.indexOf(schedule)
+        if (sourceIndex < 0) return view
 
         val tvPump = view.findViewById<TextView>(R.id.tv_pump)
         val tvTime = view.findViewById<TextView>(R.id.tv_time)
@@ -86,7 +91,7 @@ class PumpScheduleAdapter(
                         pumpNumber = schedule.pumpNumber,
                         newTime = newTime,
                         newQty = newQty,
-                        editedIndex = position
+                        editedIndex = sourceIndex
                     )
 
                     if (conflict != null) {
@@ -104,10 +109,10 @@ class PumpScheduleAdapter(
         }
 
         // -----------------------------------------------------------------
-        // 🗑 SUPPRIMER
+        // 🗑 SUPPRIMER (CORRECT)
         // -----------------------------------------------------------------
         btnDelete.setOnClickListener {
-            schedules.removeAt(position)
+            schedules.removeAt(sourceIndex)
             notifyDataSetChanged()
             onScheduleChanged()
         }
