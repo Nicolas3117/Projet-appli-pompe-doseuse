@@ -320,8 +320,13 @@ object ProgramStore {
             // Charge les lignes stockées (ordre de saisie)
             val rawLines = loadEncodedLines(context, pump)
 
+            val filteredLines = rawLines.filter { line ->
+                val secs = line.substring(6, 9).toIntOrNull()
+                secs != null && secs in 1..600
+            }
+
             // ✅ Tri officiel pour l’envoi (copie triée)
-            val sortedLines = sortLinesForSend(rawLines)
+            val sortedLines = sortLinesForSend(filteredLines)
 
             // ✅ Puis on limite à 12
             val lines = sortedLines.take(MAX_LINES_PER_PUMP)
