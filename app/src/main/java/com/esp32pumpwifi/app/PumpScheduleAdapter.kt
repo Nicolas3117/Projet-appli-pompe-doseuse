@@ -138,9 +138,10 @@ class PumpScheduleAdapter(
 
         val flowKey = "esp_${active.id}_pump${pumpNumber}_flow"
         val flow = prefs.getFloat(flowKey, 0f)
-        if (flow <= 0f) return "Pompe $pumpNumber non calibrée"
+        if (flow <= 0f) return "Pompe non calibrée"
 
-        val durationSec = (newQty / flow).roundToInt()
+        // ✅ Durée minimale 1 seconde
+        val durationSec = maxOf(1, (newQty.toFloat() / flow).roundToInt())
         val endSec = startSec + durationSec
 
         if (endSec >= 86400) {
@@ -168,7 +169,8 @@ class PumpScheduleAdapter(
                 val flowOther =
                     prefs.getFloat("esp_${active.id}_pump${p}_flow", flow)
 
-                val sDuration = (s.quantity / flowOther).roundToInt()
+                // ✅ Durée minimale 1 seconde
+                val sDuration = maxOf(1, (s.quantity.toFloat() / flowOther).roundToInt())
                 val sEnd = sStart + sDuration
 
                 if (startSec < sEnd && endSec > sStart) {

@@ -182,12 +182,13 @@ class PumpScheduleFragment : Fragment() {
 
         if (flow <= 0f) {
             return ConflictResult(
-                blockingMessage = "${getPumpName(pumpNumber)} non calibrée"
+                blockingMessage = "Pompe non calibrée"
             )
         }
 
+        // ✅ Durée minimale 1 seconde
         val duration =
-            (quantity / flow).roundToInt()
+            maxOf(1, (quantity.toFloat() / flow).roundToInt())
 
         val endSec =
             startSec + duration
@@ -209,8 +210,9 @@ class PumpScheduleFragment : Fragment() {
             val sStart =
                 sh * 3600 + sm * 60
 
+            // ✅ Durée minimale 1 seconde
             val sDur =
-                (s.quantity / flow).roundToInt()
+                maxOf(1, (s.quantity.toFloat() / flow).roundToInt())
 
             val sEnd =
                 sStart + sDur
@@ -262,8 +264,9 @@ class PumpScheduleFragment : Fragment() {
                 val sStart =
                     sh * 3600 + sm * 60
 
+                // ✅ Durée minimale 1 seconde
                 val sDur =
-                    (s.quantity / pFlow).roundToInt()
+                    maxOf(1, (s.quantity.toFloat() / pFlow).roundToInt())
 
                 val sEnd =
                     sStart + sDur
@@ -370,8 +373,9 @@ class PumpScheduleFragment : Fragment() {
             val (hh, mm) =
                 s.time.split(":").map { it.toInt() }
 
+            // ✅ Durée minimale 1 seconde
             val seconds =
-                (s.quantity / flow).roundToInt()
+                maxOf(1, (s.quantity.toFloat() / flow).roundToInt())
 
             val line =
                 ProgramLine(
