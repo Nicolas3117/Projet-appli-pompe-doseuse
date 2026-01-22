@@ -1,3 +1,4 @@
+// PumpScheduleAdapter.kt
 package com.esp32pumpwifi.app
 
 import android.content.Context
@@ -95,8 +96,10 @@ class PumpScheduleAdapter(
                     )
 
                     if (conflict != null) {
-                        // ✅ Si “quantité trop faible”, popup + blocage
-                        if (conflict.startsWith("Quantité trop faible")) {
+                        // ✅ popup seulement pour "Quantité trop faible" ou "Durée trop longue"
+                        if (conflict.startsWith("Quantité trop faible") ||
+                            conflict.startsWith("Durée trop longue")
+                        ) {
                             AlertDialog.Builder(context)
                                 .setTitle("Impossible")
                                 .setMessage(conflict)
@@ -157,9 +160,16 @@ class PumpScheduleAdapter(
         }
 
         val durationSec = (newQty.toFloat() / flow).roundToInt()
+
         if (durationSec < 1) {
             return "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
                     "Débit actuel : ${"%.1f".format(flow)} mL/s"
+        }
+
+        // ✅ limite firmware 600s en édition aussi (sinon surprise ESP32)
+        if (durationSec > PumpScheduleFragment.MAX_PUMP_DURATION_SEC) {
+            return "Durée trop longue : maximum ${PumpScheduleFragment.MAX_PUMP_DURATION_SEC}s\n" +
+                    "Réduis la quantité ou recalibre le débit."
         }
 
         val endSec = startSec + durationSec
@@ -189,11 +199,12 @@ class PumpScheduleAdapter(
                 val flowOther =
                     prefs.getFloat("esp_${active.id}_pump${p}_flow", flow)
 
-                // Si une vieille ligne invalide existe, on l’ignore
+                // ignore héritage < 1 seconde
                 if (s.quantity.toFloat() < flowOther) continue
 
                 val sDuration = (s.quantity.toFloat() / flowOther).roundToInt()
                 if (sDuration < 1) continue
+                if (sDuration > PumpScheduleFragment.MAX_PUMP_DURATION_SEC) continue
 
                 val sEnd = sStart + sDuration
 

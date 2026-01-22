@@ -1,3 +1,4 @@
+// PumpScheduleFragment.kt
 package com.esp32pumpwifi.app
 
 import android.content.Context
@@ -124,7 +125,7 @@ class PumpScheduleFragment : Fragment() {
                 val check = detectConflicts(time, qty)
 
                 if (check.blockingMessage != null) {
-                    // ✅ Si “quantité trop faible”, on veut une popup (pas un toast)
+                    // ✅ Si blocage "popup", on utilise un dialog; sinon toast (UX inchangée)
                     if (check.isPopup) {
                         showBlockingPopup(check.blockingMessage)
                     } else {
@@ -203,8 +204,8 @@ class PumpScheduleFragment : Fragment() {
             )
         }
 
-        // ✅ Règle : on n'arrondit pas à 1s. On BLOQUE si qty < flow (1 seconde).
-        val minMl = flow // quantité min correspondant à 1 seconde
+        // ✅ Règle : on BLOQUE si qty < flow (1 seconde).
+        val minMl = flow
         if (quantity.toFloat() < minMl) {
             val msg =
                 "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
@@ -215,15 +216,25 @@ class PumpScheduleFragment : Fragment() {
             )
         }
 
-        // Durée (secondes) comme avant (cohérent avec ton choix initial)
         val duration =
             (quantity.toFloat() / flow).roundToInt()
 
-        // Sécurité (au cas où) : si jamais roundToInt sort 0 (devrait être impossible ici)
+        // Sécurité (au cas où)
         if (duration < 1) {
             val msg =
                 "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
                         "Débit actuel : ${"%.1f".format(flow)} mL/s"
+            return ConflictResult(
+                blockingMessage = msg,
+                isPopup = true
+            )
+        }
+
+        // ✅ Blocage si durée > 600s (aligné firmware ESP32)
+        if (duration > MAX_PUMP_DURATION_SEC) {
+            val msg =
+                "Durée trop longue : maximum ${MAX_PUMP_DURATION_SEC}s\n" +
+                        "Réduis la quantité ou recalibre le débit."
             return ConflictResult(
                 blockingMessage = msg,
                 isPopup = true
@@ -245,7 +256,7 @@ class PumpScheduleFragment : Fragment() {
 
             if (!s.enabled) continue
 
-            // Si un ancien schedule invalide existe (héritage), on l'ignore
+            // ignore les anciennes lignes invalides (< 1 seconde)
             if (s.quantity.toFloat() < minMl) continue
 
             val (sh, sm) =
@@ -258,6 +269,7 @@ class PumpScheduleFragment : Fragment() {
                 (s.quantity.toFloat() / flow).roundToInt()
 
             if (sDur < 1) continue
+            if (sDur > MAX_PUMP_DURATION_SEC) continue
 
             val sEnd =
                 sStart + sDur
@@ -317,6 +329,7 @@ class PumpScheduleFragment : Fragment() {
                     (s.quantity.toFloat() / pFlow).roundToInt()
 
                 if (sDur < 1) continue
+                if (sDur > MAX_PUMP_DURATION_SEC) continue
 
                 val sEnd =
                     sStart + sDur
@@ -422,8 +435,6 @@ class PumpScheduleFragment : Fragment() {
         for (s in schedules) {
 
             if (!s.enabled) continue
-
-            // Sécurité : si un ancien schedule trop faible existe, on ne l'envoie pas.
             if (s.quantity.toFloat() < minMl) continue
 
             val (hh, mm) =
@@ -433,6 +444,7 @@ class PumpScheduleFragment : Fragment() {
                 (s.quantity.toFloat() / flow).roundToInt()
 
             if (seconds < 1) continue
+            if (seconds > MAX_PUMP_DURATION_SEC) continue
 
             val line =
                 ProgramLine(
