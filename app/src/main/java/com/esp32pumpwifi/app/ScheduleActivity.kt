@@ -67,7 +67,6 @@ class ScheduleActivity : AppCompatActivity() {
         // ✅ Référence de départ
         lastProgramHash = ProgramStore.buildMessage(this)
 
-        // ✅ Remplacement de onBackPressed() (deprecated) par OnBackPressedDispatcher
         onBackPressedDispatcher.addCallback(
             this,
             object : OnBackPressedCallback(true) {
@@ -92,7 +91,6 @@ class ScheduleActivity : AppCompatActivity() {
                             dialog.dismiss()
                         }
                         .setNegativeButton("Quitter") { _, _ ->
-                            // ✅ Dernier check uniquement si connecté, puis on quitte
                             finalCheckOnExitThenFinish()
                         }
                         .show()
@@ -107,9 +105,6 @@ class ScheduleActivity : AppCompatActivity() {
         if (didAutoCheckOnResume) return
         didAutoCheckOnResume = true
 
-        // ✅ Auto-check silencieux à l’ouverture :
-        // - identique => rien
-        // - différent => popup détaillée
         autoCheckProgramOnOpen()
     }
 
@@ -232,8 +227,6 @@ class ScheduleActivity : AppCompatActivity() {
 
     // ------------------------------------------------------------
     // ✅ Dernier check quand l’utilisateur quitte malgré “non envoyée”
-    // - identique => rien + finish()
-    // - différent => popup courte + finish()
     // ------------------------------------------------------------
     private fun finalCheckOnExitThenFinish() {
         val active = Esp32Manager.getActive(this)
@@ -265,7 +258,7 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------
-    // 2️⃣ ENVOI PROGRAMMATION (SANS DÉCRÉMENT)
+    // 2️⃣ ENVOI PROGRAMMATION
     // ------------------------------------------------------------
     private fun sendSchedulesToESP32(active: EspModule) {
 
@@ -322,7 +315,6 @@ class ScheduleActivity : AppCompatActivity() {
 
     // ------------------------------------------------------------
     // 📥 Lecture programme sur ESP32 : GET /read
-    // Retourne exactement 432 chars (48 lignes * 9 digits) ou null
     // ------------------------------------------------------------
     private suspend fun fetchProgramFromEsp(ip: String): String? =
         withContext(Dispatchers.IO) {
@@ -349,9 +341,6 @@ class ScheduleActivity : AppCompatActivity() {
             }
         }
 
-    // ------------------------------------------------------------
-    // 🔧 Normalisation /read : 48 lignes de 9 chiffres -> 432 chars
-    // ------------------------------------------------------------
     private fun normalizeProgram432FromRead(raw: String): String? {
         val lines = raw
             .lineSequence()
@@ -366,8 +355,7 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------
-    // 🔎 Décodage ligne 9 chiffres (protocole ESP)
-    // [0]=type(1), [1]=pump(1..4), [2..3]=HH, [4..5]=MM, [6..8]=secs(001..600)
+    // 🔎 Décodage ligne 9 chiffres
     // ------------------------------------------------------------
     private fun decodePumpFromLine9(line9: String): Int? {
         if (line9.length != 9 || line9 == "000000000") return null
@@ -400,6 +388,12 @@ class ScheduleActivity : AppCompatActivity() {
         return (flow * secs).toInt()
     }
 
+    /**
+     * ✅ Format “propre” :
+     * - "Pompe 3 – 16:30 – 5 mL"
+     * - ou "Pompe 3 – 16:30 – 120 s" (si pas de débit)
+     * - ou "Aucune programmation"
+     */
     private fun formatReadableLine(line9: String): String {
         if (line9.length != 9 || line9 == "000000000") return "Aucune programmation"
 
@@ -409,11 +403,10 @@ class ScheduleActivity : AppCompatActivity() {
 
         val volume = if (secs != null) estimateVolumeMl(pump, secs) else null
 
-        // ✅ IMPORTANT : on renvoie le numéro SEUL (pas "Pompe 2")
         return when {
-            secs == null -> "$pump  Heure $time"
-            volume != null -> "$pump  Heure $time  Volume: ${volume} mL"
-            else -> "$pump  Heure $time  Durée: ${secs} s"
+            secs == null -> "Pompe $pump – $time"
+            volume != null -> "Pompe $pump – $time – $volume mL"
+            else -> "Pompe $pump – $time – ${secs} s"
         }
     }
 
@@ -456,19 +449,8 @@ class ScheduleActivity : AppCompatActivity() {
             append("Différences : ${diffs.size}\n\n")
 
             for (d in shown) {
-                val localReadable = if (d.localLine9 == "000000000") {
-                    "Aucune programmation"
-                } else {
-                    // ✅ Appli : on veut "Pompe: 2 ..." (pas "Pompe Pompe 2 ...")
-                    "Pompe: " + formatReadableLine(d.localLine9)
-                }
-
-                val espReadable = if (d.espLine9 == "000000000") {
-                    "Aucune programmation"
-                } else {
-                    // ✅ ESP : "Pompe: 2 ..." (pas "Pompe Pompe 2 ...")
-                    "Pompe: " + formatReadableLine(d.espLine9)
-                }
+                val localReadable = formatReadableLine(d.localLine9)
+                val espReadable = formatReadableLine(d.espLine9)
 
                 append("➡️ Appli : $localReadable\n")
                 append("➡️ Pompe : $espReadable\n\n")
