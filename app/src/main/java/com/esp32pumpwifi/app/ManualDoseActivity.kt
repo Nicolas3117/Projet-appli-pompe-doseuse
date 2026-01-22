@@ -6,6 +6,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
@@ -81,17 +82,28 @@ class ManualDoseActivity : AppCompatActivity() {
             }
 
             val seconds = (volumeMl / flow).roundToInt()
+
+            // ✅ Message plus clair si la durée tombe à 0s (volume trop faible vs débit)
             if (seconds <= 0) {
-                Toast.makeText(this, "Durée calculée invalide", Toast.LENGTH_SHORT).show()
+                val minMl = flow
+                AlertDialog.Builder(this)
+                    .setTitle("Impossible")
+                    .setMessage(
+                        "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
+                                "Débit actuel : ${"%.1f".format(flow)} mL/s"
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
                 return@setOnClickListener
             }
 
+            // ✅ Blocage manuel > 600s (comme demandé)
             if (seconds > MAX_PUMP_DURATION_SEC) {
-                Toast.makeText(
-                    this,
-                    "Volume trop important.\nMerci d'abaisser le volume à distribuer.",
-                    Toast.LENGTH_LONG
-                ).show()
+                AlertDialog.Builder(this)
+                    .setTitle("Impossible")
+                    .setMessage("Durée trop longue : maximum ${MAX_PUMP_DURATION_SEC}s")
+                    .setPositiveButton("OK", null)
+                    .show()
                 return@setOnClickListener
             }
 
