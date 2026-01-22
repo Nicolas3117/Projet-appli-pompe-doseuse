@@ -101,7 +101,11 @@ class ScheduleActivity : AppCompatActivity() {
                             // ✅ Peu importe : check final /read puis exit
                             finalCheckOnExitThenFinish()
                         }
-                        .show()
+                        .create()
+                        .also { dlg ->
+                            if (isFinishing || isDestroyed) return
+                            dlg.show()
+                        }
                 }
             }
         )
@@ -115,6 +119,11 @@ class ScheduleActivity : AppCompatActivity() {
 
         // ✅ À l’ouverture : /read + compare (avec popup si KO)
         autoCheckProgramOnOpen()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        didAutoCheckOnResume = false
     }
 
     // ------------------------------------------------------------
@@ -131,6 +140,7 @@ class ScheduleActivity : AppCompatActivity() {
                 verifyIpThenSend()
                 true
             }
+
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -177,7 +187,11 @@ class ScheduleActivity : AppCompatActivity() {
                     .setTitle("Pompe déconnectée")
                     .setMessage("⚠️ Pompe déconnectée.\nImpossible de lire la programmation.")
                     .setPositiveButton("OK", null)
-                    .show()
+                    .create()
+                    .also { dlg ->
+                        if (isFinishing || isDestroyed) return@launch
+                        dlg.show()
+                    }
                 return@launch
             }
 
@@ -218,7 +232,11 @@ class ScheduleActivity : AppCompatActivity() {
                     .setMessage("⚠️ Pompe déconnectée.\nLa programmation n'est peut-être pas enregistrée sur la pompe.")
                     .setPositiveButton("OK") { _, _ -> finish() }
                     .setOnDismissListener { finish() }
-                    .show()
+                    .create()
+                    .also { dlg ->
+                        if (isFinishing || isDestroyed) return@launch
+                        dlg.show()
+                    }
                 return@launch
             }
 
@@ -228,7 +246,11 @@ class ScheduleActivity : AppCompatActivity() {
                     .setMessage("⚠️ Programmation différente entre l'appli et la pompe.")
                     .setPositiveButton("OK") { _, _ -> finish() }
                     .setOnDismissListener { finish() }
-                    .show()
+                    .create()
+                    .also { dlg ->
+                        if (isFinishing || isDestroyed) return@launch
+                        dlg.show()
+                    }
             } else {
                 finish()
             }
@@ -281,7 +303,10 @@ class ScheduleActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 false
             } finally {
-                try { conn?.disconnect() } catch (_: Exception) {}
+                try {
+                    conn?.disconnect()
+                } catch (_: Exception) {
+                }
             }
         }
 
@@ -306,7 +331,10 @@ class ScheduleActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 null
             } finally {
-                try { conn?.disconnect() } catch (_: Exception) {}
+                try {
+                    conn?.disconnect()
+                } catch (_: Exception) {
+                }
             }
         }
 
@@ -432,6 +460,10 @@ class ScheduleActivity : AppCompatActivity() {
             .setTitle("Vérifier programme")
             .setMessage(msg)
             .setPositiveButton("OK", null)
-            .show()
+            .create()
+            .also { dlg ->
+                if (isFinishing || isDestroyed) return
+                dlg.show()
+            }
     }
 }
