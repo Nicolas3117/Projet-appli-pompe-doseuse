@@ -8,10 +8,4 @@
         android:icon="@android:drawable/ic_menu_send"
         app:showAsAction="ifRoom" />
 
-    <item
-        android:id="@+id/action_read"
-        android:title="Vérifier programme"
-        android:icon="@android:drawable/ic_menu_view"
-        app:showAsAction="ifRoom" />
-
 </menu>

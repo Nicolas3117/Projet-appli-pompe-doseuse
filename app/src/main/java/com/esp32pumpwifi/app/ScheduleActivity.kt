@@ -35,6 +35,9 @@ class ScheduleActivity : AppCompatActivity() {
     // ✅ Auto-check : 1 fois par ouverture d’activité
     private var didAutoCheckOnResume = false
 
+    // ✅ Anti double-finish / double popup (back spam)
+    private var exitInProgress = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_schedule)
@@ -64,23 +67,27 @@ class ScheduleActivity : AppCompatActivity() {
             )
         }.attach()
 
-        // ✅ Référence de départ
+        // ✅ Référence de départ (programme "considéré envoyé/chargé")
         lastProgramHash = ProgramStore.buildMessage(this)
 
+        // ✅ Sortie : toujours check final
+        // Si modif locale -> popup "non envoyée" avant
         onBackPressedDispatcher.addCallback(
             this,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
+                    if (exitInProgress) return
 
                     val currentHash = ProgramStore.buildMessage(this@ScheduleActivity)
-                    val reallyModified =
-                        lastProgramHash != null && lastProgramHash != currentHash
+                    val locallyModified = lastProgramHash != null && lastProgramHash != currentHash
 
-                    if (!reallyModified) {
-                        finish()
+                    if (!locallyModified) {
+                        // ✅ Même sans modif : check final /read puis exit
+                        finalCheckOnExitThenFinish()
                         return
                     }
 
+                    // ✅ Popup existante : "Programmation non envoyée"
                     AlertDialog.Builder(this@ScheduleActivity)
                         .setTitle("Programmation non envoyée")
                         .setMessage(
@@ -91,6 +98,7 @@ class ScheduleActivity : AppCompatActivity() {
                             dialog.dismiss()
                         }
                         .setNegativeButton("Quitter") { _, _ ->
+                            // ✅ Peu importe : check final /read puis exit
                             finalCheckOnExitThenFinish()
                         }
                         .show()
@@ -105,11 +113,12 @@ class ScheduleActivity : AppCompatActivity() {
         if (didAutoCheckOnResume) return
         didAutoCheckOnResume = true
 
+        // ✅ À l’ouverture : /read + compare (avec popup si KO)
         autoCheckProgramOnOpen()
     }
 
     // ------------------------------------------------------------
-    // 🛫 MENU
+    // 🛫 MENU (on garde uniquement Envoyer)
     // ------------------------------------------------------------
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.menu_schedule, menu)
@@ -122,10 +131,6 @@ class ScheduleActivity : AppCompatActivity() {
                 verifyIpThenSend()
                 true
             }
-            R.id.action_read -> {
-                verifyIpThenReadAndCompare()
-                true
-            }
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -134,7 +139,6 @@ class ScheduleActivity : AppCompatActivity() {
     // 1️⃣ Vérification ESP32 puis envoi
     // ------------------------------------------------------------
     private fun verifyIpThenSend() {
-
         val active = Esp32Manager.getActive(this)
         if (active == null) {
             Toast.makeText(this, "Aucun module sélectionné", Toast.LENGTH_LONG).show()
@@ -143,7 +147,6 @@ class ScheduleActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             val ok = verifyEsp32Connection(active)
-
             if (!ok) {
                 Toast.makeText(
                     this@ScheduleActivity,
@@ -158,77 +161,45 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------
-    // 1️⃣ bis : Vérification ESP32 puis lecture /read + comparaison (manuel via bouton)
-    // ------------------------------------------------------------
-    private fun verifyIpThenReadAndCompare() {
-
-        val active = Esp32Manager.getActive(this)
-        if (active == null) {
-            Toast.makeText(this, "Aucun module sélectionné", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        lifecycleScope.launch {
-            val ok = verifyEsp32Connection(active)
-
-            if (!ok) {
-                Toast.makeText(
-                    this@ScheduleActivity,
-                    "${active.displayName} non connecté.\nVérifiez le Wi-Fi ou le mode AP.",
-                    Toast.LENGTH_LONG
-                ).show()
-                return@launch
-            }
-
-            val espProgram = fetchProgramFromEsp(active.ip)
-            if (espProgram == null) {
-                Toast.makeText(
-                    this@ScheduleActivity,
-                    "Impossible de lire le programme sur l’ESP32 (/read).",
-                    Toast.LENGTH_LONG
-                ).show()
-                return@launch
-            }
-
-            val localProgram = ProgramStore.buildMessage(this@ScheduleActivity)
-
-            if (espProgram == localProgram) {
-                Toast.makeText(
-                    this@ScheduleActivity,
-                    "✅ Programme identique (ESP ↔ appli)",
-                    Toast.LENGTH_LONG
-                ).show()
-            } else {
-                val diffs = computeAllDiffs(localProgram, espProgram)
-                showAllDiffsDialog(diffs)
-            }
-        }
-    }
-
-    // ------------------------------------------------------------
-    // ✅ Auto-check à l’ouverture (silencieux si identique)
+    // ✅ À l’ouverture : /read + compare
+    // - /read KO => popup courte (pompe déconnectée)
+    // - identique => rien
+    // - différent => popup détaillée
     // ------------------------------------------------------------
     private fun autoCheckProgramOnOpen() {
         val active = Esp32Manager.getActive(this) ?: return
 
         lifecycleScope.launch {
-            val ok = verifyEsp32Connection(active)
-            if (!ok) return@launch
+            val espProgram = fetchProgramFromEsp(active.ip)
 
-            val espProgram = fetchProgramFromEsp(active.ip) ?: return@launch
+            if (espProgram == null) {
+                AlertDialog.Builder(this@ScheduleActivity)
+                    .setTitle("Pompe déconnectée")
+                    .setMessage("⚠️ Pompe déconnectée.\nImpossible de lire la programmation.")
+                    .setPositiveButton("OK", null)
+                    .show()
+                return@launch
+            }
+
             val localProgram = ProgramStore.buildMessage(this@ScheduleActivity)
 
             if (espProgram != localProgram) {
                 val diffs = computeAllDiffs(localProgram, espProgram)
-                showAllDiffsDialog(diffs)
+                showAllDiffsDialog(diffs) // ✅ popup détaillée
             }
         }
     }
 
     // ------------------------------------------------------------
-    // ✅ Dernier check quand l’utilisateur quitte malgré “non envoyée”
+    // ✅ À la fermeture : /read + compare
+    // - /read KO => popup courte + finish
+    // - identique => finish
+    // - différent => popup courte + finish
     // ------------------------------------------------------------
     private fun finalCheckOnExitThenFinish() {
+        if (exitInProgress) return
+        exitInProgress = true
+
         val active = Esp32Manager.getActive(this)
         if (active == null) {
             finish()
@@ -236,20 +207,27 @@ class ScheduleActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch {
-            val ok = verifyEsp32Connection(active)
-            if (!ok) {
-                finish()
-                return@launch
-            }
+            Log.i("SCHEDULE_EXIT", "Exit check: tentative /read sur ${active.ip}")
 
             val espProgram = fetchProgramFromEsp(active.ip)
             val localProgram = ProgramStore.buildMessage(this@ScheduleActivity)
 
-            if (espProgram != null && espProgram != localProgram) {
+            if (espProgram == null) {
+                AlertDialog.Builder(this@ScheduleActivity)
+                    .setTitle("Pompe déconnectée")
+                    .setMessage("⚠️ Pompe déconnectée.\nLa programmation n'est peut-être pas enregistrée sur la pompe.")
+                    .setPositiveButton("OK") { _, _ -> finish() }
+                    .setOnDismissListener { finish() }
+                    .show()
+                return@launch
+            }
+
+            if (espProgram != localProgram) {
                 AlertDialog.Builder(this@ScheduleActivity)
                     .setTitle("Programmation différente")
                     .setMessage("⚠️ Programmation différente entre l'appli et la pompe.")
                     .setPositiveButton("OK") { _, _ -> finish() }
+                    .setOnDismissListener { finish() }
                     .show()
             } else {
                 finish()
@@ -261,7 +239,6 @@ class ScheduleActivity : AppCompatActivity() {
     // 2️⃣ ENVOI PROGRAMMATION
     // ------------------------------------------------------------
     private fun sendSchedulesToESP32(active: EspModule) {
-
         val message = ProgramStore.buildMessage(this)
         Log.i("SCHEDULE_SEND", "➡️ Envoi programmation via NetworkHelper")
 
@@ -271,19 +248,17 @@ class ScheduleActivity : AppCompatActivity() {
 
             for (pumpNum in 1..4) {
                 prefs.edit()
-                    .putLong(
-                        "esp_${active.id}_pump${pumpNum}_last_processed_time",
-                        now
-                    )
+                    .putLong("esp_${active.id}_pump${pumpNum}_last_processed_time", now)
                     .apply()
             }
 
+            // ✅ Après envoi, on met à jour la référence "envoyée"
             lastProgramHash = ProgramStore.buildMessage(this@ScheduleActivity)
         }
     }
 
     // ------------------------------------------------------------
-    // 🔍 Vérification ESP32
+    // 🔍 Vérification ESP32 (/id)
     // ------------------------------------------------------------
     private suspend fun verifyEsp32Connection(module: EspModule): Boolean =
         withContext(Dispatchers.IO) {
@@ -306,10 +281,7 @@ class ScheduleActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 false
             } finally {
-                try {
-                    conn?.disconnect()
-                } catch (_: Exception) {
-                }
+                try { conn?.disconnect() } catch (_: Exception) {}
             }
         }
 
@@ -334,10 +306,7 @@ class ScheduleActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 null
             } finally {
-                try {
-                    conn?.disconnect()
-                } catch (_: Exception) {
-                }
+                try { conn?.disconnect() } catch (_: Exception) {}
             }
         }
 
@@ -355,7 +324,7 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------
-    // 🔎 Décodage ligne 9 chiffres
+    // 🔎 Décodage ligne 9 chiffres + affichage propre
     // ------------------------------------------------------------
     private fun decodePumpFromLine9(line9: String): Int? {
         if (line9.length != 9 || line9 == "000000000") return null
@@ -414,7 +383,7 @@ class ScheduleActivity : AppCompatActivity() {
     // ✅ Toutes les différences (48 lignes)
     // ------------------------------------------------------------
     private data class LineDiff(
-        val globalLine: Int,   // 0..47
+        val globalLine: Int,
         val localLine9: String,
         val espLine9: String
     )
@@ -428,9 +397,7 @@ class ScheduleActivity : AppCompatActivity() {
             val start = line * 9
             val la = a.substring(start, start + 9)
             val lb = b.substring(start, start + 9)
-            if (la != lb) {
-                diffs.add(LineDiff(line, la, lb))
-            }
+            if (la != lb) diffs.add(LineDiff(line, la, lb))
         }
         return diffs
     }
