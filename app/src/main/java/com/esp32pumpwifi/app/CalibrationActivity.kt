@@ -10,6 +10,11 @@ import androidx.appcompat.app.AppCompatActivity
 
 class CalibrationActivity : AppCompatActivity() {
 
+    companion object {
+        // ✅ Limite spécifique calibration
+        const val MAX_CALIBRATION_DURATION_SEC = 250
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_calibration)
@@ -160,6 +165,20 @@ class CalibrationActivity : AppCompatActivity() {
                     Toast.makeText(this, "Durée invalide", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
+
+                // ✅ Blocage > 250s (limite calibration) + message clair
+                if (duration > MAX_CALIBRATION_DURATION_SEC) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Impossible")
+                        .setMessage(
+                            "Durée trop longue : maximum ${MAX_CALIBRATION_DURATION_SEC}s\n" +
+                                    "Réduis la durée pour l’étalonnage."
+                        )
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@setOnClickListener
+                }
+
                 NetworkHelper.sendManualCommand(this, esp32Ip, pumpNum, duration)
             }
 
