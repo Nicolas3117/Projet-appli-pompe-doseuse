@@ -58,8 +58,8 @@ class ManualDoseActivity : AppCompatActivity() {
 
         btnStart.setOnClickListener {
 
-            // ✅ BLOQUAGE : dose programmée en cours sur cette pompe
-            if (isScheduledDoseInProgressNow(this, pumpNumber)) {
+            // ✅ BLOQUAGE : dose programmée en cours sur cette pompe (multi-modules OK)
+            if (isScheduledDoseInProgressNow(this, espId, pumpNumber)) {
                 Toast.makeText(
                     this,
                     "Impossible : $pumpName est déjà en cours (dose programmée).",
@@ -174,7 +174,7 @@ class ManualDoseActivity : AppCompatActivity() {
      * Hypothèse actuelle (ton code) :
      * - une ligne active = tous les jours (pas de jours semaine ici)
      */
-    private fun isScheduledDoseInProgressNow(context: Context, pumpNum: Int): Boolean {
+    private fun isScheduledDoseInProgressNow(context: Context, espId: Long, pumpNum: Int): Boolean {
         val now = System.currentTimeMillis()
 
         // Début de la journée (aujourd'hui)
@@ -186,7 +186,8 @@ class ManualDoseActivity : AppCompatActivity() {
             set(Calendar.MILLISECOND, 0)
         }
 
-        val lines = ProgramStore.loadEncodedLines(context, pumpNum)
+        // ✅ Multi-modules OK : lecture par espId explicite
+        val lines = ProgramStore.loadEncodedLines(context, espId, pumpNum)
         for (line in lines) {
             if (line == "000000000") continue
             if (line.length < 9) continue
