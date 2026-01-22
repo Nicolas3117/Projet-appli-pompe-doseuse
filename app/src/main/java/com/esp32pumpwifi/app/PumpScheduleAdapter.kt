@@ -95,7 +95,16 @@ class PumpScheduleAdapter(
                     )
 
                     if (conflict != null) {
-                        Toast.makeText(context, conflict, Toast.LENGTH_LONG).show()
+                        // ✅ Si “quantité trop faible”, popup + blocage
+                        if (conflict.startsWith("Quantité trop faible")) {
+                            AlertDialog.Builder(context)
+                                .setTitle("Impossible")
+                                .setMessage(conflict)
+                                .setPositiveButton("OK", null)
+                                .show()
+                        } else {
+                            Toast.makeText(context, conflict, Toast.LENGTH_LONG).show()
+                        }
                         return@setPositiveButton
                     }
 
@@ -140,8 +149,19 @@ class PumpScheduleAdapter(
         val flow = prefs.getFloat(flowKey, 0f)
         if (flow <= 0f) return "Pompe non calibrée"
 
-        // ✅ Durée minimale 1 seconde
-        val durationSec = maxOf(1, (newQty.toFloat() / flow).roundToInt())
+        // ✅ Règle : on bloque si qty < flow (1 seconde)
+        val minMl = flow
+        if (newQty.toFloat() < minMl) {
+            return "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
+                    "Débit actuel : ${"%.1f".format(flow)} mL/s"
+        }
+
+        val durationSec = (newQty.toFloat() / flow).roundToInt()
+        if (durationSec < 1) {
+            return "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
+                    "Débit actuel : ${"%.1f".format(flow)} mL/s"
+        }
+
         val endSec = startSec + durationSec
 
         if (endSec >= 86400) {
@@ -169,8 +189,12 @@ class PumpScheduleAdapter(
                 val flowOther =
                     prefs.getFloat("esp_${active.id}_pump${p}_flow", flow)
 
-                // ✅ Durée minimale 1 seconde
-                val sDuration = maxOf(1, (s.quantity.toFloat() / flowOther).roundToInt())
+                // Si une vieille ligne invalide existe, on l’ignore
+                if (s.quantity.toFloat() < flowOther) continue
+
+                val sDuration = (s.quantity.toFloat() / flowOther).roundToInt()
+                if (sDuration < 1) continue
+
                 val sEnd = sStart + sDuration
 
                 if (startSec < sEnd && endSec > sStart) {

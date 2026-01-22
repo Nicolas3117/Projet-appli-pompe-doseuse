@@ -80,6 +80,17 @@ class PumpScheduleFragment : Fragment() {
     }
 
     // ---------------------------------------------------------------------
+    // ✅ POPUP bloquante
+    // ---------------------------------------------------------------------
+    private fun showBlockingPopup(message: String) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Impossible")
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    // ---------------------------------------------------------------------
     // ➕ AJOUT PROGRAMMATION
     // ---------------------------------------------------------------------
     private fun showAddScheduleDialog() {
@@ -113,11 +124,16 @@ class PumpScheduleFragment : Fragment() {
                 val check = detectConflicts(time, qty)
 
                 if (check.blockingMessage != null) {
-                    Toast.makeText(
-                        requireContext(),
-                        check.blockingMessage,
-                        Toast.LENGTH_LONG
-                    ).show()
+                    // ✅ Si “quantité trop faible”, on veut une popup (pas un toast)
+                    if (check.isPopup) {
+                        showBlockingPopup(check.blockingMessage)
+                    } else {
+                        Toast.makeText(
+                            requireContext(),
+                            check.blockingMessage,
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                     return@setPositiveButton
                 }
 
@@ -155,7 +171,7 @@ class PumpScheduleFragment : Fragment() {
     }
 
     // ---------------------------------------------------------------------
-    // 🔍 DÉTECTION DES CONFLITS (CORRIGÉ MULTI-POMPES)
+    // 🔍 DÉTECTION DES CONFLITS
     // ---------------------------------------------------------------------
     private fun detectConflicts(
         time: String,
@@ -182,20 +198,45 @@ class PumpScheduleFragment : Fragment() {
 
         if (flow <= 0f) {
             return ConflictResult(
-                blockingMessage = "Pompe non calibrée"
+                blockingMessage = "Pompe non calibrée",
+                isPopup = false
             )
         }
 
-        // ✅ Durée minimale 1 seconde
+        // ✅ Règle : on n'arrondit pas à 1s. On BLOQUE si qty < flow (1 seconde).
+        val minMl = flow // quantité min correspondant à 1 seconde
+        if (quantity.toFloat() < minMl) {
+            val msg =
+                "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
+                        "Débit actuel : ${"%.1f".format(flow)} mL/s"
+            return ConflictResult(
+                blockingMessage = msg,
+                isPopup = true
+            )
+        }
+
+        // Durée (secondes) comme avant (cohérent avec ton choix initial)
         val duration =
-            maxOf(1, (quantity.toFloat() / flow).roundToInt())
+            (quantity.toFloat() / flow).roundToInt()
+
+        // Sécurité (au cas où) : si jamais roundToInt sort 0 (devrait être impossible ici)
+        if (duration < 1) {
+            val msg =
+                "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
+                        "Débit actuel : ${"%.1f".format(flow)} mL/s"
+            return ConflictResult(
+                blockingMessage = msg,
+                isPopup = true
+            )
+        }
 
         val endSec =
             startSec + duration
 
         if (endSec >= 86400) {
             return ConflictResult(
-                blockingMessage = "La distribution dépasse minuit"
+                blockingMessage = "La distribution dépasse minuit",
+                isPopup = false
             )
         }
 
@@ -204,15 +245,19 @@ class PumpScheduleFragment : Fragment() {
 
             if (!s.enabled) continue
 
+            // Si un ancien schedule invalide existe (héritage), on l'ignore
+            if (s.quantity.toFloat() < minMl) continue
+
             val (sh, sm) =
                 s.time.split(":").map { it.toInt() }
 
             val sStart =
                 sh * 3600 + sm * 60
 
-            // ✅ Durée minimale 1 seconde
             val sDur =
-                maxOf(1, (s.quantity.toFloat() / flow).roundToInt())
+                (s.quantity.toFloat() / flow).roundToInt()
+
+            if (sDur < 1) continue
 
             val sEnd =
                 sStart + sDur
@@ -220,7 +265,8 @@ class PumpScheduleFragment : Fragment() {
             if (startSec < sEnd && endSec > sStart) {
                 return ConflictResult(
                     blockingMessage =
-                        "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}"
+                        "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}",
+                    isPopup = false
                 )
             }
         }
@@ -254,9 +300,12 @@ class PumpScheduleFragment : Fragment() {
 
             if (pFlow <= 0f) continue
 
+            val pMinMl = pFlow
+
             for (s in list) {
 
                 if (!s.enabled) continue
+                if (s.quantity.toFloat() < pMinMl) continue
 
                 val (sh, sm) =
                     s.time.split(":").map { it.toInt() }
@@ -264,9 +313,10 @@ class PumpScheduleFragment : Fragment() {
                 val sStart =
                     sh * 3600 + sm * 60
 
-                // ✅ Durée minimale 1 seconde
                 val sDur =
-                    maxOf(1, (s.quantity.toFloat() / pFlow).roundToInt())
+                    (s.quantity.toFloat() / pFlow).roundToInt()
+
+                if (sDur < 1) continue
 
                 val sEnd =
                     sStart + sDur
@@ -294,7 +344,8 @@ class PumpScheduleFragment : Fragment() {
 
     data class ConflictResult(
         val blockingMessage: String? = null,
-        val warningMessage: String? = null
+        val warningMessage: String? = null,
+        val isPopup: Boolean = false
     )
 
     // ---------------------------------------------------------------------
@@ -366,16 +417,22 @@ class PumpScheduleFragment : Fragment() {
 
         if (flow <= 0f) return
 
+        val minMl = flow
+
         for (s in schedules) {
 
             if (!s.enabled) continue
 
+            // Sécurité : si un ancien schedule trop faible existe, on ne l'envoie pas.
+            if (s.quantity.toFloat() < minMl) continue
+
             val (hh, mm) =
                 s.time.split(":").map { it.toInt() }
 
-            // ✅ Durée minimale 1 seconde
             val seconds =
-                maxOf(1, (s.quantity.toFloat() / flow).roundToInt())
+                (s.quantity.toFloat() / flow).roundToInt()
+
+            if (seconds < 1) continue
 
             val line =
                 ProgramLine(
