@@ -186,6 +186,34 @@ object ProgramStore {
     }
 
     // ---------------------------------------------------------------------
+    // 🕒 TRI OFFICIEL (POUR L’ENVOI) — stable, sans modifier le stockage
+    // ---------------------------------------------------------------------
+    private fun sortLinesForSend(lines: List<String>): List<String> {
+        // Tri stable :
+        // 1) lignes valides non-placeholder d'abord
+        // 2) par heure (decodeStartMinutes)
+        // 3) à égalité, on conserve l’ordre d’origine
+        return lines
+            .withIndex()
+            .sortedWith(
+                compareBy<IndexedValue<String>>(
+                    { it.value == PLACEHOLDER }, // false (vraies lignes) avant true (placeholder)
+                    {
+                        // Si une ligne est malformée (ça ne devrait pas arriver grâce au filtre),
+                        // on la met à la fin des "vraies lignes".
+                        try {
+                            if (it.value == PLACEHOLDER) Int.MAX_VALUE else decodeStartMinutes(it.value)
+                        } catch (_: Exception) {
+                            Int.MAX_VALUE
+                        }
+                    },
+                    { it.index } // stabilité
+                )
+            )
+            .map { it.value }
+    }
+
+    // ---------------------------------------------------------------------
     // 🔒 SÉCURITÉ 1 — INTERDICTION même pompe (BLOQUANT)
     // ---------------------------------------------------------------------
     fun hasBlockingConflict(
@@ -278,6 +306,7 @@ object ProgramStore {
 
     // ---------------------------------------------------------------------
     // 🚀 CONSTRUCTION MESSAGE FINAL POUR /program (module actif)
+    // ✅ ICI : TRI OFFICIEL AVANT ENVOI
     // ---------------------------------------------------------------------
     fun buildMessage(context: Context): String {
         // 4 pompes * 12 lignes * 9 chars = 432 chars
@@ -288,8 +317,14 @@ object ProgramStore {
 
         for (pump in 1..PUMP_COUNT) {
 
-            val lines = loadEncodedLines(context, pump)
-                .take(MAX_LINES_PER_PUMP)
+            // Charge les lignes stockées (ordre de saisie)
+            val rawLines = loadEncodedLines(context, pump)
+
+            // ✅ Tri officiel pour l’envoi (copie triée)
+            val sortedLines = sortLinesForSend(rawLines)
+
+            // ✅ Puis on limite à 12
+            val lines = sortedLines.take(MAX_LINES_PER_PUMP)
 
             Log.e("PROGRAM_BUILD", "Pompe $pump : ${lines.size} ligne(s)")
 

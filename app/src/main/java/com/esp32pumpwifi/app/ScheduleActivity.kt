@@ -29,6 +29,9 @@ class ScheduleActivity : AppCompatActivity() {
     // ✅ Empreinte de la programmation envoyée / chargée
     private var lastProgramHash: String? = null
 
+    // ✅ /read : 48 lignes de 9 chiffres
+    private val line9DigitsRegex = Regex("""\d{9}""")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_schedule)
@@ -104,16 +107,21 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return if (item.itemId == R.id.action_send) {
-            verifyIpThenSend()
-            true
-        } else {
-            super.onOptionsItemSelected(item)
+        return when (item.itemId) {
+            R.id.action_send -> {
+                verifyIpThenSend()
+                true
+            }
+            R.id.action_read -> {
+                verifyIpThenReadAndCompare()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
         }
     }
 
     // ------------------------------------------------------------
-    // 1️⃣ Vérification ESP32
+    // 1️⃣ Vérification ESP32 puis envoi
     // ------------------------------------------------------------
     private fun verifyIpThenSend() {
 
@@ -136,6 +144,54 @@ class ScheduleActivity : AppCompatActivity() {
             }
 
             sendSchedulesToESP32(active)
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 1️⃣ bis : Vérification ESP32 puis lecture /read + comparaison
+    // ------------------------------------------------------------
+    private fun verifyIpThenReadAndCompare() {
+
+        val active = Esp32Manager.getActive(this)
+        if (active == null) {
+            Toast.makeText(this, "Aucun module sélectionné", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        lifecycleScope.launch {
+            val ok = verifyEsp32Connection(active)
+
+            if (!ok) {
+                Toast.makeText(
+                    this@ScheduleActivity,
+                    "${active.displayName} non connecté.\nVérifiez le Wi-Fi ou le mode AP.",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+
+            val espProgram = fetchProgramFromEsp(active.ip)
+            if (espProgram == null) {
+                Toast.makeText(
+                    this@ScheduleActivity,
+                    "Impossible de lire le programme sur l’ESP32 (/read).",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+
+            val localProgram = ProgramStore.buildMessage(this@ScheduleActivity)
+
+            if (espProgram == localProgram) {
+                Toast.makeText(
+                    this@ScheduleActivity,
+                    "✅ Programme identique (ESP ↔ appli)",
+                    Toast.LENGTH_LONG
+                ).show()
+            } else {
+                val diffIndex = firstDiffIndex(localProgram, espProgram)
+                showProgramDiffDialog(localProgram, espProgram, diffIndex)
+            }
         }
     }
 
@@ -171,14 +227,17 @@ class ScheduleActivity : AppCompatActivity() {
     // ------------------------------------------------------------
     private suspend fun verifyEsp32Connection(module: EspModule): Boolean =
         withContext(Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
             try {
                 val url = URL("http://${module.ip}/id")
-                val conn = url.openConnection() as HttpURLConnection
-                conn.connectTimeout = 800
-                conn.readTimeout = 800
+                conn = (url.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 2000
+                    readTimeout = 2000
+                    useCaches = false
+                    setRequestProperty("Connection", "close")
+                }
 
-                val response = conn.inputStream.bufferedReader().readText()
-                conn.disconnect()
+                val response = conn.inputStream.bufferedReader().use { it.readText() }
 
                 response.startsWith("POMPE_NAME=") &&
                         response.removePrefix("POMPE_NAME=").trim() ==
@@ -186,6 +245,88 @@ class ScheduleActivity : AppCompatActivity() {
 
             } catch (_: Exception) {
                 false
+            } finally {
+                try {
+                    conn?.disconnect()
+                } catch (_: Exception) {
+                }
             }
         }
+
+    // ------------------------------------------------------------
+    // 📥 Lecture programme sur ESP32 : GET /read
+    // Retourne exactement 432 chars (48 lignes * 9 digits) ou null
+    // ------------------------------------------------------------
+    private suspend fun fetchProgramFromEsp(ip: String): String? =
+        withContext(Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
+            try {
+                val url = URL("http://$ip/read")
+                conn = (url.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 2000
+                    readTimeout = 2000
+                    useCaches = false
+                    setRequestProperty("Connection", "close")
+                }
+
+                val raw = conn.inputStream.bufferedReader().use { it.readText() }
+                normalizeProgram432FromRead(raw)
+
+            } catch (_: Exception) {
+                null
+            } finally {
+                try {
+                    conn?.disconnect()
+                } catch (_: Exception) {
+                }
+            }
+        }
+
+    // ------------------------------------------------------------
+    // 🔧 Normalisation /read : 48 lignes de 9 chiffres -> 432 chars
+    // ------------------------------------------------------------
+    private fun normalizeProgram432FromRead(raw: String): String? {
+        val lines = raw
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.matches(line9DigitsRegex) }
+            .toList()
+
+        // 4 pompes * 12 lignes = 48 lignes (format strict confirmé)
+        if (lines.size != 48) return null
+
+        val joined = lines.joinToString(separator = "")
+        return if (joined.length == 432) joined else null
+    }
+
+    // ------------------------------------------------------------
+    // 🔎 Index première différence
+    // ------------------------------------------------------------
+    private fun firstDiffIndex(a: String, b: String): Int {
+        val n = minOf(a.length, b.length)
+        for (i in 0 until n) {
+            if (a[i] != b[i]) return i
+        }
+        return if (a.length == b.length) -1 else n
+    }
+
+    // ------------------------------------------------------------
+    // 🪟 Popup si différent
+    // ------------------------------------------------------------
+    private fun showProgramDiffDialog(local: String, esp: String, diffIndex: Int) {
+        val msg = buildString {
+            append("⚠️ Programme différent.\n")
+            if (diffIndex >= 0) append("Première différence à l’index : $diffIndex\n\n")
+            append("ESP32 (/read) :\n")
+            append(esp)
+            append("\n\nAppli (buildMessage) :\n")
+            append(local)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Vérifier programme")
+            .setMessage(msg)
+            .setPositiveButton("OK", null)
+            .show()
+    }
 }
