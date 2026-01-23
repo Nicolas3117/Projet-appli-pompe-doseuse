@@ -59,11 +59,14 @@
         app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- ================= ZONE ACTIONS ================= -->
-    <LinearLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layout_actions"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
+        android:layout_marginBottom="16dp"
+        android:paddingBottom="8dp"
+        android:background="@android:color/transparent"
+        android:elevation="4dp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
@@ -74,14 +77,21 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Accéder aux pompes"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginBottom="12dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
         <!-- ================= SÉPARATEUR ================= -->
         <View
+            android:id="@+id/view_actions_separator"
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="#CCCCCC"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginBottom="12dp"
+            app:layout_constraintTop_toBottomOf="@id/btn_open_pumps"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
 
         <!-- ================= TOGGLE ALERTES TELEGRAM ================= -->
         <LinearLayout
@@ -92,7 +102,10 @@
             android:gravity="center_vertical"
             android:padding="8dp"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            app:layout_constraintTop_toBottomOf="@id/view_actions_separator"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
 
             <ImageView
                 android:id="@+id/icon_telegram_toggle"
@@ -116,8 +129,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:fillViewport="true"
-            android:maxHeight="260dp"
-            android:overScrollMode="ifContentScrolls">
+            android:overScrollMode="ifContentScrolls"
+            android:clipToPadding="false"
+            app:layout_constrainedHeight="true"
+            app:layout_constraintHeight_max="@dimen/telegram_panel_max_height"
+            app:layout_constraintTop_toBottomOf="@id/layout_telegram_toggle"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
 
             <LinearLayout
                 android:id="@+id/layout_telegram_content"
@@ -126,7 +145,8 @@
                 android:orientation="vertical"
                 android:visibility="gone"
                 android:paddingStart="8dp"
-                android:paddingEnd="8dp">
+                android:paddingEnd="8dp"
+                android:paddingBottom="12dp">
 
                 <EditText
                     android:id="@+id/edit_telegram_token"
@@ -171,6 +191,6 @@
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
 
-    </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
