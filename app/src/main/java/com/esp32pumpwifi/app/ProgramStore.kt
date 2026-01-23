@@ -214,6 +214,28 @@ object ProgramStore {
     }
 
     // ---------------------------------------------------------------------
+    // ✅ DERNIÈRE PROTECTION — validation HH/MM/SECS sur une ligne encodée
+    // - accepte PLACEHOLDER
+    // - HH 00..23
+    // - MM 00..59
+    // - SECS 001..600
+    // ---------------------------------------------------------------------
+    private fun isValidEncodedLineForSend(line: String): Boolean {
+        if (line == PLACEHOLDER) return true
+        if (line.length != 9 || !line.all(Char::isDigit)) return false
+
+        val hh = line.substring(2, 4).toIntOrNull() ?: return false
+        val mm = line.substring(4, 6).toIntOrNull() ?: return false
+        val secs = line.substring(6, 9).toIntOrNull() ?: return false
+
+        if (hh !in 0..23) return false
+        if (mm !in 0..59) return false
+        if (secs !in 1..600) return false
+
+        return true
+    }
+
+    // ---------------------------------------------------------------------
     // 🔒 SÉCURITÉ 1 — INTERDICTION même pompe (BLOQUANT)
     // ---------------------------------------------------------------------
     fun hasBlockingConflict(
@@ -306,7 +328,7 @@ object ProgramStore {
 
     // ---------------------------------------------------------------------
     // 🚀 CONSTRUCTION MESSAGE FINAL POUR /program (module actif)
-    // ✅ ICI : TRI OFFICIEL AVANT ENVOI
+    // ✅ ICI : TRI OFFICIEL + DERNIÈRE PROTECTION AVANT ENVOI
     // ---------------------------------------------------------------------
     fun buildMessage(context: Context): String {
         // 4 pompes * 12 lignes * 9 chars = 432 chars
@@ -320,9 +342,9 @@ object ProgramStore {
             // Charge les lignes stockées (ordre de saisie)
             val rawLines = loadEncodedLines(context, pump)
 
+            // ✅ Filtre ultime : HH/MM valides + secs 1..600 (tolère PLACEHOLDER)
             val filteredLines = rawLines.filter { line ->
-                val secs = line.substring(6, 9).toIntOrNull()
-                secs != null && secs in 1..600
+                isValidEncodedLineForSend(line) && line != PLACEHOLDER
             }
 
             // ✅ Tri officiel pour l’envoi (copie triée)
