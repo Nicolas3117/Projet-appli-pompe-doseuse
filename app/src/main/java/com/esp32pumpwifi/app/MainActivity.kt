@@ -1,9 +1,6 @@
 package com.esp32pumpwifi.app
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
@@ -12,8 +9,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -62,20 +57,7 @@ class MainActivity : AppCompatActivity() {
         tvConnectionStatus = findViewById(R.id.tv_connection_status)
         tankSummaryContainer = findViewById(R.id.layout_tank_summary)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (
-                ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    1001
-                )
-            }
-        }
+        NotificationPermissionHelper.requestPermissionIfNeeded(this)
 
         val periodicWork =
             PeriodicWorkRequestBuilder<TankRecalcWorker>(15, TimeUnit.MINUTES)

@@ -278,6 +278,8 @@ class MaterielsActivity : AppCompatActivity() {
             .putString("esp_${module.id}_telegram_chat_id", chatId)
             .apply()
 
+        NotificationPermissionHelper.requestPermissionIfNeeded(this)
+
         Toast.makeText(this, "Configuration Telegram enregistrée", Toast.LENGTH_SHORT).show()
     }
 
