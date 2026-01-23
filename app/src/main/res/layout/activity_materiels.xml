@@ -1,65 +1,72 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/scroll_materiels"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
     android:padding="16dp"
     android:clipToPadding="false">
 
+    <!-- ================= BARRE SUPÉRIEURE ================= -->
     <LinearLayout
-        android:layout_width="match_parent"
+        android:id="@+id/layout_top_bar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/tv_materiels_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Matériels"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:paddingBottom="8dp" />
+
+        <Button
+            android:id="@+id/btn_open_planning"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📊 Planning"
+            android:minHeight="48dp"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btn_add_module"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="+"
+            android:textSize="22sp"
+            android:minWidth="48dp"
+            android:minHeight="48dp" />
+    </LinearLayout>
+
+    <!-- ================= LISTE DES MODULES ESP32 ================= -->
+    <ListView
+        android:id="@+id/list_modules"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:divider="?android:attr/listDivider"
+        android:dividerHeight="1dp"
+        android:overScrollMode="ifContentScrolls"
+        app:layout_constraintTop_toBottomOf="@id/layout_top_bar"
+        app:layout_constraintBottom_toTopOf="@id/layout_actions"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- ================= ZONE ACTIONS ================= -->
+    <LinearLayout
+        android:id="@+id/layout_actions"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:focusableInTouchMode="true">
-
-        <!-- ================= BARRE SUPÉRIEURE ================= -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:id="@+id/tv_materiels_title"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Matériels"
-                android:textSize="22sp"
-                android:textStyle="bold"
-                android:paddingBottom="8dp" />
-
-            <Button
-                android:id="@+id/btn_open_planning"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📊 Planning"
-                android:minHeight="48dp"
-                android:layout_marginEnd="8dp" />
-
-            <Button
-                android:id="@+id/btn_add_module"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="+"
-                android:textSize="22sp"
-                android:minWidth="48dp"
-                android:minHeight="48dp" />
-        </LinearLayout>
-
-        <!-- ================= LISTE DES MODULES ESP32 ================= -->
-        <ListView
-            android:id="@+id/list_modules"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:divider="?android:attr/listDivider"
-            android:dividerHeight="1dp" />
-
-        <!-- ✅ ESPACE VISUEL POUR RESPIRATION -->
-        <Space
-            android:layout_width="match_parent"
-            android:layout_height="40dp" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
 
         <!-- ================= BOUTON ACCÈS POMPES ================= -->
         <Button
@@ -67,14 +74,13 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Accéder aux pompes"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="12dp" />
 
         <!-- ================= SÉPARATEUR ================= -->
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="#CCCCCC"
-            android:layout_marginTop="12dp"
             android:layout_marginBottom="12dp" />
 
         <!-- ================= TOGGLE ALERTES TELEGRAM ================= -->
@@ -104,63 +110,67 @@
                 android:textSize="16sp" />
         </LinearLayout>
 
-        <!-- ================= CONTENU TELEGRAM ================= -->
-        <LinearLayout
-            android:id="@+id/layout_telegram_content"
+        <!-- ================= CONTENU TELEGRAM (SCROLLABLE SI BESOIN) ================= -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/scroll_telegram_content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp">
+            android:fillViewport="true"
+            android:maxHeight="260dp"
+            android:overScrollMode="ifContentScrolls">
 
-            <EditText
-                android:id="@+id/edit_telegram_token"
+            <LinearLayout
+                android:id="@+id/layout_telegram_content"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Token du bot Telegram"
-                android:inputType="text"
-                android:layout_marginTop="6dp" />
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp">
 
-            <EditText
-                android:id="@+id/edit_telegram_chat_id"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="Chat ID Telegram"
-                android:inputType="text"
-                android:layout_marginTop="6dp" />
+                <EditText
+                    android:id="@+id/edit_telegram_token"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Token du bot Telegram"
+                    android:inputType="text"
+                    android:layout_marginTop="6dp" />
 
-            <TextView
-                android:id="@+id/tv_telegram_info"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Ces informations permettent l’envoi automatique des alertes (niveau bas, réservoir vide) vers Telegram."
-                android:textSize="12sp"
-                android:textColor="#666666"
-                android:layout_marginTop="4dp" />
+                <EditText
+                    android:id="@+id/edit_telegram_chat_id"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Chat ID Telegram"
+                    android:inputType="text"
+                    android:layout_marginTop="6dp" />
 
-            <Button
-                android:id="@+id/btn_save_telegram"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Enregistrer Telegram"
-                android:layout_marginTop="8dp" />
+                <TextView
+                    android:id="@+id/tv_telegram_info"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Ces informations permettent l’envoi automatique des alertes (niveau bas, réservoir vide) vers Telegram."
+                    android:textSize="12sp"
+                    android:textColor="#666666"
+                    android:layout_marginTop="4dp" />
 
-            <Button
-                android:id="@+id/btn_clear_telegram"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Effacer la configuration Telegram"
-                android:layout_marginTop="8dp"
-                android:backgroundTint="#D32F2F"
-                android:textColor="@android:color/white" />
-        </LinearLayout>
+                <Button
+                    android:id="@+id/btn_save_telegram"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Enregistrer Telegram"
+                    android:layout_marginTop="8dp" />
 
-        <!-- Vide bas pour clavier -->
-        <Space
-            android:layout_width="match_parent"
-            android:layout_height="360dp" />
+                <Button
+                    android:id="@+id/btn_clear_telegram"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Effacer la configuration Telegram"
+                    android:layout_marginTop="8dp"
+                    android:backgroundTint="#D32F2F"
+                    android:textColor="@android:color/white" />
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
 
     </LinearLayout>
 
-</androidx.core.widget.NestedScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>
