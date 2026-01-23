@@ -6,6 +6,11 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updateLayoutParams
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -40,8 +45,15 @@ class MaterielsActivity : AppCompatActivity() {
     // 📊 Planning
     private lateinit var btnOpenPlanning: Button
 
+    // Insets targets
+    private lateinit var layoutActions: ConstraintLayout
+    private lateinit var telegramScroll: androidx.core.widget.NestedScrollView
+
     private val PREFS_NAME = "prefs"
     private val KEY_TELEGRAM_TOGGLE_OPEN = "materiels_telegram_toggle_open"
+
+    private var actionsBaseMarginBottom = 0
+    private var telegramScrollBasePaddingBottom = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,7 +74,42 @@ class MaterielsActivity : AppCompatActivity() {
         telegramContent = findViewById(R.id.layout_telegram_content)
         telegramChevron = findViewById(R.id.icon_telegram_toggle)
 
+        layoutActions = findViewById(R.id.layout_actions)
+        telegramScroll = findViewById(R.id.scroll_telegram_content)
+
+        actionsBaseMarginBottom =
+            (layoutActions.layoutParams as android.view.ViewGroup.MarginLayoutParams).bottomMargin
+        telegramScrollBasePaddingBottom = telegramScroll.paddingBottom
+
+        // ✅ 1) Remonter la zone actions au-dessus clavier / barres système
+        ViewCompat.setOnApplyWindowInsetsListener(layoutActions) { view, insets ->
+            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val systemInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val bottomInset = maxOf(imeInsets.bottom, systemInsets.bottom)
+
+            view.updateLayoutParams<android.view.ViewGroup.MarginLayoutParams> {
+                bottomMargin = actionsBaseMarginBottom + bottomInset
+            }
+            insets
+        }
+
+        // ✅ 2) Ajouter du padding dans le scroll Telegram pour que les boutons restent atteignables
+        ViewCompat.setOnApplyWindowInsetsListener(telegramScroll) { view, insets ->
+            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val systemInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val bottomInset = maxOf(imeInsets.bottom, systemInsets.bottom)
+
+            view.updatePadding(bottom = telegramScrollBasePaddingBottom + bottomInset)
+            insets
+        }
+
+        ViewCompat.requestApplyInsets(layoutActions)
+        ViewCompat.requestApplyInsets(telegramScroll)
+
         setupTelegramToggle()
+
+        // ✅ 3) IMPORTANT : auto-scroll vers le champ quand on le focus (sinon tablette = clavier devant)
+        setupTelegramAutoScroll()
 
         // ➕ Scan réseau manuel
         findViewById<Button>(R.id.btn_add_module).setOnClickListener {
@@ -81,7 +128,6 @@ class MaterielsActivity : AppCompatActivity() {
 
         // 📊 Accès Planning
         btnOpenPlanning.setOnClickListener {
-
             val selectedEspIds =
                 Esp32Manager.getAll(this)
                     .filter { it.isActive }
@@ -126,6 +172,7 @@ class MaterielsActivity : AppCompatActivity() {
         telegramToggle.setOnClickListener {
             val opened = telegramContent.visibility == View.VISIBLE
             telegramContent.visibility = if (opened) View.GONE else View.VISIBLE
+
             telegramChevron.animate()
                 .rotation(if (opened) -90f else 0f)
                 .setDuration(150)
@@ -134,8 +181,36 @@ class MaterielsActivity : AppCompatActivity() {
             prefs.edit()
                 .putBoolean(KEY_TELEGRAM_TOGGLE_OPEN, !opened)
                 .apply()
+
+            // ✅ Si on ouvre, on scrolle vers la zone Telegram
+            if (!opened) {
+                telegramScroll.post {
+                    telegramScroll.smoothScrollTo(0, telegramContent.top)
+                }
+            }
         }
     }
+
+    // ✅ Auto-scroll au focus des champs Telegram
+    private fun setupTelegramAutoScroll() {
+        val scrollTo = { target: View ->
+            telegramScroll.post {
+                // marge de confort pour voir le champ + un peu d’espace
+                val y = target.bottom + dpToPx(24)
+                telegramScroll.smoothScrollTo(0, y)
+            }
+        }
+
+        editTelegramToken.setOnFocusChangeListener { v, hasFocus ->
+            if (hasFocus) scrollTo(v)
+        }
+        editTelegramChatId.setOnFocusChangeListener { v, hasFocus ->
+            if (hasFocus) scrollTo(v)
+        }
+    }
+
+    private fun dpToPx(dp: Int): Int =
+        (dp * resources.displayMetrics.density).toInt()
 
     // ================= LISTE MODULES =================
 
