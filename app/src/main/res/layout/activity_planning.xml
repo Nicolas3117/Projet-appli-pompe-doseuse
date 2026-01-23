@@ -7,7 +7,7 @@
 
     <!-- ================= SÉLECTEUR ESP ================= -->
 
-    <HorizontalScrollView
+    <com.esp32pumpwifi.app.NoInterceptHorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:fillViewport="true"
@@ -19,16 +19,16 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:padding="8dp" />
-    </HorizontalScrollView>
+    </com.esp32pumpwifi.app.NoInterceptHorizontalScrollView>
 
     <!-- ================= PLANNING SCROLLABLE ================= -->
 
-    <HorizontalScrollView
+    <com.esp32pumpwifi.app.NoInterceptHorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fillViewport="true">
 
-        <ScrollView
+        <com.esp32pumpwifi.app.NoInterceptScrollView
             android:layout_width="wrap_content"
             android:layout_height="match_parent">
 
@@ -37,7 +37,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
 
-        </ScrollView>
-    </HorizontalScrollView>
+        </com.esp32pumpwifi.app.NoInterceptScrollView>
+    </com.esp32pumpwifi.app.NoInterceptHorizontalScrollView>
 
 </LinearLayout>
