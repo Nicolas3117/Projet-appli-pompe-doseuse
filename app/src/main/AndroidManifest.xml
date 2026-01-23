@@ -3,15 +3,15 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ================= PERMISSIONS RÉSEAU ================= -->
-    <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <!-- ================= BLUETOOTH (SI UTILISÉ) ================= -->
-    <uses-permission android:name="android.permission.BLUETOOTH"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"/>
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
 
     <!-- ================= STOCKAGE (ANDROID < 13) ================= -->
     <uses-permission
@@ -34,26 +34,48 @@
         <!-- ================= PAGE D’ACCUEIL ================= -->
         <activity
             android:name=".MaterielsActivity"
-            android:exported="true">
+            android:exported="true"
+            android:windowSoftInputMode="stateHidden|adjustResize">
 
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
         </activity>
 
         <!-- ================= AUTRES ÉCRANS ================= -->
-        <activity android:name=".MainActivity" android:exported="false"/>
-        <activity android:name=".SelectIpActivity" android:exported="false"/>
-        <activity android:name=".ScheduleActivity" android:exported="false"/>
-        <activity android:name=".ManualDoseActivity" android:exported="false"/>
-        <activity android:name=".CalibrationActivity" android:exported="false"/>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
+
+        <activity
+            android:name=".SelectIpActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
+
+        <activity
+            android:name=".ScheduleActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
+
+        <activity
+            android:name=".ManualDoseActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
+
+        <activity
+            android:name=".CalibrationActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
 
         <!-- ✅ PLANNING (AJOUT OBLIGATOIRE) -->
         <activity
             android:name=".PlanningActivity"
-            android:exported="false"/>
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
 
     </application>
 
