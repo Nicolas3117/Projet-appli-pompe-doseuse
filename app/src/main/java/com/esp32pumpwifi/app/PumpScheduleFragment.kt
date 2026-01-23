@@ -21,6 +21,7 @@ class PumpScheduleFragment : Fragment() {
 
     companion object {
         const val MAX_PUMP_DURATION_SEC = 600
+        private const val MAX_SCHEDULES_PER_PUMP = 12
 
         fun newInstance(pumpNumber: Int): PumpScheduleFragment =
             PumpScheduleFragment().apply {
@@ -60,6 +61,21 @@ class PumpScheduleFragment : Fragment() {
         syncToProgramStore()
 
         return view
+    }
+
+    // ---------------------------------------------------------------------
+    // ✅ Parse + validation HH:MM (00-23 / 00-59)
+    // ---------------------------------------------------------------------
+    private fun parseTimeOrNull(time: String): Pair<Int, Int>? {
+        val t = time.trim()
+        if (!t.matches(Regex("""\d{2}:\d{2}"""))) return null
+        val parts = t.split(":")
+        if (parts.size != 2) return null
+        val hh = parts[0].toIntOrNull() ?: return null
+        val mm = parts[1].toIntOrNull() ?: return null
+        if (hh !in 0..23) return null
+        if (mm !in 0..59) return null
+        return hh to mm
     }
 
     // ---------------------------------------------------------------------
@@ -109,10 +125,21 @@ class PumpScheduleFragment : Fragment() {
             .setView(dialogView)
             .setPositiveButton("Enregistrer") { _, _ ->
 
+                // ✅ Limite 12 programmations (UX claire avant tout)
+                if (schedules.size >= MAX_SCHEDULES_PER_PUMP) {
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Limite atteinte")
+                        .setMessage("Attention : 12 programmations maximum par pompe.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@setPositiveButton
+                }
+
                 val time = etTime.text.toString().trim()
                 val qty = etQuantity.text.toString().toIntOrNull()
 
-                if (!time.matches(Regex("""\d{2}:\d{2}""")) || qty == null || qty <= 0) {
+                // ✅ format + bornes HH/MM
+                if (parseTimeOrNull(time) == null || qty == null || qty <= 0) {
                     Toast.makeText(
                         requireContext(),
                         "Format invalide",
@@ -184,8 +211,16 @@ class PumpScheduleFragment : Fragment() {
         val prefs =
             requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
-        val (h, m) =
-            time.split(":").map { it.toInt() }
+        // ✅ sécurité : au cas où (shouldn’t happen, mais protège legacy / appels indirects)
+        val parsed = parseTimeOrNull(time)
+        if (parsed == null) {
+            return ConflictResult(
+                blockingMessage = "Format invalide",
+                isPopup = false
+            )
+        }
+
+        val (h, m) = parsed
 
         val startSec =
             h * 3600 + m * 60
@@ -258,8 +293,9 @@ class PumpScheduleFragment : Fragment() {
             // ignore les anciennes lignes invalides (< 1 seconde)
             if (s.quantity.toFloat() < minMl) continue
 
-            val (sh, sm) =
-                s.time.split(":").map { it.toInt() }
+            // ✅ ignore si heure invalide (legacy/corruption)
+            val parsedExisting = parseTimeOrNull(s.time) ?: continue
+            val (sh, sm) = parsedExisting
 
             val sStart =
                 sh * 3600 + sm * 60
@@ -318,8 +354,9 @@ class PumpScheduleFragment : Fragment() {
                 if (!s.enabled) continue
                 if (s.quantity.toFloat() < pMinMl) continue
 
-                val (sh, sm) =
-                    s.time.split(":").map { it.toInt() }
+                // ✅ ignore si heure invalide (legacy/corruption)
+                val parsedOther = parseTimeOrNull(s.time) ?: continue
+                val (sh, sm) = parsedOther
 
                 val sStart =
                     sh * 3600 + sm * 60
@@ -441,8 +478,13 @@ class PumpScheduleFragment : Fragment() {
                 continue
             }
 
-            val (hh, mm) =
-                s.time.split(":").map { it.toInt() }
+            // ✅ ignore si heure invalide (legacy/corruption)
+            val parsed = parseTimeOrNull(s.time)
+            if (parsed == null) {
+                ignoredCount++
+                continue
+            }
+            val (hh, mm) = parsed
 
             val seconds =
                 (s.quantity.toFloat() / flow).roundToInt()

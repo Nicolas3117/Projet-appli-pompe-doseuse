@@ -197,6 +197,13 @@ class CalibrationActivity : AppCompatActivity() {
                 prefs.edit()
                     .putFloat("esp_${espId}_pump${pumpNum}_flow", flow)
                     .apply()
+
+                // ✅ INFO : les programmations doivent être renvoyées pour appliquer le nouveau débit
+                AlertDialog.Builder(this)
+                    .setTitle("Info")
+                    .setMessage("Après calibration : renvoie les programmations pour mise à jour.")
+                    .setPositiveButton("OK", null)
+                    .show()
             }
 
             tankResetButtons[i].setOnClickListener {

@@ -63,6 +63,21 @@ class PumpScheduleAdapter(
         }
 
         // -----------------------------------------------------------------
+        // ✅ Parse + validation HH:MM (00-23 / 00-59)
+        // -----------------------------------------------------------------
+        fun parseTimeOrNull(time: String): Pair<Int, Int>? {
+            val t = time.trim()
+            if (!t.matches(Regex("""\d{2}:\d{2}"""))) return null
+            val parts = t.split(":")
+            if (parts.size != 2) return null
+            val hh = parts[0].toIntOrNull() ?: return null
+            val mm = parts[1].toIntOrNull() ?: return null
+            if (hh !in 0..23) return null
+            if (mm !in 0..59) return null
+            return hh to mm
+        }
+
+        // -----------------------------------------------------------------
         // ✏ MODIFIER (AVEC CONTRÔLE CONFLITS)
         // -----------------------------------------------------------------
         btnEdit.setOnClickListener {
@@ -84,9 +99,8 @@ class PumpScheduleAdapter(
                     val newTime = etTime.text.toString().trim()
                     val newQty = etQty.text.toString().toIntOrNull()
 
-                    if (!newTime.matches(Regex("""\d{2}:\d{2}""")) ||
-                        newQty == null || newQty <= 0
-                    ) {
+                    // ✅ format + bornes HH/MM
+                    if (parseTimeOrNull(newTime) == null || newQty == null || newQty <= 0) {
                         Toast.makeText(context, "Format invalide", Toast.LENGTH_SHORT).show()
                         return@setPositiveButton
                     }
@@ -164,7 +178,19 @@ class PumpScheduleAdapter(
         val active = Esp32Manager.getActive(context) ?: return ConflictResult()
         val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
-        val (h, m) = newTime.split(":").map { it.toInt() }
+        // ✅ sécurité HH/MM (au cas où)
+        val t = newTime.trim()
+        if (!t.matches(Regex("""\d{2}:\d{2}"""))) {
+            return ConflictResult(blockingMessage = "Format invalide")
+        }
+        val parts = t.split(":")
+        if (parts.size != 2) return ConflictResult(blockingMessage = "Format invalide")
+        val h = parts[0].toIntOrNull() ?: return ConflictResult(blockingMessage = "Format invalide")
+        val m = parts[1].toIntOrNull() ?: return ConflictResult(blockingMessage = "Format invalide")
+        if (h !in 0..23 || m !in 0..59) {
+            return ConflictResult(blockingMessage = "Format invalide")
+        }
+
         val startSec = h * 3600 + m * 60
 
         val flowKey = "esp_${active.id}_pump${pumpNumber}_flow"
@@ -223,7 +249,15 @@ class PumpScheduleAdapter(
                 if (p == pumpNumber && index == editedIndex) continue
                 if (!s.enabled) continue
 
-                val (hh, mm) = s.time.split(":").map { it.toInt() }
+                // ✅ ignore si heure invalide (legacy/corruption)
+                val st = s.time.trim()
+                if (!st.matches(Regex("""\d{2}:\d{2}"""))) continue
+                val sp = st.split(":")
+                if (sp.size != 2) continue
+                val hh = sp[0].toIntOrNull() ?: continue
+                val mm = sp[1].toIntOrNull() ?: continue
+                if (hh !in 0..23 || mm !in 0..59) continue
+
                 val sStart = hh * 3600 + mm * 60
 
                 val flowOther =
