@@ -11,6 +11,8 @@ class PumpApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        TankNotification.ensureChannels(this)
+
         // 🔁 Worker périodique toutes les 15 minutes
         val work =
             PeriodicWorkRequestBuilder<TankRecalcWorker>(

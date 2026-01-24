@@ -47,12 +47,7 @@ object TankNotification {
         espId: Long,
         pumpNum: Int
     ) {
-        createChannel(
-            context,
-            EMPTY_CHANNEL_ID,
-            "Réservoir vide",
-            NotificationManager.IMPORTANCE_HIGH
-        )
+        ensureChannels(context)
 
         val fullName = getFullPumpName(context, espId, pumpNum)
 
@@ -77,12 +72,7 @@ object TankNotification {
         pumpNum: Int,
         percent: Int
     ) {
-        createChannel(
-            context,
-            LOW_CHANNEL_ID,
-            "Niveau bas",
-            NotificationManager.IMPORTANCE_DEFAULT
-        )
+        ensureChannels(context)
 
         val fullName = getFullPumpName(context, espId, pumpNum)
 
@@ -100,6 +90,21 @@ object TankNotification {
     // =====================================================
     // 🔧 CANAUX (SON + VIBRATION)
     // =====================================================
+    fun ensureChannels(context: Context) {
+        createChannel(
+            context,
+            EMPTY_CHANNEL_ID,
+            "Réservoir vide",
+            NotificationManager.IMPORTANCE_HIGH
+        )
+        createChannel(
+            context,
+            LOW_CHANNEL_ID,
+            "Niveau bas",
+            NotificationManager.IMPORTANCE_DEFAULT
+        )
+    }
+
     private fun createChannel(
         context: Context,
         channelId: String,
