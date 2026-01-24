@@ -102,18 +102,28 @@ object TelegramSender {
                     StandardCharsets.UTF_8.toString()
                 )
 
-            // ✅ GET conservé (simple), mais on lit la réponse JSON et on vérifie "ok": true
-            val url =
-                "https://api.telegram.org/bot${config.token}/sendMessage" +
-                        "?chat_id=${config.chatId}" +
-                        "&text=$encodedMessage"
+            val url = "https://api.telegram.org/bot${config.token}/sendMessage"
 
             conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 5000
                 readTimeout = 5000
-                requestMethod = "GET"
+                requestMethod = "POST"
+                doOutput = true
                 useCaches = false
                 setRequestProperty("Connection", "close")
+                setRequestProperty(
+                    "Content-Type",
+                    "application/x-www-form-urlencoded; charset=utf-8"
+                )
+            }
+
+            val bodyParams =
+                "chat_id=${URLEncoder.encode(config.chatId, StandardCharsets.UTF_8.toString())}" +
+                    "&text=$encodedMessage"
+
+            conn.outputStream.use { output ->
+                output.write(bodyParams.toByteArray(StandardCharsets.UTF_8))
+                output.flush()
             }
 
             val code = conn.responseCode

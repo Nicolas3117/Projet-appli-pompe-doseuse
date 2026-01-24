@@ -11,6 +11,7 @@ class PumpApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // 🔔 Channels de notifications Android (API 26+)
         TankNotification.ensureChannels(this)
 
         // ✅ Garantit le flush de la queue Telegram dès que le réseau est dispo
@@ -25,7 +26,7 @@ class PumpApplication : Application() {
                 .addTag("tank_recalc")
                 .build()
 
-        WorkManager.getInstance(this)
+        WorkManager.getInstance(applicationContext)
             .enqueueUniquePeriodicWork(
                 "tank_recalc",
                 ExistingPeriodicWorkPolicy.KEEP,
