@@ -40,12 +40,13 @@ object TankAlertManager {
                 pumpNum = pumpNum
             )
 
-            // 📲 Telegram (AUTOMATIQUE)
-            TelegramSender.sendEmptyTank(
+            // 📲 Telegram (AUTOMATIQUE + file d'attente)
+            val alert = TelegramSender.buildEmptyTankAlert(
                 context = context,
                 espId = espId,
                 pumpNum = pumpNum
             )
+            TelegramAlertQueue.trySendNowOrQueue(context, alert)
 
             return Pair(
                 lowAlertSent, // on respecte l’état réel
@@ -66,13 +67,14 @@ object TankAlertManager {
                 percent = percent
             )
 
-            // 📲 Telegram (AUTOMATIQUE)
-            TelegramSender.sendLowLevel(
+            // 📲 Telegram (AUTOMATIQUE + file d'attente)
+            val alert = TelegramSender.buildLowLevelAlert(
                 context = context,
                 espId = espId,
                 pumpNum = pumpNum,
                 percent = percent
             )
+            TelegramAlertQueue.trySendNowOrQueue(context, alert)
 
             return Pair(
                 true,

@@ -13,6 +13,10 @@ class PumpApplication : Application() {
 
         TankNotification.ensureChannels(this)
 
+        // ✅ Garantit le flush de la queue Telegram dès que le réseau est dispo
+        // (utile après reboot / si l'app n'est pas relancée au bon moment)
+        TelegramAlertQueue.scheduleFlush(this)
+
         // 🔁 Worker périodique toutes les 15 minutes
         val work =
             PeriodicWorkRequestBuilder<TankRecalcWorker>(
