@@ -459,7 +459,7 @@ class MaterielsActivity : AppCompatActivity() {
                     newModules.map { "${it.internalName} (${it.ip})" }.toTypedArray()
 
                 AlertDialog.Builder(this@MaterielsActivity)
-                    .setTitle("Nouveaux ESP32 détectés")
+                    .setTitle("Nouvelle pompe détectée")
                     .setItems(items) { _, index ->
                         val esp = newModules[index]
                         Esp32Manager.add(
