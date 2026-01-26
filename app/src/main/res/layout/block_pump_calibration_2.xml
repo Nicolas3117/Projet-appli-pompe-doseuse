@@ -30,7 +30,7 @@
         android:id="@+id/edit_duration2"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Durée (s)"
+        android:hint="Durée recommandée : 60 s"
         android:inputType="numberDecimal" />
 
     <EditText

@@ -7,12 +7,22 @@ import android.util.Log
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import java.util.Locale
 
 class CalibrationActivity : AppCompatActivity() {
 
     companion object {
         // ✅ Limite spécifique calibration
         const val MAX_CALIBRATION_DURATION_SEC = 250
+        const val FLOW_DISPLAY_DECIMALS = 3
+    }
+
+    private fun formatFlow(flow: Float): String {
+        return String.format(
+            Locale.getDefault(),
+            "%.${FLOW_DISPLAY_DECIMALS}f",
+            flow
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -134,13 +144,11 @@ class CalibrationActivity : AppCompatActivity() {
             pumpNames[i].setText(name)
             pumpTitles[i].text = name
 
-            val flow = prefs.getFloat(
-                "esp_${espId}_pump${pumpNum}_flow",
-                -1f
-            )
+            val flowKey = "esp_${espId}_pump${pumpNum}_flow"
+            val flow = prefs.getFloat(flowKey, -1f)
 
             if (flow > 0f) {
-                pumpResults[i].text = "Débit : %.1f mL/s".format(flow)
+                pumpResults[i].text = "Débit : ${formatFlow(flow)} mL/s"
             }
 
             loadTankUI(
@@ -192,17 +200,22 @@ class CalibrationActivity : AppCompatActivity() {
                 }
 
                 val flow = volume / duration
-                pumpResults[i].text = "Débit : %.1f mL/s".format(flow)
+                val flowKey = "esp_${espId}_pump${pumpNum}_flow"
+                pumpResults[i].text = "Débit : ${formatFlow(flow)} mL/s"
 
                 prefs.edit()
-                    .putFloat("esp_${espId}_pump${pumpNum}_flow", flow)
+                    .putFloat(flowKey, flow)
                     .apply()
 
                 // ✅ INFO : les programmations doivent être renvoyées pour appliquer le nouveau débit
                 AlertDialog.Builder(this)
                     .setTitle("Info")
-                    .setMessage("Calibration terminée.\n" +
-                            "Veuillez renvoyer la programmation pour appliquer les nouveaux débits.")
+                    .setMessage(
+                        "Calibration terminée.\n" +
+                                "Débit affiché avec $FLOW_DISPLAY_DECIMALS décimales " +
+                                "(stocké en Float dans SharedPreferences, clé $flowKey).\n" +
+                                "Veuillez renvoyer la programmation pour appliquer les nouveaux débits."
+                    )
                     .setPositiveButton("OK", null)
                     .show()
             }

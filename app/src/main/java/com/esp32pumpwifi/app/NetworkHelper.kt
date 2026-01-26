@@ -12,7 +12,6 @@ import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import kotlin.math.roundToInt
 
 object NetworkHelper {
 
@@ -32,7 +31,7 @@ object NetworkHelper {
     }
 
     // =====================================================
-    // 🚿 DOSAGE MANUEL (SECONDES) — compat /manual
+    // 🚿 DOSAGE MANUEL (SECONDES) — /manual
     // =====================================================
     fun sendManualCommand(
         context: Context,
@@ -40,10 +39,9 @@ object NetworkHelper {
         pump: Int,
         seconds: Int
     ) {
-        // ⚠️ On garde EXACTEMENT ta logique (même format message)
-        // (Pour ne rien casser côté firmware si tu t’y appuies déjà)
-        val message = pump.toString() + String.format("%08d", seconds)
-        val urlString = "http://$ip/manual?message=$message"
+        val message = "${pump}_${seconds}"
+        val encodedMessage = URLEncoder.encode(message, "UTF-8")
+        val urlString = "http://$ip/manual?message=$encodedMessage"
 
         showSendingToast(context)
         Log.e("ESP32_MANUAL", "➡️ $urlString")
@@ -56,8 +54,12 @@ object NetworkHelper {
                 conn.connectTimeout = 1500
                 conn.readTimeout = 1500
 
-                // Lit la réponse pour “consommer” le flux
+                val responseCode = conn.responseCode
                 conn.inputStream.bufferedReader().use { it.readText() }
+
+                if (responseCode != HttpURLConnection.HTTP_OK) {
+                    throw IllegalStateException("HTTP $responseCode")
+                }
 
                 withContext(Dispatchers.Main) {
                     showSuccessToast(context, "Commande envoyée à la pompe $pump")
@@ -66,7 +68,6 @@ object NetworkHelper {
             } catch (e: Exception) {
                 Log.e("ESP32_MANUAL", "❌ Erreur envoi", e)
                 showNoReturnToast(context)
-
             } finally {
                 try {
                     conn?.disconnect()
@@ -83,8 +84,7 @@ object NetworkHelper {
         context: Context,
         ip: String,
         pump: Int,
-        durationMs: Int,
-        fallbackToSeconds: Boolean = true
+        durationMs: Int
     ) {
         val message = "${pump}_${durationMs}"
         val encodedMessage = URLEncoder.encode(message, "UTF-8")
@@ -114,23 +114,7 @@ object NetworkHelper {
 
             } catch (e: Exception) {
                 Log.e("ESP32_MANUAL_MS", "❌ Erreur envoi", e)
-
-                if (fallbackToSeconds) {
-                    // Conversion ms -> s, garde un minimum à 1 seconde
-                    val seconds = (durationMs / 1000f).roundToInt().coerceAtLeast(1)
-
-                    // ⚠️ Important : sendManualCommand affiche un Toast => doit être safe UI
-                    withContext(Dispatchers.Main) {
-                        // petit message optionnel si tu veux voir que ça fallback
-                        // Toast.makeText(context, "Fallback en secondes…", Toast.LENGTH_SHORT).show()
-                    }
-
-                    sendManualCommand(context, ip, pump, seconds)
-                    return@launch
-                }
-
                 showNoReturnToast(context)
-
             } finally {
                 try {
                     conn?.disconnect()
@@ -186,8 +170,13 @@ object NetworkHelper {
                 conn.connectTimeout = 3000
                 conn.readTimeout = 3000
 
+                val responseCode = conn.responseCode
                 val response = conn.inputStream.bufferedReader().use { it.readText() }
                 Log.e("ESP32_PROGRAM", "ESP32 RESPONSE = '$response'")
+
+                if (responseCode != HttpURLConnection.HTTP_OK) {
+                    throw IllegalStateException("HTTP $responseCode")
+                }
 
                 withContext(Dispatchers.Main) {
                     showSuccessToast(context, "Programmation envoyée à l’ESP32")
