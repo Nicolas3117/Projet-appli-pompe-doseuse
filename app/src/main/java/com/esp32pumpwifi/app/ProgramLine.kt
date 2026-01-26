@@ -5,27 +5,27 @@ import android.util.Log
 /**
  * Représente UNE ligne de programmation envoyée à l'ESP32
  *
- * ⚠️ FORMAT STRICT ESP32 (9 caractères EXACTS) :
+ * ⚠️ FORMAT STRICT ESP32 (12 caractères EXACTS) :
  *  E = Enable (0 / 1)
  *  P = Pompe (1..4)
  *  HH = Heure (00..23)
  *  MM = Minute (00..59)
- *  QQQ = Durée en secondes (000..999)
+ *  MMMMMM = Durée en millisecondes (000050..600000)
  *
- * Exemple : "110445009"
+ * Exemple : "110445012000"
  */
 data class ProgramLine(
     val enabled: Boolean,   // true = actif
     val pump: Int,          // 1..4
     val hour: Int,          // 0..23
     val minute: Int,        // 0..59
-    val qtySeconds: Int     // 0..999
+    val qtyMs: Int          // 50..600000
 )
 
 /**
- * Conversion ULTRA SÉCURISÉE vers le format ESP32 (9 caractères)
+ * Conversion ULTRA SÉCURISÉE vers le format ESP32 (12 caractères)
  */
-fun ProgramLine.toEsp9(): String {
+fun ProgramLine.toEsp12(): String {
 
     val e = if (enabled) 1 else 0
 
@@ -42,18 +42,18 @@ fun ProgramLine.toEsp9(): String {
         .toString()
         .padStart(2, '0')
 
-    val qqq = qtySeconds
-        .coerceIn(0, 999)
+    val mmmmmm = qtyMs
+        .coerceIn(50, 600000)
         .toString()
-        .padStart(3, '0')
+        .padStart(6, '0')
 
-    val result = "$e$p$hh$mm$qqq"
+    val result = "$e$p$hh$mm$mmmmmm"
 
     // 🔍 LOG CRUCIAL POUR DEBUG ESP32
     Log.e(
         "PROGRAM_LINE",
         "➡️ ESP32 LINE = [$result] " +
-                "(pump=$p, $hh:$mm, secs=$qqq, enabled=$e)"
+                "(pump=$p, $hh:$mm, ms=$mmmmmm, enabled=$e)"
     )
 
     return result

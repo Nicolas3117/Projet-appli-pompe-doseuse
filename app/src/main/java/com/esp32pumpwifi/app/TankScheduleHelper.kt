@@ -6,7 +6,7 @@ import kotlin.math.max
 
 object TankScheduleHelper {
 
-    private const val PLACEHOLDER = "000000000"
+    private const val PLACEHOLDER = "000000000000"
 
     // ------------------------------------------------------------------
     // 📊 CONSOMMATION JOURNALIÈRE
@@ -31,10 +31,10 @@ object TankScheduleHelper {
             if (line == PLACEHOLDER) continue
             if (line.isEmpty() || line[0] != '1') continue
 
-            val durationSeconds = line.substring(6, 9).toIntOrNull() ?: continue
-            if (durationSeconds <= 0) continue
+            val durationMs = line.substring(6, 12).toIntOrNull() ?: continue
+            if (durationMs <= 0) continue
 
-            totalMl += durationSeconds * flow
+            totalMl += (durationMs / 1000f) * flow
         }
 
         return totalMl
@@ -70,7 +70,7 @@ object TankScheduleHelper {
             // ✅ FIX: trie par heure/minute (évite de “sauter” des doses si l’ordre n’est pas garanti)
             val sortedLines =
                 encodedLines
-                    .filter { it != PLACEHOLDER && it.isNotEmpty() && it[0] == '1' && it.length >= 9 }
+                    .filter { it != PLACEHOLDER && it.isNotEmpty() && it[0] == '1' && it.length >= 12 }
                     .sortedWith(
                         compareBy(
                             { it.substring(2, 4).toIntOrNull() ?: -1 },
@@ -83,14 +83,14 @@ object TankScheduleHelper {
                 // (garde-fous)
                 if (line == PLACEHOLDER) continue
                 if (line.isEmpty() || line[0] != '1') continue
-                if (line.length < 9) continue
+                if (line.length < 12) continue
 
                 val hh = line.substring(2, 4).toIntOrNull() ?: continue
                 val mm = line.substring(4, 6).toIntOrNull() ?: continue
-                val durationSeconds = line.substring(6, 9).toIntOrNull() ?: continue
-                if (durationSeconds <= 0) continue
+                val durationMs = line.substring(6, 12).toIntOrNull() ?: continue
+                if (durationMs <= 0) continue
 
-                val volumeMl = durationSeconds * flow
+                val volumeMl = (durationMs / 1000f) * flow
 
                 var dayCursor =
                     Calendar.getInstance().apply {
@@ -109,7 +109,7 @@ object TankScheduleHelper {
                             set(Calendar.MINUTE, mm)
                         }
 
-                    val endMillis = start.timeInMillis + durationSeconds * 1000L
+                    val endMillis = start.timeInMillis + durationMs
 
                     if (endMillis > lastProcessed && endMillis <= now) {
 

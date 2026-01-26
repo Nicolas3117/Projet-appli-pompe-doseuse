@@ -29,8 +29,8 @@ class ScheduleActivity : AppCompatActivity() {
     // ✅ Empreinte de la programmation envoyée / chargée
     private var lastProgramHash: String? = null
 
-    // ✅ /read : 48 lignes de 9 chiffres
-    private val line9DigitsRegex = Regex("""\d{9}""")
+    // ✅ /read_ms : 48 lignes de 12 chiffres
+    private val line12DigitsRegex = Regex("""\d{12}""")
 
     // ✅ Auto-check : 1 fois par ouverture d’activité
     private var didAutoCheckOnResume = false
@@ -68,7 +68,7 @@ class ScheduleActivity : AppCompatActivity() {
         }.attach()
 
         // ✅ Référence de départ (programme "considéré envoyé/chargé")
-        lastProgramHash = ProgramStore.buildMessage(this)
+        lastProgramHash = ProgramStore.buildMessageMs(this)
 
         // ✅ Sortie : toujours check final
         // Si modif locale -> popup "non envoyée" avant
@@ -78,7 +78,7 @@ class ScheduleActivity : AppCompatActivity() {
                 override fun handleOnBackPressed() {
                     if (exitInProgress) return
 
-                    val currentHash = ProgramStore.buildMessage(this@ScheduleActivity)
+                    val currentHash = ProgramStore.buildMessageMs(this@ScheduleActivity)
                     val locallyModified = lastProgramHash != null && lastProgramHash != currentHash
 
                     if (!locallyModified) {
@@ -117,7 +117,7 @@ class ScheduleActivity : AppCompatActivity() {
         if (didAutoCheckOnResume) return
         didAutoCheckOnResume = true
 
-        // ✅ À l’ouverture : /read + compare (avec popup si KO)
+        // ✅ À l’ouverture : /read_ms + compare (avec popup si KO)
         autoCheckProgramOnOpen()
     }
 
@@ -171,8 +171,8 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------
-    // ✅ À l’ouverture : /read + compare
-    // - /read KO => popup courte (pompe déconnectée)
+    // ✅ À l’ouverture : /read_ms + compare
+    // - /read_ms KO => popup courte (pompe déconnectée)
     // - identique => rien
     // - différent => popup détaillée
     // ------------------------------------------------------------
@@ -195,7 +195,7 @@ class ScheduleActivity : AppCompatActivity() {
                 return@launch
             }
 
-            val localProgram = ProgramStore.buildMessage(this@ScheduleActivity)
+            val localProgram = ProgramStore.buildMessageMs(this@ScheduleActivity)
 
             if (espProgram != localProgram) {
                 val diffs = computeAllDiffs(localProgram, espProgram)
@@ -205,8 +205,8 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------
-    // ✅ À la fermeture : /read + compare
-    // - /read KO => popup courte + finish
+    // ✅ À la fermeture : /read_ms + compare
+    // - /read_ms KO => popup courte + finish
     // - identique => finish
     // - différent => popup courte + finish
     // ------------------------------------------------------------
@@ -221,10 +221,10 @@ class ScheduleActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch {
-            Log.i("SCHEDULE_EXIT", "Exit check: tentative /read sur ${active.ip}")
+            Log.i("SCHEDULE_EXIT", "Exit check: tentative /read_ms sur ${active.ip}")
 
             val espProgram = fetchProgramFromEsp(active.ip)
-            val localProgram = ProgramStore.buildMessage(this@ScheduleActivity)
+            val localProgram = ProgramStore.buildMessageMs(this@ScheduleActivity)
 
             if (espProgram == null) {
                 AlertDialog.Builder(this@ScheduleActivity)
@@ -261,10 +261,10 @@ class ScheduleActivity : AppCompatActivity() {
     // 2️⃣ ENVOI PROGRAMMATION
     // ------------------------------------------------------------
     private fun sendSchedulesToESP32(active: EspModule) {
-        val message = ProgramStore.buildMessage(this)
+        val message = ProgramStore.buildMessageMs(this)
         Log.i("SCHEDULE_SEND", "➡️ Envoi programmation via NetworkHelper")
 
-        NetworkHelper.sendProgram(this, active.ip, message) {
+        NetworkHelper.sendProgramMs(this, active.ip, message) {
             val now = System.currentTimeMillis()
             val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
 
@@ -275,7 +275,7 @@ class ScheduleActivity : AppCompatActivity() {
             }
 
             // ✅ Après envoi, on met à jour la référence "envoyée"
-            lastProgramHash = ProgramStore.buildMessage(this@ScheduleActivity)
+            lastProgramHash = ProgramStore.buildMessageMs(this@ScheduleActivity)
         }
     }
 
@@ -311,13 +311,13 @@ class ScheduleActivity : AppCompatActivity() {
         }
 
     // ------------------------------------------------------------
-    // 📥 Lecture programme sur ESP32 : GET /read
+    // 📥 Lecture programme sur ESP32 : GET /read_ms
     // ------------------------------------------------------------
     private suspend fun fetchProgramFromEsp(ip: String): String? =
         withContext(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
             try {
-                val url = URL("http://$ip/read")
+                val url = URL("http://$ip/read_ms")
                 conn = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 2000
                     readTimeout = 2000
@@ -326,7 +326,7 @@ class ScheduleActivity : AppCompatActivity() {
                 }
 
                 val raw = conn.inputStream.bufferedReader().use { it.readText() }
-                normalizeProgram432FromRead(raw)
+                normalizeProgram576FromRead(raw)
 
             } catch (_: Exception) {
                 null
@@ -338,51 +338,51 @@ class ScheduleActivity : AppCompatActivity() {
             }
         }
 
-    private fun normalizeProgram432FromRead(raw: String): String? {
+    private fun normalizeProgram576FromRead(raw: String): String? {
         val lines = raw
             .lineSequence()
             .map { it.trim() }
-            .filter { it.matches(line9DigitsRegex) }
+            .filter { it.matches(line12DigitsRegex) }
             .toList()
 
         if (lines.size != 48) return null
 
         val joined = lines.joinToString(separator = "")
-        return if (joined.length == 432) joined else null
+        return if (joined.length == 576) joined else null
     }
 
     // ------------------------------------------------------------
-    // 🔎 Décodage ligne 9 chiffres + affichage propre
+    // 🔎 Décodage ligne 12 chiffres + affichage propre
     // ------------------------------------------------------------
-    private fun decodePumpFromLine9(line9: String): Int? {
-        if (line9.length != 9 || line9 == "000000000") return null
-        val pump = line9.substring(1, 2).toIntOrNull() ?: return null
+    private fun decodePumpFromLine12(line12: String): Int? {
+        if (line12.length != 12 || line12 == "000000000000") return null
+        val pump = line12.substring(1, 2).toIntOrNull() ?: return null
         return if (pump in 1..4) pump else null
     }
 
-    private fun decodeTimeFromLine9(line9: String): String? {
-        if (line9.length != 9 || line9 == "000000000") return null
+    private fun decodeTimeFromLine12(line12: String): String? {
+        if (line12.length != 12 || line12 == "000000000000") return null
         return try {
-            val hh = line9.substring(2, 4).toInt()
-            val mm = line9.substring(4, 6).toInt()
+            val hh = line12.substring(2, 4).toInt()
+            val mm = line12.substring(4, 6).toInt()
             if (hh !in 0..23 || mm !in 0..59) null else "%02d:%02d".format(hh, mm)
         } catch (_: Exception) {
             null
         }
     }
 
-    private fun decodeSecsFromLine9(line9: String): Int? {
-        if (line9.length != 9 || line9 == "000000000") return null
-        val secs = line9.substring(6, 9).toIntOrNull() ?: return null
-        return if (secs in 1..600) secs else null
+    private fun decodeMsFromLine12(line12: String): Int? {
+        if (line12.length != 12 || line12 == "000000000000") return null
+        val ms = line12.substring(6, 12).toIntOrNull() ?: return null
+        return if (ms in 50..600000) ms else null
     }
 
-    private fun estimateVolumeMl(pump: Int, secs: Int): Int? {
+    private fun estimateVolumeMl(pump: Int, durationMs: Int): Int? {
         val active = Esp32Manager.getActive(this) ?: return null
         val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
         val flow = prefs.getFloat("esp_${active.id}_pump${pump}_flow", 0f) // mL/s
         if (flow <= 0f) return null
-        return (flow * secs).toInt()
+        return (flow * (durationMs / 1000f)).toInt()
     }
 
     /**
@@ -391,19 +391,19 @@ class ScheduleActivity : AppCompatActivity() {
      * - ou "Pompe 3 – 16:30 – 120 s" (si pas de débit)
      * - ou "Aucune programmation"
      */
-    private fun formatReadableLine(line9: String): String {
-        if (line9.length != 9 || line9 == "000000000") return "Aucune programmation"
+    private fun formatReadableLine(line12: String): String {
+        if (line12.length != 12 || line12 == "000000000000") return "Aucune programmation"
 
-        val pump = decodePumpFromLine9(line9) ?: return "Programmation invalide"
-        val time = decodeTimeFromLine9(line9) ?: "—"
-        val secs = decodeSecsFromLine9(line9)
+        val pump = decodePumpFromLine12(line12) ?: return "Programmation invalide"
+        val time = decodeTimeFromLine12(line12) ?: "—"
+        val ms = decodeMsFromLine12(line12)
 
-        val volume = if (secs != null) estimateVolumeMl(pump, secs) else null
+        val volume = if (ms != null) estimateVolumeMl(pump, ms) else null
 
         return when {
-            secs == null -> "Pompe $pump – $time"
+            ms == null -> "Pompe $pump – $time"
             volume != null -> "Pompe $pump – $time – $volume mL"
-            else -> "Pompe $pump – $time – ${secs} s"
+            else -> "Pompe $pump – $time – ${ms} ms"
         }
     }
 
@@ -412,19 +412,19 @@ class ScheduleActivity : AppCompatActivity() {
     // ------------------------------------------------------------
     private data class LineDiff(
         val globalLine: Int,
-        val localLine9: String,
-        val espLine9: String
+        val localLine12: String,
+        val espLine12: String
     )
 
     private fun computeAllDiffs(local: String, esp: String): List<LineDiff> {
-        val a = local.padEnd(432, '0').take(432)
-        val b = esp.padEnd(432, '0').take(432)
+        val a = local.padEnd(576, '0').take(576)
+        val b = esp.padEnd(576, '0').take(576)
 
         val diffs = mutableListOf<LineDiff>()
         for (line in 0 until 48) {
-            val start = line * 9
-            val la = a.substring(start, start + 9)
-            val lb = b.substring(start, start + 9)
+            val start = line * 12
+            val la = a.substring(start, start + 12)
+            val lb = b.substring(start, start + 12)
             if (la != lb) diffs.add(LineDiff(line, la, lb))
         }
         return diffs
@@ -444,8 +444,8 @@ class ScheduleActivity : AppCompatActivity() {
             append("Différences : ${diffs.size}\n\n")
 
             for (d in shown) {
-                val localReadable = formatReadableLine(d.localLine9)
-                val espReadable = formatReadableLine(d.espLine9)
+                val localReadable = formatReadableLine(d.localLine12)
+                val espReadable = formatReadableLine(d.espLine12)
 
                 append("➡️ Appli : $localReadable\n")
                 append("➡️ Pompe : $espReadable\n\n")

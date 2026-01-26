@@ -125,17 +125,17 @@ object NetworkHelper {
     }
 
     // =====================================================
-    // 📅 PROGRAMMATION ESP32 (inchangé, juste safe)
+    // 📅 PROGRAMMATION ESP32 — /program_ms
     // =====================================================
-    fun sendProgram(
+    fun sendProgramMs(
         context: Context,
         ip: String,
         message: String,
         onSuccess: () -> Unit = {}
     ) {
         // 🔒 SÉCURITÉ
-        if (message.length != 432) {
-            Log.e("ESP32_PROGRAM", "❌ MESSAGE INVALIDE : ${message.length} chars (attendu 432)")
+        if (message.length != 576) {
+            Log.e("ESP32_PROGRAM_MS", "❌ MESSAGE INVALIDE : ${message.length} chars (attendu 576)")
             Toast.makeText(
                 context,
                 "Erreur interne : message invalide (${message.length})",
@@ -145,22 +145,22 @@ object NetworkHelper {
         }
 
         val encodedMessage = URLEncoder.encode(message, "UTF-8")
-        val urlString = "http://$ip/program?message=$encodedMessage"
+        val urlString = "http://$ip/program_ms?message=$encodedMessage"
 
-        Log.e("ESP32_PROGRAM", "================ PROGRAM SEND ================")
-        Log.e("ESP32_PROGRAM", "IP       = $ip")
-        Log.e("ESP32_PROGRAM", "LENGTH   = ${message.length}")
-        Log.e("ESP32_PROGRAM", "URL LEN  = ${urlString.length}")
+        Log.e("ESP32_PROGRAM_MS", "================ PROGRAM_MS SEND ================")
+        Log.e("ESP32_PROGRAM_MS", "IP       = $ip")
+        Log.e("ESP32_PROGRAM_MS", "LENGTH   = ${message.length}")
+        Log.e("ESP32_PROGRAM_MS", "URL LEN  = ${urlString.length}")
 
         var idx = 0
         var lineNum = 1
-        while (idx + 9 <= message.length) {
-            val line = message.substring(idx, idx + 9)
-            Log.e("ESP32_PROGRAM", "L$lineNum. '$line'")
-            idx += 9
+        while (idx + 12 <= message.length) {
+            val line = message.substring(idx, idx + 12)
+            Log.e("ESP32_PROGRAM_MS", "L$lineNum. '$line'")
+            idx += 12
             lineNum += 1
         }
-        Log.e("ESP32_PROGRAM", "================================================")
+        Log.e("ESP32_PROGRAM_MS", "================================================")
 
         CoroutineScope(Dispatchers.IO).launch {
             var conn: HttpURLConnection? = null
@@ -172,7 +172,7 @@ object NetworkHelper {
 
                 val responseCode = conn.responseCode
                 val response = conn.inputStream.bufferedReader().use { it.readText() }
-                Log.e("ESP32_PROGRAM", "ESP32 RESPONSE = '$response'")
+                Log.e("ESP32_PROGRAM_MS", "ESP32 RESPONSE = '$response'")
 
                 if (responseCode != HttpURLConnection.HTTP_OK) {
                     throw IllegalStateException("HTTP $responseCode")
@@ -184,7 +184,7 @@ object NetworkHelper {
                 }
 
             } catch (e: Exception) {
-                Log.e("ESP32_PROGRAM", "❌ ERREUR ENVOI PROGRAM", e)
+                Log.e("ESP32_PROGRAM_MS", "❌ ERREUR ENVOI PROGRAM_MS", e)
 
                 withContext(Dispatchers.Main) {
                     Toast.makeText(

@@ -8,8 +8,8 @@ private const val PREFS = "prefs"
 private const val MAX_LINES_PER_PUMP = 12
 private const val PUMP_COUNT = 4
 
-/** Ligne OFF = désactivée (9 caractères EXACTS) */
-private const val PLACEHOLDER = "000000000"
+/** Ligne OFF = désactivée (12 caractères EXACTS) */
+private const val PLACEHOLDER = "000000000000"
 
 object ProgramStore {
 
@@ -72,7 +72,7 @@ object ProgramStore {
     }
 
     // ---------------------------------------------------------------------
-    // 📥 Chargement lignes encodées (9 chars EXACTS) — module actif
+    // 📥 Chargement lignes encodées (12 chars EXACTS) — module actif
     // ---------------------------------------------------------------------
     fun loadEncodedLines(context: Context, pump: Int): MutableList<String> {
         val raw = context
@@ -84,12 +84,12 @@ object ProgramStore {
 
         return raw.split(';')
             .map { it.trim() }
-            .filter { it.length == 9 && it.all(Char::isDigit) }
+            .mapNotNull { normalizeEncodedLine(it) }
             .toMutableList()
     }
 
     // ---------------------------------------------------------------------
-    // 📥 Chargement lignes encodées (9 chars EXACTS) — espId explicite
+    // 📥 Chargement lignes encodées (12 chars EXACTS) — espId explicite
     // (utilisé pour recalcul multi-modules)
     // ---------------------------------------------------------------------
     fun loadEncodedLines(
@@ -106,7 +106,7 @@ object ProgramStore {
 
         return raw.split(';')
             .map { it.trim() }
-            .filter { it.length == 9 && it.all(Char::isDigit) }
+            .mapNotNull { normalizeEncodedLine(it) }
             .toMutableList()
     }
 
@@ -135,7 +135,7 @@ object ProgramStore {
         val list = loadEncodedLines(context, pump)
         if (list.size >= MAX_LINES_PER_PUMP) return false
 
-        val encoded = line.toEsp9()
+        val encoded = line.toEsp12()
         list.add(encoded)
 
         saveEncodedLines(context, pump, list)
@@ -178,7 +178,8 @@ object ProgramStore {
     }
 
     private fun decodeDurationMinutes(line: String): Int {
-        return line.substring(6, 9).toInt()
+        val durationMs = line.substring(6, 12).toInt()
+        return kotlin.math.ceil(durationMs / 60000.0).toInt()
     }
 
     private fun overlap(start1: Int, end1: Int, start2: Int, end2: Int): Boolean {
@@ -218,19 +219,19 @@ object ProgramStore {
     // - accepte PLACEHOLDER
     // - HH 00..23
     // - MM 00..59
-    // - SECS 001..600
+    // - MS 000050..600000
     // ---------------------------------------------------------------------
     private fun isValidEncodedLineForSend(line: String): Boolean {
         if (line == PLACEHOLDER) return true
-        if (line.length != 9 || !line.all(Char::isDigit)) return false
+        if (line.length != 12 || !line.all(Char::isDigit)) return false
 
         val hh = line.substring(2, 4).toIntOrNull() ?: return false
         val mm = line.substring(4, 6).toIntOrNull() ?: return false
-        val secs = line.substring(6, 9).toIntOrNull() ?: return false
+        val ms = line.substring(6, 12).toIntOrNull() ?: return false
 
         if (hh !in 0..23) return false
         if (mm !in 0..59) return false
-        if (secs !in 1..600) return false
+        if (ms !in 50..600000) return false
 
         return true
     }
@@ -243,7 +244,7 @@ object ProgramStore {
         pump: Int,
         newLine: ProgramLine
     ): String? {
-        val newEncoded = newLine.toEsp9()
+        val newEncoded = newLine.toEsp12()
         val newStart = decodeStartMinutes(newEncoded)
         val newEnd = newStart + decodeDurationMinutes(newEncoded)
 
@@ -287,7 +288,7 @@ object ProgramStore {
     ): List<Pair<Int, String>> {
         val conflicts = mutableListOf<Pair<Int, String>>()
 
-        val newEncoded = newLine.toEsp9()
+        val newEncoded = newLine.toEsp12()
         val newStart = decodeStartMinutes(newEncoded)
         val newEnd = newStart + decodeDurationMinutes(newEncoded)
 
@@ -327,15 +328,15 @@ object ProgramStore {
     }
 
     // ---------------------------------------------------------------------
-    // 🚀 CONSTRUCTION MESSAGE FINAL POUR /program (module actif)
+    // 🚀 CONSTRUCTION MESSAGE FINAL POUR /program_ms (module actif)
     // ✅ ICI : TRI OFFICIEL + DERNIÈRE PROTECTION AVANT ENVOI
     // ---------------------------------------------------------------------
-    fun buildMessage(context: Context): String {
-        // 4 pompes * 12 lignes * 9 chars = 432 chars
+    fun buildMessageMs(context: Context): String {
+        // 4 pompes * 12 lignes * 12 chars = 576 chars
         val totalLines = PUMP_COUNT * MAX_LINES_PER_PUMP
         val sb = StringBuilder(totalLines * PLACEHOLDER.length)
 
-        Log.e("PROGRAM_BUILD", "================ BUILD /program ================")
+        Log.e("PROGRAM_BUILD", "================ BUILD /program_ms ================")
 
         for (pump in 1..PUMP_COUNT) {
 
@@ -369,7 +370,7 @@ object ProgramStore {
         val result = sb.toString()
 
         Log.e("PROGRAM_BUILD", "------------------------------------------------")
-        Log.e("PROGRAM_BUILD", "LONGUEUR = ${result.length} (ATTENDU 432)")
+        Log.e("PROGRAM_BUILD", "LONGUEUR = ${result.length} (ATTENDU 576)")
         Log.e("PROGRAM_BUILD", "MESSAGE = $result")
         Log.e("PROGRAM_BUILD", "================================================")
 
@@ -388,5 +389,31 @@ object ProgramStore {
         editor.apply()
 
         Log.e("PROGRAM_STORE", "🧹 ALL PROGRAMS CLEARED")
+    }
+
+    // ---------------------------------------------------------------------
+    // 🔄 Normalisation des lignes (12 digits, conversion legacy 9 digits)
+    // ---------------------------------------------------------------------
+    private fun normalizeEncodedLine(raw: String): String? {
+        if (raw.isBlank()) return null
+        val trimmed = raw.trim()
+        if (!trimmed.all(Char::isDigit)) return null
+
+        if (trimmed.length == 12) return trimmed
+
+        if (trimmed.length == 9) {
+            if (trimmed == "000000000") return PLACEHOLDER
+
+            val enabled = trimmed.substring(0, 1)
+            val pump = trimmed.substring(1, 2)
+            val hh = trimmed.substring(2, 4)
+            val mm = trimmed.substring(4, 6)
+            val secs = trimmed.substring(6, 9).toIntOrNull() ?: return null
+            val ms = (secs * 1000).coerceIn(50, 600000)
+            val msPart = ms.toString().padStart(6, '0')
+            return "$enabled$pump$hh$mm$msPart"
+        }
+
+        return null
     }
 }

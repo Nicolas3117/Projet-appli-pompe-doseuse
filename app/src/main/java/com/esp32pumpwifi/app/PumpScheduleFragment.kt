@@ -498,13 +498,15 @@ class PumpScheduleFragment : Fragment() {
                 continue
             }
 
+            val durationMs = (seconds * 1000).coerceAtLeast(50)
+
             val line =
                 ProgramLine(
                     enabled = true,
                     pump = pumpNumber,
                     hour = hh,
                     minute = mm,
-                    qtySeconds = seconds
+                    qtyMs = durationMs
                 )
 
             ProgramStore.addLine(
