@@ -212,8 +212,6 @@ class CalibrationActivity : AppCompatActivity() {
                     .setTitle("Info")
                     .setMessage(
                         "Calibration terminée.\n" +
-                                "Débit affiché avec $FLOW_DISPLAY_DECIMALS décimales " +
-                                "(stocké en Float dans SharedPreferences, clé $flowKey).\n" +
                                 "Veuillez renvoyer la programmation pour appliquer les nouveaux débits."
                     )
                     .setPositiveButton("OK", null)

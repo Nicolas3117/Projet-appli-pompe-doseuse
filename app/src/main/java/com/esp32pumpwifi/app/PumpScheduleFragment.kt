@@ -2,6 +2,7 @@ package com.esp32pumpwifi.app
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -198,7 +199,7 @@ class PumpScheduleFragment : Fragment() {
     }
 
     // ---------------------------------------------------------------------
-    // 🔍 DÉTECTION DES CONFLITS
+    // 🔍 DÉTECTION DES CONFLITS (✅ CORRIGÉ : tout en millisecondes)
     // ---------------------------------------------------------------------
     private fun detectConflicts(
         time: String,
@@ -211,7 +212,7 @@ class PumpScheduleFragment : Fragment() {
         val prefs =
             requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
-        // ✅ sécurité : au cas où (shouldn’t happen, mais protège legacy / appels indirects)
+        // ✅ sécurité : au cas où
         val parsed = parseTimeOrNull(time)
         if (parsed == null) {
             return ConflictResult(
@@ -222,8 +223,8 @@ class PumpScheduleFragment : Fragment() {
 
         val (h, m) = parsed
 
-        val startSec =
-            h * 3600 + m * 60
+        // Timeline en ms (précis)
+        val startMs = (h * 3600L + m * 60L) * 1000L
 
         val flow =
             prefs.getFloat(
@@ -238,11 +239,11 @@ class PumpScheduleFragment : Fragment() {
             )
         }
 
-        // ✅ Règle : on BLOQUE si qty < flow (1 seconde).
-        val minMl = flow
+        // ✅ Minimum réel : 50 ms (comme le manuel et l’ESP32)
+        val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
         if (quantity.toFloat() < minMl) {
             val msg =
-                "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
+                "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
                         "Débit actuel : ${"%.1f".format(flow)} mL/s"
             return ConflictResult(
                 blockingMessage = msg,
@@ -250,13 +251,14 @@ class PumpScheduleFragment : Fragment() {
             )
         }
 
-        val duration =
-            (quantity.toFloat() / flow).roundToInt()
+        // ✅ Durée ms EXACTEMENT comme le manuel
+        val durationMs =
+            (quantity.toFloat() / flow * 1000f).roundToInt()
 
         // Sécurité (au cas où)
-        if (duration < 1) {
+        if (durationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) {
             val msg =
-                "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
+                "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
                         "Débit actuel : ${"%.1f".format(flow)} mL/s"
             return ConflictResult(
                 blockingMessage = msg,
@@ -265,7 +267,8 @@ class PumpScheduleFragment : Fragment() {
         }
 
         // ✅ Blocage si durée > 600s (aligné firmware ESP32)
-        if (duration > MAX_PUMP_DURATION_SEC) {
+        val maxMs = MAX_PUMP_DURATION_SEC * 1000
+        if (durationMs > maxMs) {
             val msg =
                 "Durée trop longue : maximum ${MAX_PUMP_DURATION_SEC}s\n" +
                         "Réduis la quantité ou recalibre le débit."
@@ -275,10 +278,10 @@ class PumpScheduleFragment : Fragment() {
             )
         }
 
-        val endSec =
-            startSec + duration
+        val endMs = startMs + durationMs.toLong()
 
-        if (endSec >= 86400) {
+        // 24h = 86400000ms
+        if (endMs >= 86_400_000L) {
             return ConflictResult(
                 blockingMessage = "La distribution dépasse minuit",
                 isPopup = false
@@ -290,26 +293,24 @@ class PumpScheduleFragment : Fragment() {
 
             if (!s.enabled) continue
 
-            // ignore les anciennes lignes invalides (< 1 seconde)
-            if (s.quantity.toFloat() < minMl) continue
+            // ignore les quantités trop faibles selon la règle ms
+            val sMinMl = minMl
+            if (s.quantity.toFloat() < sMinMl) continue
 
-            // ✅ ignore si heure invalide (legacy/corruption)
             val parsedExisting = parseTimeOrNull(s.time) ?: continue
             val (sh, sm) = parsedExisting
 
-            val sStart =
-                sh * 3600 + sm * 60
+            val sStartMs = (sh * 3600L + sm * 60L) * 1000L
 
-            val sDur =
-                (s.quantity.toFloat() / flow).roundToInt()
+            val sDurMs =
+                (s.quantity.toFloat() / flow * 1000f).roundToInt()
 
-            if (sDur < 1) continue
-            if (sDur > MAX_PUMP_DURATION_SEC) continue
+            if (sDurMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) continue
+            if (sDurMs > maxMs) continue
 
-            val sEnd =
-                sStart + sDur
+            val sEndMs = sStartMs + sDurMs.toLong()
 
-            if (startSec < sEnd && endSec > sStart) {
+            if (startMs < sEndMs && endMs > sStartMs) {
                 return ConflictResult(
                     blockingMessage =
                         "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}",
@@ -347,30 +348,27 @@ class PumpScheduleFragment : Fragment() {
 
             if (pFlow <= 0f) continue
 
-            val pMinMl = pFlow
+            val pMinMl = pFlow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
 
             for (s in list) {
 
                 if (!s.enabled) continue
                 if (s.quantity.toFloat() < pMinMl) continue
 
-                // ✅ ignore si heure invalide (legacy/corruption)
                 val parsedOther = parseTimeOrNull(s.time) ?: continue
                 val (sh, sm) = parsedOther
 
-                val sStart =
-                    sh * 3600 + sm * 60
+                val sStartMs = (sh * 3600L + sm * 60L) * 1000L
 
-                val sDur =
-                    (s.quantity.toFloat() / pFlow).roundToInt()
+                val sDurMs =
+                    (s.quantity.toFloat() / pFlow * 1000f).roundToInt()
 
-                if (sDur < 1) continue
-                if (sDur > MAX_PUMP_DURATION_SEC) continue
+                if (sDurMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) continue
+                if (sDurMs > maxMs) continue
 
-                val sEnd =
-                    sStart + sDur
+                val sEndMs = sStartMs + sDurMs.toLong()
 
-                if (startSec < sEnd && endSec > sStart) {
+                if (startMs < sEndMs && endMs > sStartMs) {
                     overlappingPumps.add(getPumpName(p))
                 }
             }
@@ -444,7 +442,7 @@ class PumpScheduleFragment : Fragment() {
     }
 
     // ---------------------------------------------------------------------
-    // 🔁 SYNC → ProgramStore
+    // 🔁 SYNC → ProgramStore (✅ déjà OK chez toi)
     // ---------------------------------------------------------------------
     private fun syncToProgramStore() {
 
@@ -466,7 +464,7 @@ class PumpScheduleFragment : Fragment() {
 
         if (flow <= 0f) return
 
-        val minMl = flow
+        val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
 
         var ignoredCount = 0
 
@@ -478,7 +476,6 @@ class PumpScheduleFragment : Fragment() {
                 continue
             }
 
-            // ✅ ignore si heure invalide (legacy/corruption)
             val parsed = parseTimeOrNull(s.time)
             if (parsed == null) {
                 ignoredCount++
@@ -486,19 +483,23 @@ class PumpScheduleFragment : Fragment() {
             }
             val (hh, mm) = parsed
 
-            val seconds =
-                (s.quantity.toFloat() / flow).roundToInt()
+            val durationMs =
+                (s.quantity.toFloat() / flow * 1000f).roundToInt()
 
-            if (seconds < 1) {
+            if (durationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) {
                 ignoredCount++
                 continue
             }
-            if (seconds > MAX_PUMP_DURATION_SEC) {
+            if (durationMs > MAX_PUMP_DURATION_SEC * 1000) {
                 ignoredCount++
                 continue
             }
 
-            val durationMs = (seconds * 1000).coerceAtLeast(50)
+            Log.d(
+                "PROGRAM_SAVE",
+                "Saving schedule line: pump=$pumpNumber time=$hh:$mm " +
+                        "volumeMl=${s.quantity} flow=$flow durationMs=$durationMs"
+            )
 
             val line =
                 ProgramLine(
