@@ -23,6 +23,8 @@ class ManualDoseActivity : AppCompatActivity() {
 
     companion object {
         const val MAX_PUMP_DURATION_SEC = 600
+        const val MIN_PUMP_DURATION_MS = 50
+        const val MAX_PUMP_DURATION_MS = 600_000
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,15 +83,15 @@ class ManualDoseActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val seconds = (volumeMl / flow).roundToInt()
+            val durationMs = (volumeMl / flow * 1000f).roundToInt()
 
             // ✅ Message plus clair si la durée tombe à 0s (volume trop faible vs débit)
-            if (seconds <= 0) {
-                val minMl = flow
+            if (durationMs < MIN_PUMP_DURATION_MS) {
+                val minMl = flow * (MIN_PUMP_DURATION_MS / 1000f)
                 AlertDialog.Builder(this)
                     .setTitle("Impossible")
                     .setMessage(
-                        "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
+                        "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${MIN_PUMP_DURATION_MS} ms)\n" +
                                 "Débit actuel : ${"%.1f".format(flow)} mL/s"
                     )
                     .setPositiveButton("OK", null)
@@ -98,7 +100,7 @@ class ManualDoseActivity : AppCompatActivity() {
             }
 
             // ✅ Blocage manuel > 600s (comme demandé)
-            if (seconds > MAX_PUMP_DURATION_SEC) {
+            if (durationMs > MAX_PUMP_DURATION_MS) {
                 AlertDialog.Builder(this)
                     .setTitle("Impossible")
                     .setMessage("Durée trop longue : maximum ${MAX_PUMP_DURATION_SEC}s")
@@ -119,11 +121,11 @@ class ManualDoseActivity : AppCompatActivity() {
                 }
 
                 // 🚿 ENVOI COMMANDE
-                NetworkHelper.sendManualCommand(
+                NetworkHelper.sendManualCommandMs(
                     context = this@ManualDoseActivity,
                     ip = espIp,
                     pump = pumpNumber,
-                    seconds = seconds
+                    durationMs = durationMs
                 )
 
                 // 🔋 DÉCRÉMENTATION (EXCEPTION NORMALE POUR LE MANUEL)
