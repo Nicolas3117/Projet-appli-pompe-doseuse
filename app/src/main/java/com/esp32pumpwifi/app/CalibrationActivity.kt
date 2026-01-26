@@ -201,7 +201,8 @@ class CalibrationActivity : AppCompatActivity() {
                 // ✅ INFO : les programmations doivent être renvoyées pour appliquer le nouveau débit
                 AlertDialog.Builder(this)
                     .setTitle("Info")
-                    .setMessage("Après calibration : renvoie les programmations pour mise à jour.")
+                    .setMessage("Calibration terminée.\n" +
+                            "Veuillez renvoyer la programmation pour appliquer les nouveaux débits.")
                     .setPositiveButton("OK", null)
                     .show()
             }
