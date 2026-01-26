@@ -1,6 +1,7 @@
 package com.esp32pumpwifi.app
 
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
 import android.widget.*
@@ -54,6 +55,7 @@ class MaterielsActivity : AppCompatActivity() {
 
     private var actionsBaseMarginBottom = 0
     private var telegramScrollBasePaddingBottom = 0
+    private var telegramScrollImeBottom = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,6 +101,7 @@ class MaterielsActivity : AppCompatActivity() {
             val systemInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val bottomInset = maxOf(imeInsets.bottom, systemInsets.bottom)
 
+            telegramScrollImeBottom = bottomInset
             view.updatePadding(bottom = telegramScrollBasePaddingBottom + bottomInset)
             insets
         }
@@ -108,7 +111,7 @@ class MaterielsActivity : AppCompatActivity() {
 
         setupTelegramToggle()
 
-        // ✅ 3) IMPORTANT : auto-scroll vers le champ quand on le focus (sinon tablette = clavier devant)
+        // ✅ 3) IMPORTANT : auto-scroll vers le champ quand on le focus (Android 15 tablette)
         setupTelegramAutoScroll()
 
         // ➕ Scan réseau manuel
@@ -191,26 +194,60 @@ class MaterielsActivity : AppCompatActivity() {
         }
     }
 
-    // ✅ Auto-scroll au focus des champs Telegram
+    // ✅ Auto-scroll robuste (focus switch Android 15 tablette)
     private fun setupTelegramAutoScroll() {
-        val scrollTo = { target: View ->
+
+        fun scrollToTarget(target: View) {
+            val run = { ensureTelegramFieldVisible(target) }
+
+            // 1) tout de suite
             telegramScroll.post {
-                // marge de confort pour voir le champ + un peu d’espace
-                val y = target.bottom + dpToPx(24)
-                telegramScroll.smoothScrollTo(0, y)
+                ViewCompat.requestApplyInsets(telegramScroll)
+                run()
+            }
+
+            // 2) après stabilisation IME (vital sur Android 15)
+            telegramScroll.postDelayed({
+                ViewCompat.requestApplyInsets(telegramScroll)
+                run()
+            }, 120L)
+        }
+
+        fun attach(target: View) {
+            target.setOnFocusChangeListener { v, hasFocus ->
+                if (hasFocus) scrollToTarget(v)
+            }
+            // Important sur certaines tablettes : un tap peut déclencher un micro resize même si focus inchangé
+            target.setOnClickListener { v ->
+                scrollToTarget(v)
             }
         }
 
-        editTelegramToken.setOnFocusChangeListener { v, hasFocus ->
-            if (hasFocus) scrollTo(v)
-        }
-        editTelegramChatId.setOnFocusChangeListener { v, hasFocus ->
-            if (hasFocus) scrollTo(v)
-        }
+        attach(editTelegramToken)
+        attach(editTelegramChatId)
     }
 
     private fun dpToPx(dp: Int): Int =
         (dp * resources.displayMetrics.density).toInt()
+
+    /**
+     * Garantit que le champ (et un peu de marge) est visible.
+     * On laisse NestedScrollView calculer le bon scroll (plus fiable que smoothScrollTo(scrollY) sur Android 15).
+     */
+    private fun ensureTelegramFieldVisible(target: View) {
+        val margin = dpToPx(24)
+
+        val rect = Rect()
+        target.getDrawingRect(rect)
+
+        rect.top -= margin
+        rect.bottom += margin
+
+        telegramScroll.offsetDescendantRectToMyCoords(target, rect)
+
+        // Laisse Android/NestedScrollView décider du scroll exact
+        telegramScroll.requestChildRectangleOnScreen(target, rect, true)
+    }
 
     // ================= LISTE MODULES =================
 
