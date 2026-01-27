@@ -7,10 +7,9 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 class PlanningView @JvmOverloads constructor(
     context: Context,
@@ -149,7 +148,6 @@ class PlanningView @JvmOverloads constructor(
 
     // ================= DONNÉES =================
 
-    private val gson = Gson()
     private var visibleEspIds: List<Long> = emptyList()
 
     private val blocks = mutableListOf<PlanningBlock>()
@@ -336,8 +334,7 @@ class PlanningView @JvmOverloads constructor(
                 val json = prefsSchedules.getString("esp_${espId}_pump$pumpNum", null) ?: continue
 
                 val schedules: List<PumpSchedule> = try {
-                    val type = object : TypeToken<List<PumpSchedule>>() {}.type
-                    gson.fromJson(json, type) ?: emptyList()
+                    PumpScheduleJson.fromJson(json)
                 } catch (_: Exception) {
                     emptyList()
                 }
@@ -360,7 +357,7 @@ class PlanningView @JvmOverloads constructor(
                     val hh = parts[0].toIntOrNull() ?: return@forEach
                     val mm = parts[1].toIntOrNull() ?: return@forEach
 
-                    val quantityF = s.quantity.toFloat()
+                    val quantityF = s.quantityMl
 
                     val base = blockThickness(quantityF)
                     val height = max(base, base * volumeScale)
@@ -400,7 +397,7 @@ class PlanningView @JvmOverloads constructor(
             canvas.drawRoundRect(b.rect, 10f, 10f, blockPaint)
             canvas.drawRoundRect(b.rect, 10f, 10f, blockStrokePaint)
 
-            val label = "${b.quantity.toInt()}ml"
+            val label = "${QuantityInputUtils.formatQuantityMl((b.quantity * 10f).roundToInt())}ml"
             val textY = b.rect.centerY() + (blockTextPaint.textSize / 3f)
             canvas.drawText(label, b.rect.centerX(), textY, blockTextPaint)
         }
@@ -437,7 +434,7 @@ class PlanningView @JvmOverloads constructor(
                 Module : ${block.espName}
                 Pompe : ${block.pumpName}
                 Heure : ${block.time}
-                Quantité : ${block.quantity} ml
+                Quantité : ${QuantityInputUtils.formatQuantityMl((block.quantity * 10f).roundToInt())} ml
                 """.trimIndent()
             )
             .setPositiveButton("OK", null)

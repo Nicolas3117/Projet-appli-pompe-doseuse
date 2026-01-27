@@ -6,8 +6,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlin.math.roundToInt
 
 class PumpScheduleAdapter(
@@ -20,7 +18,6 @@ class PumpScheduleAdapter(
         const val MAX_PUMP_DURATION_SEC = 600
     }
 
-    private val gson = Gson()
 
     override fun getCount(): Int = schedules.size
     override fun getItem(position: Int): Any = schedules[position]
@@ -52,7 +49,7 @@ class PumpScheduleAdapter(
         // --- Affichage ---
         tvPump.text = "Pompe ${schedule.pumpNumber}"
         tvTime.text = schedule.time
-        tvQty.text = "${schedule.quantity} mL"
+        tvQty.text = "${QuantityInputUtils.formatQuantityMl(schedule.quantityTenth)} mL"
 
         // --- Switch ON/OFF ---
         swEnabled.setOnCheckedChangeListener(null)
@@ -89,7 +86,8 @@ class PumpScheduleAdapter(
             val etQty = dialogView.findViewById<EditText>(R.id.et_quantity)
 
             etTime.setText(schedule.time)
-            etQty.setText(schedule.quantity.toString())
+            etQty.setText(QuantityInputUtils.formatQuantityMl(schedule.quantityTenth))
+            QuantityInputUtils.applyInputFilter(etQty)
 
             AlertDialog.Builder(context)
                 .setTitle("Modifier la programmation")
@@ -97,10 +95,11 @@ class PumpScheduleAdapter(
                 .setPositiveButton("Enregistrer") { _, _ ->
 
                     val newTime = etTime.text.toString().trim()
-                    val newQty = etQty.text.toString().toIntOrNull()
+                    val newQtyTenth =
+                        QuantityInputUtils.parseQuantityTenth(etQty.text.toString())
 
                     // ✅ format + bornes HH/MM
-                    if (parseTimeOrNull(newTime) == null || newQty == null || newQty <= 0) {
+                    if (parseTimeOrNull(newTime) == null || newQtyTenth == null) {
                         Toast.makeText(context, "Format invalide", Toast.LENGTH_SHORT).show()
                         return@setPositiveButton
                     }
@@ -108,7 +107,7 @@ class PumpScheduleAdapter(
                     val conflict = detectConflict(
                         pumpNumber = schedule.pumpNumber,
                         newTime = newTime,
-                        newQty = newQty,
+                        newQtyTenth = newQtyTenth,
                         editedIndex = sourceIndex
                     )
 
@@ -135,7 +134,7 @@ class PumpScheduleAdapter(
                             .setMessage(conflict.warningMessage)
                             .setPositiveButton("Oui") { _, _ ->
                                 schedule.time = newTime
-                                schedule.quantity = newQty
+                                schedule.quantityTenth = newQtyTenth
                                 notifyDataSetChanged()
                                 onScheduleChanged()
                             }
@@ -145,7 +144,7 @@ class PumpScheduleAdapter(
                     }
 
                     schedule.time = newTime
-                    schedule.quantity = newQty
+                    schedule.quantityTenth = newQtyTenth
                     notifyDataSetChanged()
                     onScheduleChanged()
                 }
@@ -171,7 +170,7 @@ class PumpScheduleAdapter(
     private fun detectConflict(
         pumpNumber: Int,
         newTime: String,
-        newQty: Int,
+        newQtyTenth: Int,
         editedIndex: Int
     ): ConflictResult {
 
@@ -199,7 +198,8 @@ class PumpScheduleAdapter(
 
         // ✅ Minimum réel : 50 ms (comme le manuel et l’ESP32)
         val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
-        if (newQty.toFloat() < minMl) {
+        val newQtyMl = QuantityInputUtils.quantityMl(newQtyTenth)
+        if (newQtyMl < minMl) {
             return ConflictResult(
                 blockingMessage =
                     "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
@@ -207,7 +207,7 @@ class PumpScheduleAdapter(
             )
         }
 
-        val durationMs = (newQty.toFloat() / flow * 1000f).roundToInt()
+        val durationMs = (newQtyMl / flow * 1000f).roundToInt()
         if (durationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) {
             return ConflictResult(
                 blockingMessage =
@@ -240,8 +240,7 @@ class PumpScheduleAdapter(
                 .getString("esp_${active.id}_pump$p", null)
                 ?: continue
 
-            val type = object : TypeToken<MutableList<PumpSchedule>>() {}.type
-            val list: MutableList<PumpSchedule> = gson.fromJson(json, type)
+            val list: MutableList<PumpSchedule> = PumpScheduleJson.fromJson(json)
 
             for ((index, s) in list.withIndex()) {
 
@@ -264,9 +263,9 @@ class PumpScheduleAdapter(
 
                 val minOtherMl =
                     flowOther * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
-                if (s.quantity.toFloat() < minOtherMl) continue
+                if (s.quantityMl < minOtherMl) continue
 
-                val sDurationMs = (s.quantity.toFloat() / flowOther * 1000f).roundToInt()
+                val sDurationMs = (s.quantityMl / flowOther * 1000f).roundToInt()
                 if (sDurationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) continue
                 if (sDurationMs > ManualDoseActivity.MAX_PUMP_DURATION_MS) continue
 

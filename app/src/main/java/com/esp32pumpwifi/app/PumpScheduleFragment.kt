@@ -10,7 +10,6 @@ import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlin.math.roundToInt
 
 class PumpScheduleFragment : Fragment() {
@@ -120,6 +119,7 @@ class PumpScheduleFragment : Fragment() {
 
         val etQuantity =
             dialogView.findViewById<EditText>(R.id.et_quantity)
+        QuantityInputUtils.applyInputFilter(etQuantity)
 
         AlertDialog.Builder(requireContext())
             .setTitle("Ajouter une programmation")
@@ -137,10 +137,10 @@ class PumpScheduleFragment : Fragment() {
                 }
 
                 val time = etTime.text.toString().trim()
-                val qty = etQuantity.text.toString().toIntOrNull()
+                val qtyTenth = QuantityInputUtils.parseQuantityTenth(etQuantity.text.toString())
 
                 // ✅ format + bornes HH/MM
-                if (parseTimeOrNull(time) == null || qty == null || qty <= 0) {
+                if (parseTimeOrNull(time) == null || qtyTenth == null) {
                     Toast.makeText(
                         requireContext(),
                         "Format invalide",
@@ -149,7 +149,7 @@ class PumpScheduleFragment : Fragment() {
                     return@setPositiveButton
                 }
 
-                val check = detectConflicts(time, qty)
+                val check = detectConflicts(time, qtyTenth)
 
                 if (check.blockingMessage != null) {
                     // ✅ Si blocage "popup", on utilise un dialog; sinon toast (UX inchangée)
@@ -170,25 +170,25 @@ class PumpScheduleFragment : Fragment() {
                         .setTitle("Chevauchement détecté")
                         .setMessage(check.warningMessage)
                         .setPositiveButton("Oui") { _, _ ->
-                            addSchedule(time, qty)
+                            addSchedule(time, qtyTenth)
                         }
                         .setNegativeButton("Non", null)
                         .show()
                     return@setPositiveButton
                 }
 
-                addSchedule(time, qty)
+                addSchedule(time, qtyTenth)
             }
             .setNegativeButton("Annuler", null)
             .show()
     }
 
-    private fun addSchedule(time: String, qty: Int) {
+    private fun addSchedule(time: String, qtyTenth: Int) {
         schedules.add(
             PumpSchedule(
                 pumpNumber = pumpNumber,
                 time = time,
-                quantity = qty,
+                quantityTenth = qtyTenth,
                 enabled = true
             )
         )
@@ -203,7 +203,7 @@ class PumpScheduleFragment : Fragment() {
     // ---------------------------------------------------------------------
     private fun detectConflicts(
         time: String,
-        quantity: Int
+        quantityTenth: Int
     ): ConflictResult {
 
         val active =
@@ -241,7 +241,8 @@ class PumpScheduleFragment : Fragment() {
 
         // ✅ Minimum réel : 50 ms (comme le manuel et l’ESP32)
         val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
-        if (quantity.toFloat() < minMl) {
+        val quantityMl = QuantityInputUtils.quantityMl(quantityTenth)
+        if (quantityMl < minMl) {
             val msg =
                 "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
                         "Débit actuel : ${"%.1f".format(flow)} mL/s"
@@ -253,7 +254,7 @@ class PumpScheduleFragment : Fragment() {
 
         // ✅ Durée ms EXACTEMENT comme le manuel
         val durationMs =
-            (quantity.toFloat() / flow * 1000f).roundToInt()
+            (quantityMl / flow * 1000f).roundToInt()
 
         // Sécurité (au cas où)
         if (durationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) {
@@ -295,7 +296,7 @@ class PumpScheduleFragment : Fragment() {
 
             // ignore les quantités trop faibles selon la règle ms
             val sMinMl = minMl
-            if (s.quantity.toFloat() < sMinMl) continue
+            if (s.quantityMl < sMinMl) continue
 
             val parsedExisting = parseTimeOrNull(s.time) ?: continue
             val (sh, sm) = parsedExisting
@@ -303,7 +304,7 @@ class PumpScheduleFragment : Fragment() {
             val sStartMs = (sh * 3600L + sm * 60L) * 1000L
 
             val sDurMs =
-                (s.quantity.toFloat() / flow * 1000f).roundToInt()
+                (s.quantityMl / flow * 1000f).roundToInt()
 
             if (sDurMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) continue
             if (sDurMs > maxMs) continue
@@ -334,11 +335,8 @@ class PumpScheduleFragment : Fragment() {
                         null
                     ) ?: continue
 
-            val type =
-                object : TypeToken<List<PumpSchedule>>() {}.type
-
             val list: List<PumpSchedule> =
-                gson.fromJson(json, type)
+                PumpScheduleJson.fromJson(json)
 
             val pFlow =
                 prefs.getFloat(
@@ -353,7 +351,7 @@ class PumpScheduleFragment : Fragment() {
             for (s in list) {
 
                 if (!s.enabled) continue
-                if (s.quantity.toFloat() < pMinMl) continue
+                if (s.quantityMl < pMinMl) continue
 
                 val parsedOther = parseTimeOrNull(s.time) ?: continue
                 val (sh, sm) = parsedOther
@@ -361,7 +359,7 @@ class PumpScheduleFragment : Fragment() {
                 val sStartMs = (sh * 3600L + sm * 60L) * 1000L
 
                 val sDurMs =
-                    (s.quantity.toFloat() / pFlow * 1000f).roundToInt()
+                    (s.quantityMl / pFlow * 1000f).roundToInt()
 
                 if (sDurMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) continue
                 if (sDurMs > maxMs) continue
@@ -408,7 +406,7 @@ class PumpScheduleFragment : Fragment() {
             .edit()
             .putString(
                 "esp_${active.id}_pump$pumpNumber",
-                gson.toJson(schedules)
+                PumpScheduleJson.toJson(schedules, gson)
             )
             .apply()
     }
@@ -427,16 +425,11 @@ class PumpScheduleFragment : Fragment() {
                 )
                 ?: return
 
-        val type =
-            object : TypeToken<MutableList<PumpSchedule>>() {}.type
-
-        val loaded: MutableList<PumpSchedule>? =
-            gson.fromJson(json, type)
+        val loaded: MutableList<PumpSchedule> =
+            PumpScheduleJson.fromJson(json)
 
         schedules.clear()
-        if (loaded != null) {
-            schedules.addAll(loaded)
-        }
+        schedules.addAll(loaded)
 
         adapter.notifyDataSetChanged()
     }
@@ -471,7 +464,7 @@ class PumpScheduleFragment : Fragment() {
         for (s in schedules) {
 
             if (!s.enabled) continue
-            if (s.quantity.toFloat() < minMl) {
+            if (s.quantityMl < minMl) {
                 ignoredCount++
                 continue
             }
@@ -484,7 +477,7 @@ class PumpScheduleFragment : Fragment() {
             val (hh, mm) = parsed
 
             val durationMs =
-                (s.quantity.toFloat() / flow * 1000f).roundToInt()
+                (s.quantityMl / flow * 1000f).roundToInt()
 
             if (durationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) {
                 ignoredCount++
@@ -498,7 +491,7 @@ class PumpScheduleFragment : Fragment() {
             Log.d(
                 "PROGRAM_SAVE",
                 "Saving schedule line: pump=$pumpNumber time=$hh:$mm " +
-                        "volumeMl=${s.quantity} flow=$flow durationMs=$durationMs"
+                        "volumeMl=${QuantityInputUtils.formatQuantityMl(s.quantityTenth)} flow=$flow durationMs=$durationMs"
             )
 
             val line =

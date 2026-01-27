@@ -58,6 +58,7 @@ class ManualDoseActivity : AppCompatActivity() {
         val btnStart = findViewById<Button>(R.id.btn_start_dose)
 
         tvPump.text = pumpName
+        QuantityInputUtils.applyInputFilter(editVolume)
 
         btnStart.setOnClickListener {
 
@@ -71,11 +72,12 @@ class ManualDoseActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val volumeMl = editVolume.text.toString().toFloatOrNull()
-            if (volumeMl == null || volumeMl <= 0f) {
+            val qtyTenth = QuantityInputUtils.parseQuantityTenth(editVolume.text.toString())
+            if (qtyTenth == null) {
                 Toast.makeText(this, "Volume invalide pour $pumpName", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            val volumeMl = QuantityInputUtils.quantityMl(qtyTenth)
 
             val flow = prefs.getFloat(pumpFlowKey, 0f)
             if (flow <= 0f) {

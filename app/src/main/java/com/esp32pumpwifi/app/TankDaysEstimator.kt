@@ -1,8 +1,6 @@
 package com.esp32pumpwifi.app
 
 import android.content.Context
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlin.math.floor
 
 /**
@@ -37,17 +35,14 @@ object TankDaysEstimator {
                 null
             ) ?: return null   // aucune programmation
 
-        val type =
-            object : TypeToken<List<PumpSchedule>>() {}.type
-
         val schedules: List<PumpSchedule> =
-            Gson().fromJson(json, type)
+            PumpScheduleJson.fromJson(json)
 
         // 🔢 consommation journalière réelle
         val dailyConsumption =
             schedules
                 .filter { it.enabled }
-                .sumOf { it.quantity.toDouble() }
+                .sumOf { it.quantityMl.toDouble() }
                 .toFloat()
 
         if (dailyConsumption <= 0f) return null
