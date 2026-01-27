@@ -37,8 +37,19 @@
         android:id="@+id/edit_volume4"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Volume (mL)"
-        android:inputType="numberDecimal" />
+        android:hint="Volume 1 (mL)"
+        android:inputType="numberDecimal"
+        android:digits="0123456789.," />
+
+    <!-- ✅ Nouveau champ optionnel pour moyenne -->
+    <EditText
+        android:id="@+id/edit_volume4_bis"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Volume 2 (mL) - optionnel (moyenne)"
+        android:inputType="numberDecimal"
+        android:digits="0123456789.,"
+        android:layout_marginBottom="6dp" />
 
     <Button
         android:id="@+id/btn_start4"

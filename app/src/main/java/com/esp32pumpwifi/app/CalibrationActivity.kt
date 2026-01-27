@@ -25,6 +25,13 @@ class CalibrationActivity : AppCompatActivity() {
         )
     }
 
+    // ✅ Parse Float tolérant virgule FR
+    private fun parseFloatFr(text: String): Float? {
+        val t = text.trim()
+        if (t.isEmpty()) return null
+        return t.replace(',', '.').toFloatOrNull()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_calibration)
@@ -62,6 +69,14 @@ class CalibrationActivity : AppCompatActivity() {
             findViewById(R.id.edit_volume2),
             findViewById(R.id.edit_volume3),
             findViewById(R.id.edit_volume4)
+        )
+
+        // ✅ NOUVEAU : volumes optionnels (2e mesure)
+        val pumpVolumesBis = arrayOf(
+            findViewById<EditText>(R.id.edit_volume1_bis),
+            findViewById(R.id.edit_volume2_bis),
+            findViewById(R.id.edit_volume3_bis),
+            findViewById(R.id.edit_volume4_bis)
         )
 
         val pumpResults = arrayOf(
@@ -191,20 +206,42 @@ class CalibrationActivity : AppCompatActivity() {
             }
 
             calcButtons[i].setOnClickListener {
-                val duration = pumpDurations[i].text.toString().toFloatOrNull()
-                val volume = pumpVolumes[i].text.toString().toFloatOrNull()
+                val duration = parseFloatFr(pumpDurations[i].text.toString())
+                val volume1 = parseFloatFr(pumpVolumes[i].text.toString())
+                val volume2Text = pumpVolumesBis[i].text.toString()
+                val volume2 = parseFloatFr(volume2Text) // null si vide/invalid
 
-                if (duration == null || volume == null || duration <= 0 || volume <= 0) {
-                    Toast.makeText(this, "Valeurs invalides", Toast.LENGTH_SHORT).show()
+                if (duration == null || duration <= 0f) {
+                    Toast.makeText(this, "Durée invalide", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
 
-                val flow = volume / duration
+                if (volume1 == null || volume1 <= 0f) {
+                    Toast.makeText(this, "Volume 1 invalide", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                if (volume2Text.isNotBlank() && (volume2 == null || volume2 <= 0f)) {
+                    Toast.makeText(this, "Volume 2 invalide", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                // ✅ Débit 1
+                val flow1 = volume1 / duration
+
+                // ✅ Si volume2 rempli -> moyenne des débits
+                val flowFinal = if (volume2 != null && volume2 > 0f) {
+                    val flow2 = volume2 / duration
+                    (flow1 + flow2) / 2f
+                } else {
+                    flow1
+                }
+
                 val flowKey = "esp_${espId}_pump${pumpNum}_flow"
-                pumpResults[i].text = "Débit : ${formatFlow(flow)} mL/s"
+                pumpResults[i].text = "Débit : ${formatFlow(flowFinal)} mL/s"
 
                 prefs.edit()
-                    .putFloat(flowKey, flow)
+                    .putFloat(flowKey, flowFinal)
                     .apply()
 
                 // ✅ INFO : les programmations doivent être renvoyées pour appliquer le nouveau débit

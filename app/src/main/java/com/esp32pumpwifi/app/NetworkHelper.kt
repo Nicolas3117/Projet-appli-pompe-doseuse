@@ -5,6 +5,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -27,6 +28,49 @@ object NetworkHelper {
     private fun showNoReturnToast(context: Context) {
         CoroutineScope(Dispatchers.Main).launch {
             Toast.makeText(context, "⚠️ Aucun retour du module", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // ✅ Popup quand pompe occupée (BUSY)
+    private fun showPumpBusyDialog(context: Context, pump: Int) {
+        CoroutineScope(Dispatchers.Main).launch {
+            AlertDialog.Builder(context)
+                .setTitle("Pompe occupée")
+                .setMessage(
+                    "Une distribution est déjà en cours sur ${getPumpDisplayName(context, pump)}.\n\n" +
+                            "Le volume demandé n’a pas été distribué."
+                )
+                .setPositiveButton("OK", null)
+                .show()
+        }
+    }
+
+    // ✅ Popup pour erreurs de programmation (message du firmware)
+    private fun showProgramErrorDialog(context: Context, details: String) {
+        CoroutineScope(Dispatchers.Main).launch {
+            AlertDialog.Builder(context)
+                .setTitle("Programmation refusée")
+                .setMessage(
+                    "L’ESP32 a refusé la programmation.\n\n" +
+                            details.trim()
+                )
+                .setPositiveButton("OK", null)
+                .show()
+        }
+    }
+
+    // ✅ Récupère un nom lisible (si custom) sans casser
+    private fun getPumpDisplayName(context: Context, pump: Int): String {
+        return try {
+            val active = Esp32Manager.getActive(context)
+            if (active != null) {
+                val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+                prefs.getString("esp_${active.id}_pump${pump}_name", "Pompe $pump") ?: "Pompe $pump"
+            } else {
+                "Pompe $pump"
+            }
+        } catch (_: Exception) {
+            "Pompe $pump"
         }
     }
 
@@ -55,10 +99,16 @@ object NetworkHelper {
                 conn.readTimeout = 1500
 
                 val responseCode = conn.responseCode
-                conn.inputStream.bufferedReader().use { it.readText() }
+                val responseText = conn.inputStream.bufferedReader().use { it.readText() }.trim()
 
                 if (responseCode != HttpURLConnection.HTTP_OK) {
                     throw IllegalStateException("HTTP $responseCode")
+                }
+
+                // ✅ Gestion BUSY (pompe déjà active)
+                if (responseText.equals("BUSY", ignoreCase = true)) {
+                    showPumpBusyDialog(context, pump)
+                    return@launch
                 }
 
                 withContext(Dispatchers.Main) {
@@ -102,10 +152,16 @@ object NetworkHelper {
                 conn.readTimeout = 1500
 
                 val responseCode = conn.responseCode
-                conn.inputStream.bufferedReader().use { it.readText() }
+                val responseText = conn.inputStream.bufferedReader().use { it.readText() }.trim()
 
                 if (responseCode != HttpURLConnection.HTTP_OK) {
                     throw IllegalStateException("HTTP $responseCode")
+                }
+
+                // ✅ Gestion BUSY (pompe déjà active)
+                if (responseText.equals("BUSY", ignoreCase = true)) {
+                    showPumpBusyDialog(context, pump)
+                    return@launch
                 }
 
                 withContext(Dispatchers.Main) {
@@ -171,16 +227,47 @@ object NetworkHelper {
                 conn.readTimeout = 3000
 
                 val responseCode = conn.responseCode
-                val response = conn.inputStream.bufferedReader().use { it.readText() }
-                Log.e("ESP32_PROGRAM_MS", "ESP32 RESPONSE = '$response'")
 
-                if (responseCode != HttpURLConnection.HTTP_OK) {
-                    throw IllegalStateException("HTTP $responseCode")
+                // ✅ Lire le body même si HTTP != 200 (sinon on perd "Invalid program line #X")
+                val responseText = try {
+                    val stream =
+                        if (responseCode in 200..299) conn.inputStream else conn.errorStream
+                    stream?.bufferedReader()?.use { it.readText() } ?: ""
+                } catch (_: Exception) {
+                    ""
                 }
 
-                withContext(Dispatchers.Main) {
-                    showSuccessToast(context, "Programmation envoyée à l’ESP32")
-                    onSuccess()
+                Log.e("ESP32_PROGRAM_MS", "ESP32 HTTP = $responseCode")
+                Log.e("ESP32_PROGRAM_MS", "ESP32 RESPONSE = '${responseText.trim()}'")
+
+                // ✅ Cas OK attendu
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    val r = responseText.trim()
+                    if (r.equals("OK", ignoreCase = true) || r.isEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            showSuccessToast(context, "Programmation envoyée à l’ESP32")
+                            onSuccess()
+                        }
+                        return@launch
+                    }
+
+                    // HTTP 200 mais réponse inattendue -> afficher le détail
+                    showProgramErrorDialog(context, "Réponse inattendue : $r")
+                    return@launch
+                }
+
+                // ✅ Cas refus (400 etc.) -> popup clair si on a un message
+                val details = responseText.trim()
+                if (details.isNotEmpty()) {
+                    showProgramErrorDialog(context, details)
+                } else {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            context,
+                            "Erreur réseau (programmation)",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
 
             } catch (e: Exception) {
