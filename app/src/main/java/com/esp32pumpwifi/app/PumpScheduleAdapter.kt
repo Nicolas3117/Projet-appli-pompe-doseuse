@@ -29,15 +29,16 @@ class PumpScheduleAdapter(
             .inflate(R.layout.item_schedule, parent, false)
 
         // 🔹 LISTE TRIÉE POUR L’AFFICHAGE UNIQUEMENT
-        val displaySchedules = schedules.sortedBy { timeToMinutes(it.time) }
+        val displaySchedules = schedules.withIndex()
+            .sortedBy { timeToMinutes(it.value.time) }
 
         if (position !in displaySchedules.indices) return view
 
-        val schedule = displaySchedules[position]
+        val indexedSchedule = displaySchedules[position]
+        val schedule = indexedSchedule.value
 
         // 🔹 index réel dans la liste source (non triée)
-        val sourceIndex = schedules.indexOf(schedule)
-        if (sourceIndex < 0) return view
+        val sourceIndex = indexedSchedule.index
 
         val tvPump = view.findViewById<TextView>(R.id.tv_pump)
         val tvTime = view.findViewById<TextView>(R.id.tv_time)
