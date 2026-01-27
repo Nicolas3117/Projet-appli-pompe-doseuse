@@ -2,7 +2,7 @@ package com.esp32pumpwifi.app
 
 /**
  * Représente une ligne de programmation côté application
- * (avant conversion en secondes pour l'ESP32)
+ * (avant conversion en millisecondes pour l'ESP32)
  */
 data class PumpSchedule(
 

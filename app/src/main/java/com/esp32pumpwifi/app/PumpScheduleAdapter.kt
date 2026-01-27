@@ -191,34 +191,33 @@ class PumpScheduleAdapter(
             return ConflictResult(blockingMessage = "Format invalide")
         }
 
-        val startSec = h * 3600 + m * 60
+        val startMs = (h * 3600L + m * 60L) * 1000L
 
         val flowKey = "esp_${active.id}_pump${pumpNumber}_flow"
         val flow = prefs.getFloat(flowKey, 0f)
         if (flow <= 0f) return ConflictResult(blockingMessage = "Pompe non calibrée")
 
-        // ✅ Règle : on bloque si qty < flow (1 seconde)
-        val minMl = flow
+        // ✅ Minimum réel : 50 ms (comme le manuel et l’ESP32)
+        val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
         if (newQty.toFloat() < minMl) {
             return ConflictResult(
                 blockingMessage =
-                    "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
+                    "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
                             "Débit actuel : ${"%.1f".format(flow)} mL/s"
             )
         }
 
-        val durationSec = (newQty.toFloat() / flow).roundToInt()
-
-        if (durationSec < 1) {
+        val durationMs = (newQty.toFloat() / flow * 1000f).roundToInt()
+        if (durationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) {
             return ConflictResult(
                 blockingMessage =
-                    "Quantité trop faible : minimum ${"%.1f".format(minMl)} mL (1 seconde)\n" +
+                    "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
                             "Débit actuel : ${"%.1f".format(flow)} mL/s"
             )
         }
 
         // ✅ limite firmware 600s en édition aussi (sinon surprise ESP32)
-        if (durationSec > MAX_PUMP_DURATION_SEC) {
+        if (durationMs > ManualDoseActivity.MAX_PUMP_DURATION_MS) {
             return ConflictResult(
                 blockingMessage =
                     "Durée trop longue : maximum ${MAX_PUMP_DURATION_SEC}s\n" +
@@ -226,9 +225,9 @@ class PumpScheduleAdapter(
             )
         }
 
-        val endSec = startSec + durationSec
+        val endMs = startMs + durationMs
 
-        if (endSec >= 86400) {
+        if (endMs >= 86_400_000L) {
             return ConflictResult(blockingMessage = "La distribution dépasse minuit (00:00)")
         }
 
@@ -258,21 +257,22 @@ class PumpScheduleAdapter(
                 val mm = sp[1].toIntOrNull() ?: continue
                 if (hh !in 0..23 || mm !in 0..59) continue
 
-                val sStart = hh * 3600 + mm * 60
+                val sStartMs = (hh * 3600L + mm * 60L) * 1000L
 
                 val flowOther =
                     prefs.getFloat("esp_${active.id}_pump${p}_flow", flow)
 
-                // ignore héritage < 1 seconde
-                if (s.quantity.toFloat() < flowOther) continue
+                val minOtherMl =
+                    flowOther * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
+                if (s.quantity.toFloat() < minOtherMl) continue
 
-                val sDuration = (s.quantity.toFloat() / flowOther).roundToInt()
-                if (sDuration < 1) continue
-                if (sDuration > MAX_PUMP_DURATION_SEC) continue
+                val sDurationMs = (s.quantity.toFloat() / flowOther * 1000f).roundToInt()
+                if (sDurationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) continue
+                if (sDurationMs > ManualDoseActivity.MAX_PUMP_DURATION_MS) continue
 
-                val sEnd = sStart + sDuration
+                val sEndMs = sStartMs + sDurationMs
 
-                if (startSec < sEnd && endSec > sStart) {
+                if (startMs < sEndMs && endMs > sStartMs) {
                     // ✅ même pompe = bloquant (message cohérent)
                     if (p == pumpNumber) {
                         return ConflictResult(

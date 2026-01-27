@@ -343,7 +343,7 @@ object ProgramStore {
             // Charge les lignes stockées (ordre de saisie)
             val rawLines = loadEncodedLines(context, pump)
 
-            // ✅ Filtre ultime : HH/MM valides + secs 1..600 (tolère PLACEHOLDER)
+            // ✅ Filtre ultime : HH/MM valides + ms 50..600000 (tolère PLACEHOLDER)
             val filteredLines = rawLines.filter { line ->
                 isValidEncodedLineForSend(line) && line != PLACEHOLDER
             }

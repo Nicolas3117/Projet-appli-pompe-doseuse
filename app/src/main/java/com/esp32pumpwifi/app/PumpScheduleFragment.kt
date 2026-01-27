@@ -267,7 +267,7 @@ class PumpScheduleFragment : Fragment() {
         }
 
         // ✅ Blocage si durée > 600s (aligné firmware ESP32)
-        val maxMs = MAX_PUMP_DURATION_SEC * 1000
+        val maxMs = ManualDoseActivity.MAX_PUMP_DURATION_MS
         if (durationMs > maxMs) {
             val msg =
                 "Durée trop longue : maximum ${MAX_PUMP_DURATION_SEC}s\n" +
@@ -490,7 +490,7 @@ class PumpScheduleFragment : Fragment() {
                 ignoredCount++
                 continue
             }
-            if (durationMs > MAX_PUMP_DURATION_SEC * 1000) {
+            if (durationMs > ManualDoseActivity.MAX_PUMP_DURATION_MS) {
                 ignoredCount++
                 continue
             }

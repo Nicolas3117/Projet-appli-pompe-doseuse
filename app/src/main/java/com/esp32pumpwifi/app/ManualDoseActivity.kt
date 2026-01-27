@@ -203,14 +203,14 @@ class ManualDoseActivity : AppCompatActivity() {
         // ✅ Multi-modules OK : lecture par espId explicite
         val lines = ProgramStore.loadEncodedLines(context, espId, pumpNum)
         for (line in lines) {
-            if (line == "000000000") continue
-            if (line.length < 9) continue
+            if (line == "000000000000") continue
+            if (line.length < 12) continue
             if (line[0] != '1') continue
 
             val hh = line.substring(2, 4).toIntOrNull() ?: continue
             val mm = line.substring(4, 6).toIntOrNull() ?: continue
-            val secs = line.substring(6, 9).toIntOrNull() ?: continue
-            if (secs <= 0) continue
+            val durationMs = line.substring(6, 12).toIntOrNull() ?: continue
+            if (durationMs <= 0) continue
 
             val start = (dayStart.clone() as Calendar).apply {
                 set(Calendar.HOUR_OF_DAY, hh)
@@ -219,7 +219,7 @@ class ManualDoseActivity : AppCompatActivity() {
                 set(Calendar.MILLISECOND, 0)
             }.timeInMillis
 
-            val end = start + secs * 1000L
+            val end = start + durationMs
 
             // En cours si now ∈ [start, end[
             if (now >= start && now < end) return true
