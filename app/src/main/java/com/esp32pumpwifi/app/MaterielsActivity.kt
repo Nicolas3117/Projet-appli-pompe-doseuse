@@ -48,7 +48,7 @@ class MaterielsActivity : AppCompatActivity() {
     private lateinit var btnOpenPlanning: Button
 
     // 📡 Wi-Fi
-    private lateinit var btnConfigureWifi: Button
+    private lateinit var btnConfigureWifi: View
     private var lastWifiSsid: String? = null
 
     // Insets targets

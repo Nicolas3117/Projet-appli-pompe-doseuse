@@ -69,20 +69,27 @@
                     android:tint="@android:color/black" />
             </FrameLayout>
 
-            <Button
+            <FrameLayout
                 android:id="@+id/btn_configure_wifi"
                 android:layout_width="64dp"
                 android:layout_height="40dp"
                 android:background="@drawable/bg_pill_planning_ripple"
+                android:clickable="true"
+                android:focusable="true"
                 android:paddingStart="14dp"
                 android:paddingEnd="14dp"
                 android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:gravity="center"
-                android:text=""
-                android:contentDescription="Configurer le Wi-Fi"
-                android:drawableStart="@drawable/ic_wifi"
-                android:drawableTint="@android:color/black" />
+                android:paddingBottom="8dp">
+
+                <ImageView
+                    android:id="@+id/icon_wifi"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerInside"
+                    android:contentDescription="Configurer le Wi-Fi"
+                    android:src="@drawable/ic_wifi"
+                    android:tint="@android:color/black" />
+            </FrameLayout>
 
         </LinearLayout>
 
