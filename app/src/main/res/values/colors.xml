@@ -17,13 +17,6 @@
     <color name="textPrimary">#000000</color>
     <color name="textSecondary">#444444</color>
 
-    <!-- ================= SWITCH ================= -->
-
-    <color name="switch_thumb_on">#003366</color>
-    <color name="switch_thumb_off">#CCCCCC</color>
-    <color name="switch_track_on">#99CCFF</color>
-    <color name="switch_track_off">#EEEEEE</color>
-
     <!-- ================= JAUGES BIDONS ================= -->
 
     <color name="tank_green">#4CAF50</color>
