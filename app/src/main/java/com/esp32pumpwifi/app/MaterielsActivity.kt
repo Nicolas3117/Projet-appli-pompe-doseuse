@@ -3,6 +3,7 @@ package com.esp32pumpwifi.app
 import android.content.Intent
 import android.graphics.Rect
 import android.os.Bundle
+import android.text.InputType
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
@@ -46,6 +47,10 @@ class MaterielsActivity : AppCompatActivity() {
     // 📊 Planning
     private lateinit var btnOpenPlanning: Button
 
+    // 📡 Wi-Fi
+    private lateinit var btnConfigureWifi: Button
+    private var lastWifiSsid: String? = null
+
     // Insets targets
     private lateinit var layoutActions: ConstraintLayout
     private lateinit var telegramScroll: androidx.core.widget.NestedScrollView
@@ -65,6 +70,7 @@ class MaterielsActivity : AppCompatActivity() {
 
         btnOpenPumps = findViewById(R.id.btn_open_pumps)
         btnOpenPlanning = findViewById(R.id.btn_open_planning)
+        btnConfigureWifi = findViewById(R.id.btn_configure_wifi)
 
         editTelegramToken = findViewById(R.id.edit_telegram_token)
         editTelegramChatId = findViewById(R.id.edit_telegram_chat_id)
@@ -129,6 +135,11 @@ class MaterielsActivity : AppCompatActivity() {
             startActivity(Intent(this, MainActivity::class.java))
         }
 
+        // 📡 Configurer Wi-Fi
+        btnConfigureWifi.setOnClickListener {
+            showWifiConfigDialog()
+        }
+
         // 📊 Accès Planning
         btnOpenPlanning.setOnClickListener {
             val selectedEspIds =
@@ -161,6 +172,7 @@ class MaterielsActivity : AppCompatActivity() {
         super.onResume()
         loadList()
         loadTelegramForActiveModule()
+        updateWifiButtonState()
     }
 
     // ================= TOGGLE TELEGRAM =================
@@ -263,6 +275,7 @@ class MaterielsActivity : AppCompatActivity() {
         )
 
         listView.adapter = adapter
+        updateWifiButtonState()
     }
 
     // ================= TELEGRAM =================
@@ -376,6 +389,7 @@ class MaterielsActivity : AppCompatActivity() {
         }
         adapter.refresh(modules)
         loadTelegramForActiveModule()
+        updateWifiButtonState()
 
         Toast.makeText(
             this,
@@ -416,6 +430,128 @@ class MaterielsActivity : AppCompatActivity() {
             )
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    private fun updateWifiButtonState() {
+        val hasActiveModule = Esp32Manager.getActive(this) != null
+        btnConfigureWifi.isEnabled = hasActiveModule
+        btnConfigureWifi.visibility = if (hasActiveModule) View.VISIBLE else View.GONE
+    }
+
+    private fun showWifiConfigDialog() {
+        val activeModule = Esp32Manager.getActive(this)
+        if (activeModule == null) {
+            Toast.makeText(this, "Sélectionnez un module actif", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_configure_wifi, null)
+        val editSsid = dialogView.findViewById<EditText>(R.id.edit_wifi_ssid)
+        val editPassword = dialogView.findViewById<EditText>(R.id.edit_wifi_password)
+        val checkboxShowPassword = dialogView.findViewById<CheckBox>(R.id.checkbox_show_password)
+        val errorText = dialogView.findViewById<TextView>(R.id.text_wifi_error)
+        val progressLayout = dialogView.findViewById<View>(R.id.layout_wifi_progress)
+
+        lastWifiSsid?.let { editSsid.setText(it) }
+
+        checkboxShowPassword.setOnCheckedChangeListener { _, isChecked ->
+            val selectionStart = editPassword.selectionStart
+            val selectionEnd = editPassword.selectionEnd
+            editPassword.inputType =
+                if (isChecked) {
+                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                } else {
+                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                }
+            editPassword.setSelection(selectionStart, selectionEnd)
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Configurer Wi-Fi")
+            .setView(dialogView)
+            .setPositiveButton("Envoyer", null)
+            .setNegativeButton("Annuler", null)
+            .create()
+
+        dialog.setOnShowListener {
+            val sendButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+
+            sendButton.setOnClickListener {
+                val ssid = editSsid.text.toString().trim()
+                val password = editPassword.text.toString()
+
+                if (ssid.isEmpty()) {
+                    editSsid.error = "SSID requis"
+                    return@setOnClickListener
+                }
+
+                lastWifiSsid = ssid
+                errorText.visibility = View.GONE
+                progressLayout.visibility = View.VISIBLE
+                sendButton.isEnabled = false
+
+                lifecycleScope.launch {
+                    val module = Esp32Manager.getActive(this@MaterielsActivity)
+                    if (module == null) {
+                        errorText.text = "Module injoignable"
+                        errorText.visibility = View.VISIBLE
+                        progressLayout.visibility = View.GONE
+                        sendButton.isEnabled = true
+                        return@launch
+                    }
+
+                    val reachable = ensureActiveModuleReachable(module)
+                    if (reachable == null) {
+                        errorText.text = "Module injoignable"
+                        errorText.visibility = View.VISIBLE
+                        progressLayout.visibility = View.GONE
+                        sendButton.isEnabled = true
+                        return@launch
+                    }
+
+                    val result = NetworkHelper.postSaveWifi(
+                        baseIp = reachable.ip,
+                        ssid = ssid,
+                        password = password
+                    )
+
+                    if (result.isSuccess) {
+                        dialog.dismiss()
+                        Toast.makeText(
+                            this@MaterielsActivity,
+                            "Wi-Fi enregistré. Le module redémarre…",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        errorText.text = result.exceptionOrNull()?.message
+                            ?: "Erreur lors de l’envoi"
+                        errorText.visibility = View.VISIBLE
+                        progressLayout.visibility = View.GONE
+                        sendButton.isEnabled = true
+                    }
+                }
+            }
+        }
+
+        dialog.show()
+    }
+
+    private suspend fun ensureActiveModuleReachable(module: EspModule): EspModule? {
+        if (testModuleConnection(module)) {
+            return module
+        }
+
+        val found = NetworkScanner.scan(this@MaterielsActivity)
+        val match = found.firstOrNull { it.internalName == module.internalName }
+        if (match != null) {
+            module.ip = match.ip
+            Esp32Manager.update(this@MaterielsActivity, module)
+            if (testModuleConnection(module)) {
+                return module
+            }
+        }
+
+        return null
     }
 
     // ================= SCAN RÉSEAU MANUEL =================

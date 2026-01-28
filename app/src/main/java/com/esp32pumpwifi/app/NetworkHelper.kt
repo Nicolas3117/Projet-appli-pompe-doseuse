@@ -303,4 +303,55 @@ object NetworkHelper {
             show()
         }
     }
+
+    suspend fun postSaveWifi(baseIp: String, ssid: String, password: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
+            try {
+                val url = URL("http://$baseIp/save_wifi")
+                val body =
+                    "ssid=${URLEncoder.encode(ssid, "UTF-8")}" +
+                        "&password=${URLEncoder.encode(password, "UTF-8")}"
+
+                conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 8000
+                conn.readTimeout = 12000
+                conn.doOutput = true
+                conn.setRequestProperty(
+                    "Content-Type",
+                    "application/x-www-form-urlencoded; charset=UTF-8"
+                )
+
+                conn.outputStream.use { output ->
+                    output.write(body.toByteArray(Charsets.UTF_8))
+                }
+
+                val responseCode = conn.responseCode
+                val responseText = try {
+                    val stream =
+                        if (responseCode in 200..299) conn.inputStream else conn.errorStream
+                    stream?.bufferedReader()?.use { it.readText() } ?: ""
+                } catch (_: Exception) {
+                    ""
+                }
+
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    Result.success(Unit)
+                } else {
+                    Result.failure(
+                        IllegalStateException(
+                            "Erreur HTTP $responseCode: ${responseText.trim()}"
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            } finally {
+                try {
+                    conn?.disconnect()
+                } catch (_: Exception) {
+                }
+            }
+        }
 }
