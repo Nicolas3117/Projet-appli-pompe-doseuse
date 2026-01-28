@@ -405,8 +405,8 @@ class MaterielsActivity : AppCompatActivity() {
                     URL("http://${module.ip}/id")
                         .openConnection() as HttpURLConnection
 
-                conn.connectTimeout = 800
-                conn.readTimeout = 800
+                conn.connectTimeout = 2000
+                conn.readTimeout = 2000
 
                 val response =
                     conn.inputStream.bufferedReader().readText()
@@ -451,6 +451,7 @@ class MaterielsActivity : AppCompatActivity() {
         val checkboxShowPassword = dialogView.findViewById<CheckBox>(R.id.checkbox_show_password)
         val errorText = dialogView.findViewById<TextView>(R.id.text_wifi_error)
         val progressLayout = dialogView.findViewById<View>(R.id.layout_wifi_progress)
+        val progressText = dialogView.findViewById<TextView>(R.id.text_wifi_progress)
 
         lastWifiSsid?.let { editSsid.setText(it) }
 
@@ -488,6 +489,7 @@ class MaterielsActivity : AppCompatActivity() {
                 lastWifiSsid = ssid
                 errorText.visibility = View.GONE
                 progressLayout.visibility = View.VISIBLE
+                progressText.text = "Vérification…"
                 sendButton.isEnabled = false
 
                 lifecycleScope.launch {
@@ -509,6 +511,7 @@ class MaterielsActivity : AppCompatActivity() {
                         return@launch
                     }
 
+                    progressText.text = "Envoi…"
                     val result = NetworkHelper.postSaveWifi(
                         baseIp = reachable.ip,
                         ssid = ssid,
