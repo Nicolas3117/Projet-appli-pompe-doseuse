@@ -10,9 +10,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.EOFException
+import java.io.IOException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 import java.net.URLEncoder
+
+sealed class WifiSaveResult {
+    object Success : WifiSaveResult()
+    object ProbableSuccess : WifiSaveResult()
+    data class Failure(val error: Throwable?) : WifiSaveResult()
+}
 
 object NetworkHelper {
 
@@ -105,7 +114,6 @@ object NetworkHelper {
                     throw IllegalStateException("HTTP $responseCode")
                 }
 
-                // ✅ Gestion BUSY (pompe déjà active)
                 if (responseText.equals("BUSY", ignoreCase = true)) {
                     showPumpBusyDialog(context, pump)
                     return@launch
@@ -121,8 +129,7 @@ object NetworkHelper {
             } finally {
                 try {
                     conn?.disconnect()
-                } catch (_: Exception) {
-                }
+                } catch (_: Exception) { }
             }
         }
     }
@@ -158,7 +165,6 @@ object NetworkHelper {
                     throw IllegalStateException("HTTP $responseCode")
                 }
 
-                // ✅ Gestion BUSY (pompe déjà active)
                 if (responseText.equals("BUSY", ignoreCase = true)) {
                     showPumpBusyDialog(context, pump)
                     return@launch
@@ -174,8 +180,7 @@ object NetworkHelper {
             } finally {
                 try {
                     conn?.disconnect()
-                } catch (_: Exception) {
-                }
+                } catch (_: Exception) { }
             }
         }
     }
@@ -189,7 +194,6 @@ object NetworkHelper {
         message: String,
         onSuccess: () -> Unit = {}
     ) {
-        // 🔒 SÉCURITÉ
         if (message.length != 576) {
             Log.e("ESP32_PROGRAM_MS", "❌ MESSAGE INVALIDE : ${message.length} chars (attendu 576)")
             Toast.makeText(
@@ -204,9 +208,9 @@ object NetworkHelper {
         val urlString = "http://$ip/program_ms?message=$encodedMessage"
 
         Log.e("ESP32_PROGRAM_MS", "================ PROGRAM_MS SEND ================")
-        Log.e("ESP32_PROGRAM_MS", "IP       = $ip")
-        Log.e("ESP32_PROGRAM_MS", "LENGTH   = ${message.length}")
-        Log.e("ESP32_PROGRAM_MS", "URL LEN  = ${urlString.length}")
+        Log.e("ESP32_PROGRAM_MS", "IP = $ip")
+        Log.e("ESP32_PROGRAM_MS", "LENGTH = ${message.length}")
+        Log.e("ESP32_PROGRAM_MS", "URL LEN = ${urlString.length}")
 
         var idx = 0
         var lineNum = 1
@@ -228,7 +232,6 @@ object NetworkHelper {
 
                 val responseCode = conn.responseCode
 
-                // ✅ Lire le body même si HTTP != 200 (sinon on perd "Invalid program line #X")
                 val responseText = try {
                     val stream =
                         if (responseCode in 200..299) conn.inputStream else conn.errorStream
@@ -240,7 +243,6 @@ object NetworkHelper {
                 Log.e("ESP32_PROGRAM_MS", "ESP32 HTTP = $responseCode")
                 Log.e("ESP32_PROGRAM_MS", "ESP32 RESPONSE = '${responseText.trim()}'")
 
-                // ✅ Cas OK attendu
                 if (responseCode == HttpURLConnection.HTTP_OK) {
                     val r = responseText.trim()
                     if (r.equals("OK", ignoreCase = true) || r.isEmpty()) {
@@ -251,12 +253,10 @@ object NetworkHelper {
                         return@launch
                     }
 
-                    // HTTP 200 mais réponse inattendue -> afficher le détail
                     showProgramErrorDialog(context, "Réponse inattendue : $r")
                     return@launch
                 }
 
-                // ✅ Cas refus (400 etc.) -> popup clair si on a un message
                 val details = responseText.trim()
                 if (details.isNotEmpty()) {
                     showProgramErrorDialog(context, details)
@@ -283,8 +283,7 @@ object NetworkHelper {
             } finally {
                 try {
                     conn?.disconnect()
-                } catch (_: Exception) {
-                }
+                } catch (_: Exception) { }
             }
         }
     }
@@ -304,9 +303,8 @@ object NetworkHelper {
         }
     }
 
-    // ✅ postSaveWifi : on garde le comportement "strict" (HTTP 200 = success),
-    // et on laisse MaterielsActivity décider si un timeout/reset doit être considéré comme "probable succès".
-    suspend fun postSaveWifi(baseIp: String, ssid: String, password: String): Result<Unit> =
+    // ✅ postSaveWifi : HTTP 200 = succès, certaines erreurs réseau = "probable succès" (reboot ESP32).
+    suspend fun postSaveWifi(baseIp: String, ssid: String, password: String): WifiSaveResult =
         withContext(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
             try {
@@ -339,21 +337,24 @@ object NetworkHelper {
                 }
 
                 if (responseCode == HttpURLConnection.HTTP_OK) {
-                    Result.success(Unit)
+                    WifiSaveResult.Success
                 } else {
-                    Result.failure(
-                        IllegalStateException(
-                            "Erreur HTTP $responseCode: ${responseText.trim()}"
-                        )
+                    WifiSaveResult.Failure(
+                        IllegalStateException("Erreur HTTP $responseCode: ${responseText.trim()}")
                     )
                 }
             } catch (e: Exception) {
-                Result.failure(e)
+                if (e is SocketTimeoutException || e is EOFException || e is IOException) {
+                    WifiSaveResult.ProbableSuccess
+                } else if ((e.message ?: "").contains("broken pipe", ignoreCase = true)) {
+                    WifiSaveResult.ProbableSuccess
+                } else {
+                    WifiSaveResult.Failure(e)
+                }
             } finally {
                 try {
                     conn?.disconnect()
-                } catch (_: Exception) {
-                }
+                } catch (_: Exception) { }
             }
         }
 }

@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Rect
 import android.os.Bundle
 import android.text.InputType
+import android.util.Log
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
@@ -21,6 +22,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class MaterielsActivity : AppCompatActivity() {
+
     companion object {
         const val EXTRA_AUTO_SCAN = "extra_auto_scan"
     }
@@ -116,8 +118,6 @@ class MaterielsActivity : AppCompatActivity() {
         ViewCompat.requestApplyInsets(telegramScroll)
 
         setupTelegramToggle()
-
-        // ✅ 3) IMPORTANT : auto-scroll vers le champ quand on le focus (Android 15 tablette)
         setupTelegramAutoScroll()
 
         // ➕ Scan réseau manuel
@@ -197,7 +197,6 @@ class MaterielsActivity : AppCompatActivity() {
                 .putBoolean(KEY_TELEGRAM_TOGGLE_OPEN, !opened)
                 .apply()
 
-            // ✅ Si on ouvre, on scrolle vers la zone Telegram
             if (!opened) {
                 telegramScroll.post {
                     telegramScroll.smoothScrollTo(0, telegramContent.top)
@@ -206,19 +205,16 @@ class MaterielsActivity : AppCompatActivity() {
         }
     }
 
-    // ✅ Auto-scroll robuste (focus switch Android 15 tablette)
     private fun setupTelegramAutoScroll() {
 
         fun scrollToTarget(target: View) {
             val run = { ensureTelegramFieldVisible(target) }
 
-            // 1) tout de suite
             telegramScroll.post {
                 ViewCompat.requestApplyInsets(telegramScroll)
                 run()
             }
 
-            // 2) après stabilisation IME (vital sur Android 15)
             telegramScroll.postDelayed({
                 ViewCompat.requestApplyInsets(telegramScroll)
                 run()
@@ -229,7 +225,6 @@ class MaterielsActivity : AppCompatActivity() {
             target.setOnFocusChangeListener { v, hasFocus ->
                 if (hasFocus) scrollToTarget(v)
             }
-            // Important sur certaines tablettes : un tap peut déclencher un micro resize même si focus inchangé
             target.setOnClickListener { v ->
                 scrollToTarget(v)
             }
@@ -242,10 +237,6 @@ class MaterielsActivity : AppCompatActivity() {
     private fun dpToPx(dp: Int): Int =
         (dp * resources.displayMetrics.density).toInt()
 
-    /**
-     * Garantit que le champ (et un peu de marge) est visible.
-     * On laisse NestedScrollView calculer le bon scroll (plus fiable que smoothScrollTo(scrollY) sur Android 15).
-     */
     private fun ensureTelegramFieldVisible(target: View) {
         val margin = dpToPx(24)
 
@@ -256,8 +247,6 @@ class MaterielsActivity : AppCompatActivity() {
         rect.bottom += margin
 
         telegramScroll.offsetDescendantRectToMyCoords(target, rect)
-
-        // Laisse Android/NestedScrollView décider du scroll exact
         telegramScroll.requestChildRectangleOnScreen(target, rect, true)
     }
 
@@ -357,13 +346,11 @@ class MaterielsActivity : AppCompatActivity() {
     private fun checkConnectionBeforeSelect(module: EspModule) {
         lifecycleScope.launch {
 
-            // 1️⃣ Test STA direct
             if (testModuleConnection(module)) {
                 activateModule(module)
                 return@launch
             }
 
-            // 2️⃣ Fallback AP / scan réseau
             val found = NetworkScanner.scan(this@MaterielsActivity)
 
             val match = found.firstOrNull {
@@ -377,7 +364,6 @@ class MaterielsActivity : AppCompatActivity() {
                 return@launch
             }
 
-            // 3️⃣ Échec total
             showNotConnectedDialog(module)
         }
     }
@@ -436,23 +422,6 @@ class MaterielsActivity : AppCompatActivity() {
         val hasActiveModule = Esp32Manager.getActive(this) != null
         btnConfigureWifi.isEnabled = hasActiveModule
         btnConfigureWifi.visibility = if (hasActiveModule) View.VISIBLE else View.GONE
-    }
-
-    // ✅ Heuristique : si l’ESP32 reboot / coupe la connexion juste après avoir reçu le POST,
-    // certains téléphones voient un timeout/EOF/reset alors que le Wi-Fi est bien enregistré.
-    private fun shouldAssumeWifiSaved(err: Throwable?): Boolean {
-        if (err == null) return false
-        val msg = (err.message ?: "").lowercase()
-
-        return err is java.net.SocketTimeoutException ||
-                err is java.net.SocketException ||         // "Connection reset", "Broken pipe", etc.
-                err is java.io.EOFException ||             // stream closed
-                err is java.net.ConnectException ||        // bascule réseau
-                msg.contains("reset") ||
-                msg.contains("broken pipe") ||
-                msg.contains("eof") ||
-                msg.contains("closed") ||
-                msg.contains("failed to connect")
     }
 
     private fun showWifiSuccessDialog() {
@@ -547,16 +516,24 @@ class MaterielsActivity : AppCompatActivity() {
                         password = password
                     )
 
-                    val err = result.exceptionOrNull()
+                    when (result) {
+                        is WifiSaveResult.Success -> {
+                            dialog.dismiss()
+                            showWifiSuccessDialog()
+                        }
 
-                    if (result.isSuccess || shouldAssumeWifiSaved(err)) {
-                        dialog.dismiss()
-                        showWifiSuccessDialog()
-                    } else {
-                        errorText.text = err?.message ?: "Erreur lors de l’envoi"
-                        errorText.visibility = View.VISIBLE
-                        progressLayout.visibility = View.GONE
-                        sendButton.isEnabled = true
+                        is WifiSaveResult.ProbableSuccess -> {
+                            Log.w("WIFI", "Succès probable (ESP32 reboot trop rapide)")
+                            dialog.dismiss()
+                            showWifiSuccessDialog()
+                        }
+
+                        is WifiSaveResult.Failure -> {
+                            errorText.text = result.error?.message ?: "Erreur lors de l’envoi"
+                            errorText.visibility = View.VISIBLE
+                            progressLayout.visibility = View.GONE
+                            sendButton.isEnabled = true
+                        }
                     }
                 }
             }
@@ -600,7 +577,6 @@ class MaterielsActivity : AppCompatActivity() {
                 .rotationBy(360f)
                 .setDuration(800)
                 .withEndAction {
-                    // Relance tant que le scan n'est pas fini
                     if (!btnScan.isEnabled) {
                         icon.rotation = 0f
                         startIconSpin()
@@ -623,7 +599,6 @@ class MaterielsActivity : AppCompatActivity() {
 
             val found = NetworkScanner.scan(this@MaterielsActivity)
 
-            // 🛑 Stop animation + réactiver bouton
             stopIconSpin()
 
             if (found.isEmpty()) {
@@ -637,7 +612,6 @@ class MaterielsActivity : AppCompatActivity() {
 
             val existing = Esp32Manager.getAll(this@MaterielsActivity)
 
-            // Mise à jour IP si module existant
             found.forEach { scan ->
                 val existingModule =
                     existing.firstOrNull { it.internalName == scan.internalName }
@@ -648,7 +622,6 @@ class MaterielsActivity : AppCompatActivity() {
                 }
             }
 
-            // Nouveaux modules
             val newModules =
                 found.filter { scan ->
                     existing.none { it.internalName == scan.internalName }
