@@ -520,11 +520,16 @@ class MaterielsActivity : AppCompatActivity() {
 
                     if (result.isSuccess) {
                         dialog.dismiss()
-                        Toast.makeText(
-                            this@MaterielsActivity,
-                            "Wi-Fi enregistré. Le module redémarre…",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        AlertDialog.Builder(this@MaterielsActivity)
+                            .setTitle("Configuration Wi-Fi")
+                            .setMessage(
+                                "Wi-Fi enregistré avec succès.\n\n" +
+                                    "1️⃣ Débranchez puis rebranchez la pompe.\n" +
+                                    "2️⃣ Reconnectez votre appareil au Wi-Fi de votre box ou routeur.\n" +
+                                    "3️⃣ Revenez dans la page Matériels et appuyez sur Rafraîchir."
+                            )
+                            .setPositiveButton("OK", null)
+                            .show()
                     } else {
                         errorText.text = result.exceptionOrNull()?.message
                             ?: "Erreur lors de l’envoi"

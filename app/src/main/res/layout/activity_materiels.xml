@@ -11,52 +11,80 @@
         android:id="@+id/layout_top_bar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:gravity="start"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <TextView
             android:id="@+id/tv_materiels_title"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:text="Matériels"
             android:textSize="22sp"
             android:textStyle="bold"
             android:paddingBottom="8dp" />
 
-        <Button
-            android:id="@+id/btn_open_planning"
+        <LinearLayout
+            android:id="@+id/layout_top_actions"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="📊 Planning"
-            android:minHeight="48dp"
-            android:layout_marginEnd="8dp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-        <!-- ✅ Bouton refresh : pilule identique Planning + icône animable -->
-        <FrameLayout
-            android:id="@+id/btn_add_module"
-            android:layout_width="64dp"
-            android:layout_height="40dp"
-            android:background="@drawable/bg_pill_planning_ripple"
-            android:clickable="true"
-            android:focusable="true"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp">
+            <Button
+                android:id="@+id/btn_open_planning"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:text="📊 Planning"
+                android:background="@drawable/bg_pill_planning_ripple"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:layout_marginEnd="8dp" />
 
-            <ImageView
-                android:id="@+id/icon_refresh"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scaleType="centerInside"
-                android:contentDescription="Scanner le réseau"
-                android:src="@drawable/ic_wifi_refresh"
-                android:tint="@android:color/black" />
-        </FrameLayout>
+            <!-- ✅ Bouton refresh : pilule identique Planning + icône animable -->
+            <FrameLayout
+                android:id="@+id/btn_add_module"
+                android:layout_width="64dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_pill_planning_ripple"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:layout_marginEnd="8dp">
+
+                <ImageView
+                    android:id="@+id/icon_refresh"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerInside"
+                    android:contentDescription="Scanner le réseau"
+                    android:src="@drawable/ic_wifi_refresh"
+                    android:tint="@android:color/black" />
+            </FrameLayout>
+
+            <Button
+                android:id="@+id/btn_configure_wifi"
+                android:layout_width="64dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_pill_planning_ripple"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:gravity="center"
+                android:text=""
+                android:contentDescription="Configurer le Wi-Fi"
+                android:drawableStart="@drawable/ic_wifi"
+                android:drawableTint="@android:color/black" />
+
+        </LinearLayout>
 
     </LinearLayout>
 
@@ -86,17 +114,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <!-- ================= CONFIGURATION WIFI ================= -->
-        <Button
-            android:id="@+id/btn_configure_wifi"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Configurer Wi-Fi"
-            android:layout_marginBottom="12dp"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
-
         <!-- ================= BOUTON ACCÈS POMPES ================= -->
         <Button
             android:id="@+id/btn_open_pumps"
@@ -104,7 +121,7 @@
             android:layout_height="wrap_content"
             android:text="Accéder aux pompes"
             android:layout_marginBottom="12dp"
-            app:layout_constraintTop_toBottomOf="@id/btn_configure_wifi"
+            app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
 
