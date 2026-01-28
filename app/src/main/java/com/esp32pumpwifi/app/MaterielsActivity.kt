@@ -115,7 +115,7 @@ class MaterielsActivity : AppCompatActivity() {
         setupTelegramAutoScroll()
 
         // ➕ Scan réseau manuel
-        findViewById<Button>(R.id.btn_add_module).setOnClickListener {
+        findViewById<View>(R.id.btn_add_module).setOnClickListener {
             scanForEsp32()
         }
 
@@ -421,10 +421,45 @@ class MaterielsActivity : AppCompatActivity() {
     // ================= SCAN RÉSEAU MANUEL =================
 
     private fun scanForEsp32() {
+
+        val btnScan = findViewById<View>(R.id.btn_add_module)
+        val icon = findViewById<ImageView>(R.id.icon_refresh)
+
+        fun startIconSpin() {
+            btnScan.isEnabled = false
+
+            icon.animate().cancel()
+            icon.rotation = 0f
+
+            icon.animate()
+                .rotationBy(360f)
+                .setDuration(800)
+                .withEndAction {
+                    // Relance tant que le scan n'est pas fini
+                    if (!btnScan.isEnabled) {
+                        icon.rotation = 0f
+                        startIconSpin()
+                    }
+                }
+                .start()
+        }
+
+        fun stopIconSpin() {
+            icon.animate().cancel()
+            icon.rotation = 0f
+            btnScan.isEnabled = true
+        }
+
+        startIconSpin()
+
         Toast.makeText(this, "Recherche des modules…", Toast.LENGTH_SHORT).show()
 
         lifecycleScope.launch {
+
             val found = NetworkScanner.scan(this@MaterielsActivity)
+
+            // 🛑 Stop animation + réactiver bouton
+            stopIconSpin()
 
             if (found.isEmpty()) {
                 Toast.makeText(
