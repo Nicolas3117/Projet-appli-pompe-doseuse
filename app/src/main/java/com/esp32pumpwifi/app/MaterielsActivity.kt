@@ -438,6 +438,35 @@ class MaterielsActivity : AppCompatActivity() {
         btnConfigureWifi.visibility = if (hasActiveModule) View.VISIBLE else View.GONE
     }
 
+    // ✅ Heuristique : si l’ESP32 reboot / coupe la connexion juste après avoir reçu le POST,
+    // certains téléphones voient un timeout/EOF/reset alors que le Wi-Fi est bien enregistré.
+    private fun shouldAssumeWifiSaved(err: Throwable?): Boolean {
+        if (err == null) return false
+        val msg = (err.message ?: "").lowercase()
+
+        return err is java.net.SocketTimeoutException ||
+                err is java.net.SocketException ||         // "Connection reset", "Broken pipe", etc.
+                err is java.io.EOFException ||             // stream closed
+                err is java.net.ConnectException ||        // bascule réseau
+                msg.contains("reset") ||
+                msg.contains("broken pipe") ||
+                msg.contains("eof") ||
+                msg.contains("closed") ||
+                msg.contains("failed to connect")
+    }
+
+    private fun showWifiSuccessDialog() {
+        AlertDialog.Builder(this@MaterielsActivity)
+            .setTitle("Configuration Wi-Fi")
+            .setMessage(
+                "Le Wi-Fi a bien été enregistré.\n\n" +
+                        "1️⃣ Reconnectez votre téléphone ou tablette au Wi-Fi de votre box ou routeur.\n" +
+                        "2️⃣ Revenez dans l’application, page Matériels, puis appuyez sur Rafraîchir."
+            )
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
     private fun showWifiConfigDialog() {
         val activeModule = Esp32Manager.getActive(this)
         if (activeModule == null) {
@@ -518,21 +547,13 @@ class MaterielsActivity : AppCompatActivity() {
                         password = password
                     )
 
-                    if (result.isSuccess) {
+                    val err = result.exceptionOrNull()
+
+                    if (result.isSuccess || shouldAssumeWifiSaved(err)) {
                         dialog.dismiss()
-                        AlertDialog.Builder(this@MaterielsActivity)
-                            .setTitle("Configuration Wi-Fi")
-                            .setMessage(
-                                "Wi-Fi enregistré avec succès.\n\n" +
-                                    "1️⃣ Débranchez puis rebranchez la pompe.\n" +
-                                    "2️⃣ Reconnectez votre appareil au Wi-Fi de votre box ou routeur.\n" +
-                                    "3️⃣ Revenez dans la page Matériels et appuyez sur Rafraîchir."
-                            )
-                            .setPositiveButton("OK", null)
-                            .show()
+                        showWifiSuccessDialog()
                     } else {
-                        errorText.text = result.exceptionOrNull()?.message
-                            ?: "Erreur lors de l’envoi"
+                        errorText.text = err?.message ?: "Erreur lors de l’envoi"
                         errorText.visibility = View.VISIBLE
                         progressLayout.visibility = View.GONE
                         sendButton.isEnabled = true

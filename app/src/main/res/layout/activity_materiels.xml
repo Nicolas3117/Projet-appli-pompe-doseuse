@@ -13,6 +13,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="start"
+        android:layout_marginBottom="12dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -26,25 +27,13 @@
             android:textStyle="bold"
             android:paddingBottom="8dp" />
 
-        <LinearLayout
+        <!-- ✅ Actions top : Wifi gauche, Planning centré, Refresh droite -->
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/layout_top_actions"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
 
-            <Button
-                android:id="@+id/btn_open_planning"
-                android:layout_width="wrap_content"
-                android:layout_height="40dp"
-                android:text="📊 Planning"
-                android:background="@drawable/bg_pill_planning_ripple"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:layout_marginEnd="8dp" />
-
+            <!-- Zone gauche (Wifi) -->
             <FrameLayout
                 android:id="@+id/btn_configure_wifi"
                 android:layout_width="64dp"
@@ -55,7 +44,10 @@
                 android:paddingStart="14dp"
                 android:paddingEnd="14dp"
                 android:paddingTop="8dp"
-                android:paddingBottom="8dp">
+                android:paddingBottom="8dp"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
 
                 <ImageView
                     android:id="@+id/icon_wifi"
@@ -67,7 +59,7 @@
                     android:tint="@android:color/black" />
             </FrameLayout>
 
-            <!-- ✅ Bouton refresh : pilule identique Planning + icône animable -->
+            <!-- Zone droite (Refresh) -->
             <FrameLayout
                 android:id="@+id/btn_add_module"
                 android:layout_width="64dp"
@@ -79,7 +71,9 @@
                 android:paddingEnd="14dp"
                 android:paddingTop="8dp"
                 android:paddingBottom="8dp"
-                android:layout_marginEnd="8dp">
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent">
 
                 <ImageView
                     android:id="@+id/icon_refresh"
@@ -91,7 +85,29 @@
                     android:tint="@android:color/black" />
             </FrameLayout>
 
-        </LinearLayout>
+            <!-- ✅ Planning centré dans l'espace restant (entre Wifi et Refresh) -->
+            <Button
+                android:id="@+id/btn_open_planning"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:text="📊 Planning"
+                android:background="@drawable/bg_pill_planning_ripple"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:gravity="center"
+                android:minHeight="40dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                app:layout_constraintStart_toEndOf="@id/btn_configure_wifi"
+                app:layout_constraintEnd_toStartOf="@id/btn_add_module"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintHorizontal_bias="0.5"
+                app:layout_constraintWidth_default="wrap" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
     </LinearLayout>
 
@@ -100,6 +116,7 @@
         android:id="@+id/list_modules"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        android:layout_marginTop="16dp"
         android:divider="?android:attr/listDivider"
         android:dividerHeight="1dp"
         android:overScrollMode="ifContentScrolls"

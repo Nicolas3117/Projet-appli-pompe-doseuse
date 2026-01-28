@@ -304,6 +304,8 @@ object NetworkHelper {
         }
     }
 
+    // ✅ postSaveWifi : on garde le comportement "strict" (HTTP 200 = success),
+    // et on laisse MaterielsActivity décider si un timeout/reset doit être considéré comme "probable succès".
     suspend fun postSaveWifi(baseIp: String, ssid: String, password: String): Result<Unit> =
         withContext(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
@@ -311,7 +313,7 @@ object NetworkHelper {
                 val url = URL("http://$baseIp/save_wifi")
                 val body =
                     "ssid=${URLEncoder.encode(ssid, "UTF-8")}" +
-                        "&password=${URLEncoder.encode(password, "UTF-8")}"
+                            "&password=${URLEncoder.encode(password, "UTF-8")}"
 
                 conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
