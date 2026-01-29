@@ -27,11 +27,6 @@
             android:progress="0"
             android:progressDrawable="@drawable/daily_segment_progress_drawable" />
 
-        <com.esp32pumpwifi.app.SegmentOverlayView
-            android:id="@+id/daily_segments_1"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
         <TextView
             android:id="@+id/tv_daily_inside_1"
             android:layout_width="wrap_content"
