@@ -397,8 +397,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateDailySummary(activeModule: EspModule) {
+        val totalPlannedDoses = (1..4).sumOf { pumpNum ->
+            getPlannedDoseCount(activeModule.id, pumpNum)
+        }
+        if (totalPlannedDoses == 0) {
+            dailySummaryContainer.visibility = View.GONE
+            return
+        }
         dailySummaryContainer.visibility = View.VISIBLE
         for (pumpNum in 1..4) updateOneDaily(activeModule.id, pumpNum)
+    }
+
+    private fun getPlannedDoseCount(espId: Long, pumpNum: Int): Int {
+        val encodedLines = ProgramStore.loadEncodedLines(this, espId, pumpNum)
+        val activeLines = encodedLines.filter { line ->
+            val trimmed = line.trim()
+            // 12 chars digités requis par le format ESP32 (sinon on ignore).
+            val isValidFormat = trimmed.length == 12 && trimmed.all(Char::isDigit)
+            // Ignorer les placeholders (ligne vide/0) et ne garder que enabled=1.
+            val isPlaceholder = trimmed.all { it == '0' }
+            val isEnabled = trimmed.firstOrNull() == '1'
+            isValidFormat && !isPlaceholder && isEnabled
+        }
+        return activeLines.size.coerceAtMost(12)
     }
 
     private fun updateOneDaily(espId: Long, pumpNum: Int) {
@@ -418,17 +439,7 @@ class MainActivity : AppCompatActivity() {
             "Pompe $pumpNum"
         ) ?: "Pompe $pumpNum"
 
-        val encodedLines = ProgramStore.loadEncodedLines(this, espId, pumpNum)
-        val activeLines = encodedLines.filter { line ->
-            val trimmed = line.trim()
-            // 12 chars digités requis par le format ESP32 (sinon on ignore).
-            val isValidFormat = trimmed.length == 12 && trimmed.all(Char::isDigit)
-            // Ignorer les placeholders (ligne vide/0) et ne garder que enabled=1.
-            val isPlaceholder = trimmed.all { it == '0' }
-            val isEnabled = trimmed.firstOrNull() == '1'
-            isValidFormat && !isPlaceholder && isEnabled
-        }
-        val plannedDoseCountToday = activeLines.size.coerceAtMost(12)
+        val plannedDoseCountToday = getPlannedDoseCount(espId, pumpNum)
         val segmentCount = if (plannedDoseCountToday <= 1) 0 else plannedDoseCountToday
 
         val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
