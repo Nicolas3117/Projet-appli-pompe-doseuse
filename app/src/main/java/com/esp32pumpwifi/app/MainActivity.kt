@@ -415,11 +415,32 @@ class MainActivity : AppCompatActivity() {
             "Pompe $pumpNum"
         ) ?: "Pompe $pumpNum"
 
-        val plannedDoseCountToday = 12
-        val doneDoseCountToday = min(pumpNum, plannedDoseCountToday)
-        val plannedMlToday = 39f
-        val doneMlToday = min(10f * pumpNum, plannedMlToday)
-        val progressValue = (doneMlToday / plannedMlToday * 100f).roundToInt()
+        val placeholder = "000000000000"
+        val encodedLines = ProgramStore.loadEncodedLines(this, espId, pumpNum)
+        val activeLines = encodedLines.filter { line ->
+            line.isNotEmpty() && line != placeholder && line[0] == '1'
+        }
+        val plannedDoseCountToday = activeLines.size.coerceAtMost(12)
+
+        val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
+        val plannedMlToday =
+            if (flow > 0f && plannedDoseCountToday > 0)
+                TankScheduleHelper.getDailyConsumption(this, espId, pumpNum)
+            else
+                0f
+
+        val doneDoseCountToday =
+            if (plannedDoseCountToday > 0) min(pumpNum, plannedDoseCountToday) else 0
+        val doneMlToday =
+            if (plannedMlToday > 0f) min(10f * pumpNum, plannedMlToday) else 0f
+
+        val progressValue =
+            if (plannedMlToday > 0f)
+                (doneMlToday / plannedMlToday * 100f).roundToInt()
+            else
+                0
+
+        val plannedMlRounded = plannedMlToday.roundToInt()
 
         findViewById<TextView>(nameId).text = name
         findViewById<ProgressBar>(progressId).apply {
@@ -427,7 +448,7 @@ class MainActivity : AppCompatActivity() {
             progress = progressValue
         }
         findViewById<TextView>(minId).text = "0 ml"
-        findViewById<TextView>(maxId).text = "39 ml"
+        findViewById<TextView>(maxId).text = "$plannedMlRounded ml"
         findViewById<TextView>(doseId).text = "Dose : $doneDoseCountToday/$plannedDoseCountToday"
     }
 }
