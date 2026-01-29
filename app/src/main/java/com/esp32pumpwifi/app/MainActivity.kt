@@ -429,7 +429,7 @@ class MainActivity : AppCompatActivity() {
             isValidFormat && !isPlaceholder && isEnabled
         }
         val plannedDoseCountToday = activeLines.size.coerceAtMost(12)
-        val segmentCount = plannedDoseCountToday.coerceIn(0, 12)
+        val segmentCount = if (plannedDoseCountToday <= 1) 0 else plannedDoseCountToday
 
         val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
         val plannedMlToday =

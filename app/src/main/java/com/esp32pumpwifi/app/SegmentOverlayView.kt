@@ -6,7 +6,6 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
-import kotlin.math.roundToInt
 
 class SegmentOverlayView @JvmOverloads constructor(
     context: Context,
@@ -21,9 +20,12 @@ class SegmentOverlayView @JvmOverloads constructor(
         }
 
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(120, 0, 0, 0)
-        strokeWidth = 1f
+        color = Color.argb(90, 0, 0, 0)
         style = Paint.Style.STROKE
+    }
+
+    init {
+        setWillNotDraw(false)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -31,10 +33,12 @@ class SegmentOverlayView @JvmOverloads constructor(
 
         if (segments <= 1) return
 
-        linePaint.strokeWidth = dpToPx(1f)
+        val strokeWidthPx = resources.displayMetrics.density
+        linePaint.strokeWidth = strokeWidthPx
 
-        val left = paddingLeft.toFloat()
-        val right = width.toFloat() - paddingRight
+        val halfStroke = strokeWidthPx / 2f
+        val left = paddingLeft.toFloat() + halfStroke
+        val right = width.toFloat() - paddingRight - halfStroke
         val top = paddingTop.toFloat()
         val bottom = height.toFloat() - paddingBottom
 
@@ -46,9 +50,5 @@ class SegmentOverlayView @JvmOverloads constructor(
             val x = left + (segmentWidth * i)
             canvas.drawLine(x, top, x, bottom, linePaint)
         }
-    }
-
-    private fun dpToPx(dp: Float): Float {
-        return (dp * resources.displayMetrics.density).roundToInt().toFloat()
     }
 }
