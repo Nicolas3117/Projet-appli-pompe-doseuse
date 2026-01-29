@@ -31,22 +31,18 @@
 
         <TextView
             android:id="@+id/tv_tank_percent_2"
+            style="@style/TextStatusPrimary"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="-- %"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:textColor="#555555"/>
+            android:text="-- %" />
 
         <TextView
             android:id="@+id/tv_tank_ml_2"
+            style="@style/TextStatusPrimary"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="—"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:textColor="#555555"
-            android:layout_marginStart="12dp"/>
+            android:layout_marginStart="12dp" />
     </LinearLayout>
 
     <TextView

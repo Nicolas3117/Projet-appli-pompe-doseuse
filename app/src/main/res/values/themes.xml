@@ -29,4 +29,10 @@
         <item name="android:textColor">@color/textPrimary</item> <!-- Noir -->
         <item name="backgroundTint">@color/primary</item> <!-- Gris foncé -->
     </style>
+
+    <style name="TextStatusPrimary">
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">#555555</item>
+    </style>
 </resources>

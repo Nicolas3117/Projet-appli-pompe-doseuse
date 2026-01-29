@@ -47,31 +47,28 @@
 
         <TextView
             android:id="@+id/tv_daily_min_1"
+            style="@style/TextStatusPrimary"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="0 ml"
-            android:textSize="12sp"
-            android:textColor="#555555" />
+            android:text="0 ml" />
 
         <TextView
             android:id="@+id/tv_daily_max_1"
+            style="@style/TextStatusPrimary"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:gravity="end"
-            android:text="0 ml"
-            android:textSize="12sp"
-            android:textColor="#555555" />
+            android:text="0 ml" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/tv_daily_dose_1"
+        style="@style/TextStatusPrimary"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Dose : 0/0"
-        android:textSize="12sp"
-        android:textColor="#555555"
         android:layout_marginTop="2dp" />
 
 </LinearLayout>
