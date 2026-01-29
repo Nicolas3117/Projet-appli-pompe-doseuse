@@ -112,6 +112,7 @@ class MainActivity : AppCompatActivity() {
         tvActiveModule.text = "Sélectionné : ${activeModule.displayName}"
         updatePumpButtons(activeModule)
 
+        DailyProgramTrackingStore.resetIfNewDay(this)
         TankScheduleHelper.recalculateFromLastTime(this, activeModule.id)
         updateTankSummary(activeModule)
         updateDailySummary(activeModule)
@@ -434,16 +435,26 @@ class MainActivity : AppCompatActivity() {
             else
                 0f
 
-        val doneDoseCountToday =
-            if (plannedDoseCountToday > 0) min(pumpNum, plannedDoseCountToday) else 0
-        val doneMlToday =
-            if (plannedMlToday > 0f) min(10f * pumpNum, plannedMlToday) else 0f
+        val rawDoneDoseCountToday =
+            DailyProgramTrackingStore.getDoneDoseCountToday(this, espId, pumpNum)
+        val rawDoneMlToday = DailyProgramTrackingStore.getDoneMlToday(this, espId, pumpNum)
 
-        val progressValue =
-            if (plannedMlToday > 0f)
-                (doneMlToday / plannedMlToday * 100f).roundToInt()
-            else
-                0
+        val doneDoseCountToday: Int
+        val doneMlToday: Float
+        val progressValue: Int
+        val doseText: String
+
+        if (plannedDoseCountToday == 0 || plannedMlToday == 0f) {
+            doneDoseCountToday = 0
+            doneMlToday = 0f
+            progressValue = 0
+            doseText = "Dose : 0/0"
+        } else {
+            doneDoseCountToday = min(rawDoneDoseCountToday, plannedDoseCountToday)
+            doneMlToday = min(rawDoneMlToday, plannedMlToday)
+            progressValue = (doneMlToday / plannedMlToday * 100f).roundToInt()
+            doseText = "Dose : $doneDoseCountToday/$plannedDoseCountToday"
+        }
 
         val plannedMlRounded = plannedMlToday.roundToInt()
 
@@ -454,6 +465,6 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<TextView>(minId).text = "0 ml"
         findViewById<TextView>(maxId).text = "$plannedMlRounded ml"
-        findViewById<TextView>(doseId).text = "Dose : $doneDoseCountToday/$plannedDoseCountToday"
+        findViewById<TextView>(doseId).text = doseText
     }
 }
