@@ -95,6 +95,39 @@
 
         </LinearLayout>
 
+        <!-- ================= 📊 SUIVI QUOTIDIEN ================= -->
+        <LinearLayout
+            android:id="@+id/layout_daily_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@color/secondaryContainer"
+            android:padding="12dp"
+            android:layout_marginBottom="16dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Suivi quotidien"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Pompe 1 -->
+            <include layout="@layout/item_daily_summary_1" />
+
+            <!-- Pompe 2 -->
+            <include layout="@layout/item_daily_summary_2" />
+
+            <!-- Pompe 3 -->
+            <include layout="@layout/item_daily_summary_3" />
+
+            <!-- Pompe 4 -->
+            <include layout="@layout/item_daily_summary_4" />
+
+        </LinearLayout>
+
         <!-- ================= PROGRAMMATION ================= -->
         <Button
             android:id="@+id/btn_schedule"

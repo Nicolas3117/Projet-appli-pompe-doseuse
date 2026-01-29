@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="10dp">
+
+    <TextView
+        android:id="@+id/tv_daily_name_4"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Pompe 4"
+        android:textStyle="bold"
+        android:textSize="14sp"
+        android:layout_marginBottom="4dp" />
+
+    <ProgressBar
+        android:id="@+id/pb_daily_4"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="10dp"
+        android:max="100"
+        android:progress="0"
+        android:progressDrawable="@drawable/daily_segment_progress_drawable" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="4dp">
+
+        <TextView
+            android:id="@+id/tv_daily_min_4"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="0 ml"
+            android:textSize="12sp"
+            android:textColor="#555555" />
+
+        <TextView
+            android:id="@+id/tv_daily_max_4"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="end"
+            android:text="0 ml"
+            android:textSize="12sp"
+            android:textColor="#555555" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tv_daily_dose_4"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Dose : 0/0"
+        android:textSize="12sp"
+        android:textColor="#555555"
+        android:layout_marginTop="2dp" />
+
+</LinearLayout>
