@@ -21,6 +21,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Calendar
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.min
@@ -417,6 +419,42 @@ class MainActivity : AppCompatActivity() {
         return activeLines.size.coerceAtMost(12)
     }
 
+    private fun getNextDoseText(espId: Long, pumpNum: Int): String {
+        fun parseTimeToMinutesOrNull(time: String): Int? {
+            val trimmed = time.trim()
+            if (!trimmed.matches(Regex("""\d{2}:\d{2}"""))) return null
+            val parts = trimmed.split(":")
+            if (parts.size != 2) return null
+            val hours = parts[0].toIntOrNull() ?: return null
+            val minutes = parts[1].toIntOrNull() ?: return null
+            if (hours !in 0..23) return null
+            if (minutes !in 0..59) return null
+            return hours * 60 + minutes
+        }
+
+        val json = getSharedPreferences("schedules", MODE_PRIVATE)
+            .getString("esp_${espId}_pump$pumpNum", null)
+            ?: return "Aucune dose prévue"
+
+        val minutesList = PumpScheduleJson.fromJson(json)
+            .asSequence()
+            .filter { it.enabled && it.pumpNumber == pumpNum }
+            .mapNotNull { parseTimeToMinutesOrNull(it.time) }
+            .sorted()
+            .toList()
+
+        if (minutesList.isEmpty()) return "Aucune dose prévue"
+
+        val now = Calendar.getInstance()
+        val nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+
+        val nextMinutes = minutesList.firstOrNull { it > nowMinutes } ?: minutesList.first()
+        val nextHours = nextMinutes / 60
+        val nextMins = nextMinutes % 60
+        val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", nextHours, nextMins)
+        return "Prochaine dose : $formattedTime"
+    }
+
     private fun updateOneDaily(espId: Long, pumpNum: Int) {
         val nameId = resources.getIdentifier("tv_daily_name_$pumpNum", "id", packageName)
         val progressId = resources.getIdentifier("pb_daily_$pumpNum", "id", packageName)
@@ -424,8 +462,9 @@ class MainActivity : AppCompatActivity() {
         val maxId = resources.getIdentifier("tv_daily_max_$pumpNum", "id", packageName)
         val doseId = resources.getIdentifier("tv_daily_dose_$pumpNum", "id", packageName)
         val insideId = resources.getIdentifier("tv_daily_inside_$pumpNum", "id", packageName)
+        val nextDoseId = resources.getIdentifier("tv_daily_next_dose_$pumpNum", "id", packageName)
 
-        if (nameId == 0 || progressId == 0 || minId == 0 || maxId == 0 || doseId == 0 || insideId == 0) return
+        if (nameId == 0 || progressId == 0 || minId == 0 || maxId == 0 || doseId == 0 || insideId == 0 || nextDoseId == 0) return
 
         val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
         val name = prefs.getString(
@@ -482,6 +521,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(maxId).text = "$plannedMlRounded ml"
         findViewById<TextView>(doseId).text = doseText
         insideLabel.text = insideText
+        findViewById<TextView>(nextDoseId).text = getNextDoseText(espId, pumpNum)
         progressBar.post {
             val barWidth = progressBar.width - progressBar.paddingLeft - progressBar.paddingRight
             if (barWidth <= 0) return@post
