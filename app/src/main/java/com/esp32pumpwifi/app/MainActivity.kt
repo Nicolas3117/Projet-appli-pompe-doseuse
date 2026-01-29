@@ -404,6 +404,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateOneDaily(espId: Long, pumpNum: Int) {
         val nameId = resources.getIdentifier("tv_daily_name_$pumpNum", "id", packageName)
         val progressId = resources.getIdentifier("pb_daily_$pumpNum", "id", packageName)
+        val segmentsId = resources.getIdentifier("daily_segments_$pumpNum", "id", packageName)
         val minId = resources.getIdentifier("tv_daily_min_$pumpNum", "id", packageName)
         val maxId = resources.getIdentifier("tv_daily_max_$pumpNum", "id", packageName)
         val doseId = resources.getIdentifier("tv_daily_dose_$pumpNum", "id", packageName)
@@ -428,6 +429,7 @@ class MainActivity : AppCompatActivity() {
             isValidFormat && !isPlaceholder && isEnabled
         }
         val plannedDoseCountToday = activeLines.size.coerceAtMost(12)
+        val segmentCount = plannedDoseCountToday.coerceIn(0, 12)
 
         val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
         val plannedMlToday =
@@ -469,6 +471,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<ProgressBar>(progressId).apply {
             max = 100
             progress = progressValue
+        }
+        if (segmentsId != 0) {
+            findViewById<SegmentOverlayView>(segmentsId).segments = segmentCount
         }
         findViewById<TextView>(minId).text = "0 ml"
         findViewById<TextView>(maxId).text = "$plannedMlRounded ml"
