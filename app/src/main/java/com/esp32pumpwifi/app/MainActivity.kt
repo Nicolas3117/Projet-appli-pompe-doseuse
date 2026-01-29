@@ -397,15 +397,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateDailySummary(activeModule: EspModule) {
-        val totalPlannedDoses = (1..4).sumOf { pumpNum ->
-            getPlannedDoseCount(activeModule.id, pumpNum)
-        }
-        if (totalPlannedDoses == 0) {
-            dailySummaryContainer.visibility = View.GONE
-            return
-        }
         dailySummaryContainer.visibility = View.VISIBLE
-        for (pumpNum in 1..4) updateOneDaily(activeModule.id, pumpNum)
+        for (pumpNum in 1..4) {
+            updateOneDaily(activeModule.id, pumpNum)
+        }
     }
 
     private fun getPlannedDoseCount(espId: Long, pumpNum: Int): Int {
