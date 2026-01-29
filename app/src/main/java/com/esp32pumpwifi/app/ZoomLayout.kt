@@ -34,6 +34,7 @@ class ZoomLayout @JvmOverloads constructor(
     private var lastY = 0.0f
     private var isDragging = false
     private var isScaling = false
+    private var consumedByDoubleTap = false
 
     init {
         if (attrs != null) {
@@ -77,6 +78,7 @@ class ZoomLayout @JvmOverloads constructor(
         gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 if (zoomEnabled && doubleTapEnabled) {
+                    consumedByDoubleTap = true
                     resetTransformations()
                     return true
                 }
@@ -96,10 +98,25 @@ class ZoomLayout @JvmOverloads constructor(
         }
     }
 
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (!zoomEnabled) {
+            return super.dispatchTouchEvent(ev)
+        }
+
+        consumedByDoubleTap = false
+        gestureDetector.onTouchEvent(ev)
+        scaleDetector.onTouchEvent(ev)
+
+        if (scaleDetector.isInProgress || (scaleFactor > minScale && isDragging) || consumedByDoubleTap) {
+            return true
+        }
+
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
         if (!zoomEnabled) return super.onInterceptTouchEvent(ev)
 
-        scaleDetector.onTouchEvent(ev)
         if (scaleDetector.isInProgress || ev.pointerCount > 1) {
             return true
         }
@@ -127,8 +144,7 @@ class ZoomLayout @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!zoomEnabled) return super.onTouchEvent(event)
 
-        scaleDetector.onTouchEvent(event)
-        gestureDetector.onTouchEvent(event)
+        var handled = false
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -144,26 +160,36 @@ class ZoomLayout @JvmOverloads constructor(
                 lastY = event.getY(index)
             }
             MotionEvent.ACTION_MOVE -> {
-                if (isScaling || scaleFactor <= minScale) return true
-                val pointerIndex = event.findPointerIndex(activePointerId)
-                if (pointerIndex < 0) return true
+                if (isScaling) {
+                    handled = true
+                } else if (scaleFactor > minScale) {
+                    if (activePointerId == MotionEvent.INVALID_POINTER_ID && event.pointerCount > 0) {
+                        activePointerId = event.getPointerId(0)
+                        lastX = event.getX(0)
+                        lastY = event.getY(0)
+                    }
 
-                val x = event.getX(pointerIndex)
-                val y = event.getY(pointerIndex)
-                val dx = x - lastX
-                val dy = y - lastY
+                    val pointerIndex = event.findPointerIndex(activePointerId)
+                    if (pointerIndex >= 0) {
+                        val x = event.getX(pointerIndex)
+                        val y = event.getY(pointerIndex)
+                        val dx = x - lastX
+                        val dy = y - lastY
 
-                if (!isDragging && hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
-                    isDragging = true
+                        if (!isDragging && hypot(dx.toDouble(), dy.toDouble()) > touchSlop) {
+                            isDragging = true
+                        }
+                        if (isDragging) {
+                            translationXValue += dx
+                            translationYValue += dy
+                            clampTranslation()
+                            applyTransformations()
+                            handled = true
+                        }
+                        lastX = x
+                        lastY = y
+                    }
                 }
-                if (isDragging) {
-                    translationXValue += dx
-                    translationYValue += dy
-                    clampTranslation()
-                    applyTransformations()
-                }
-                lastX = x
-                lastY = y
             }
             MotionEvent.ACTION_POINTER_UP -> {
                 val pointerIndex = event.actionIndex
@@ -182,10 +208,15 @@ class ZoomLayout @JvmOverloads constructor(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 activePointerId = MotionEvent.INVALID_POINTER_ID
                 isDragging = false
+                handled = isScaling
             }
         }
 
-        return scaleDetector.isInProgress || scaleFactor > minScale || isDragging
+        return if (handled || isScaling) {
+            true
+        } else {
+            super.onTouchEvent(event)
+        }
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -234,6 +265,7 @@ class ZoomLayout @JvmOverloads constructor(
         scaleFactor = 1.0f
         translationXValue = 0.0f
         translationYValue = 0.0f
+        clampTranslation()
         applyTransformations()
     }
 }
