@@ -468,7 +468,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<TextView>(nameId).text = name
-        findViewById<ProgressBar>(progressId).apply {
+        val progressBar = findViewById<ProgressBar>(progressId)
+        val insideLabel = findViewById<TextView>(insideId)
+        progressBar.apply {
             max = 100
             progress = progressValue
         }
@@ -478,6 +480,24 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(minId).text = "0 ml"
         findViewById<TextView>(maxId).text = "$plannedMlRounded ml"
         findViewById<TextView>(doseId).text = doseText
-        findViewById<TextView>(insideId).text = insideText
+        insideLabel.text = insideText
+        progressBar.post {
+            val barWidth = progressBar.width - progressBar.paddingLeft - progressBar.paddingRight
+            if (barWidth <= 0) return@post
+            val labelWidth = insideLabel.width
+            val minX = progressBar.paddingLeft.toFloat()
+            val maxX = (progressBar.width - progressBar.paddingRight - labelWidth).toFloat()
+            val centeredX = progressBar.paddingLeft + (barWidth - labelWidth) / 2f
+            val targetX = when {
+                plannedMlToday == 0f -> centeredX
+                progressValue == 0 -> centeredX
+                else -> {
+                    val x = progressBar.paddingLeft + (barWidth * (progressValue / 100f))
+                    x - labelWidth / 2f
+                }
+            }
+            val clampedX = targetX.coerceIn(minX, maxX)
+            insideLabel.translationX = clampedX - insideLabel.left
+        }
     }
 }

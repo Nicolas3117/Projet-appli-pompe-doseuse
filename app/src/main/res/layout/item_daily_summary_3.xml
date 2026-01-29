@@ -34,10 +34,9 @@
 
         <TextView
             android:id="@+id/tv_daily_inside_3"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="match_parent"
-            android:layout_gravity="center"
-            android:gravity="center"
+            android:gravity="center_vertical"
             android:paddingHorizontal="6dp"
             android:text="0 ml"
             android:textColor="@android:color/white"
