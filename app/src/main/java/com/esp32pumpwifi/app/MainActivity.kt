@@ -6,6 +6,7 @@ import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -22,12 +23,15 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var tvActiveModule: TextView
     private lateinit var tvConnectionStatus: TextView
     private lateinit var tankSummaryContainer: LinearLayout
+    private lateinit var dailySummaryContainer: View
 
     private var connectionJob: Job? = null
     private val isCheckingConnection = AtomicBoolean(false)
@@ -56,6 +60,7 @@ class MainActivity : AppCompatActivity() {
         tvActiveModule = findViewById(R.id.tv_active_module)
         tvConnectionStatus = findViewById(R.id.tv_connection_status)
         tankSummaryContainer = findViewById(R.id.layout_tank_summary)
+        dailySummaryContainer = findViewById(R.id.layout_daily_summary)
 
         NotificationPermissionHelper.requestPermissionIfNeeded(this)
 
@@ -99,6 +104,7 @@ class MainActivity : AppCompatActivity() {
             updateConnectionUi(null)
             setManualButtonsEnabled(false)
             tankSummaryContainer.visibility = View.GONE
+            dailySummaryContainer.visibility = View.GONE
             stopConnectionWatcher()
             return
         }
@@ -108,6 +114,7 @@ class MainActivity : AppCompatActivity() {
 
         TankScheduleHelper.recalculateFromLastTime(this, activeModule.id)
         updateTankSummary(activeModule)
+        updateDailySummary(activeModule)
 
         updateConnectionUi(null)
         setManualButtonsEnabled(false)
@@ -120,6 +127,7 @@ class MainActivity : AppCompatActivity() {
                 Esp32Manager.getActive(this@MainActivity)?.let {
                     TankScheduleHelper.recalculateFromLastTime(this@MainActivity, it.id)
                     updateTankSummary(it)
+                    updateDailySummary(it)
                 }
             }
         }
@@ -385,5 +393,41 @@ class MainActivity : AppCompatActivity() {
             tvPercent = if (percentId != 0) findViewById(percentId) else null,
             tvMl = if (mlId != 0) findViewById(mlId) else null
         )
+    }
+
+    private fun updateDailySummary(activeModule: EspModule) {
+        dailySummaryContainer.visibility = View.VISIBLE
+        for (pumpNum in 1..4) updateOneDaily(activeModule.id, pumpNum)
+    }
+
+    private fun updateOneDaily(espId: Long, pumpNum: Int) {
+        val nameId = resources.getIdentifier("tv_daily_name_$pumpNum", "id", packageName)
+        val progressId = resources.getIdentifier("pb_daily_$pumpNum", "id", packageName)
+        val minId = resources.getIdentifier("tv_daily_min_$pumpNum", "id", packageName)
+        val maxId = resources.getIdentifier("tv_daily_max_$pumpNum", "id", packageName)
+        val doseId = resources.getIdentifier("tv_daily_dose_$pumpNum", "id", packageName)
+
+        if (nameId == 0 || progressId == 0 || minId == 0 || maxId == 0 || doseId == 0) return
+
+        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
+        val name = prefs.getString(
+            "esp_${espId}_pump${pumpNum}_name",
+            "Pompe $pumpNum"
+        ) ?: "Pompe $pumpNum"
+
+        val plannedDoseCountToday = 12
+        val doneDoseCountToday = min(pumpNum, plannedDoseCountToday)
+        val plannedMlToday = 39f
+        val doneMlToday = min(10f * pumpNum, plannedMlToday)
+        val progressValue = (doneMlToday / plannedMlToday * 100f).roundToInt()
+
+        findViewById<TextView>(nameId).text = name
+        findViewById<ProgressBar>(progressId).apply {
+            max = 100
+            progress = progressValue
+        }
+        findViewById<TextView>(minId).text = "0 ml"
+        findViewById<TextView>(maxId).text = "39 ml"
+        findViewById<TextView>(doseId).text = "Dose : $doneDoseCountToday/$plannedDoseCountToday"
     }
 }
