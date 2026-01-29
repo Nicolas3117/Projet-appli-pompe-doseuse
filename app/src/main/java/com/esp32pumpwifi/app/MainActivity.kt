@@ -415,10 +415,15 @@ class MainActivity : AppCompatActivity() {
             "Pompe $pumpNum"
         ) ?: "Pompe $pumpNum"
 
-        val placeholder = "000000000000"
         val encodedLines = ProgramStore.loadEncodedLines(this, espId, pumpNum)
         val activeLines = encodedLines.filter { line ->
-            line.isNotEmpty() && line != placeholder && line[0] == '1'
+            val trimmed = line.trim()
+            // 12 chars digités requis par le format ESP32 (sinon on ignore).
+            val isValidFormat = trimmed.length == 12 && trimmed.all(Char::isDigit)
+            // Ignorer les placeholders (ligne vide/0) et ne garder que enabled=1.
+            val isPlaceholder = trimmed.all { it == '0' }
+            val isEnabled = trimmed.firstOrNull() == '1'
+            isValidFormat && !isPlaceholder && isEnabled
         }
         val plannedDoseCountToday = activeLines.size.coerceAtMost(12)
 
