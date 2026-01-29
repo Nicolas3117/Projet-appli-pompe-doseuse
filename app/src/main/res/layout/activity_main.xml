@@ -1,177 +1,182 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<com.esp32pumpwifi.app.ZoomLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:layout_height="match_parent">
 
-    <LinearLayout
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:layout_height="match_parent"
+        android:fillViewport="true">
 
-        <!-- ================= TITRE ================= -->
-        <TextView
-            android:id="@+id/title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/title_control_pumps"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="16dp" />
-
-        <!-- ================= MATÉRIELS ================= -->
-        <Button
-            android:id="@+id/btn_materials"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/btn_materials"
-            android:layout_marginBottom="8dp" />
-
-        <!-- ================= MODULE ACTIF ================= -->
-        <TextView
-            android:id="@+id/tv_active_module"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/active_module_label"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="4dp" />
-
-        <TextView
-            android:id="@+id/tv_connection_status"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="État : inconnu"
-            android:textSize="14sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <!-- ================= 🔴 BADGE ALERTE GLOBALE ================= -->
-        <TextView
-            android:id="@+id/tv_days_alert_badge"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="⚠️ Un ou plusieurs bidons arrivent à vide"
-            android:textColor="@color/white"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:padding="10dp"
-            android:background="@drawable/bg_badge_red"
-            android:visibility="gone"
-            android:layout_marginBottom="12dp" />
-
-        <!-- ================= 🟢 NIVEAU DES RÉSERVOIRS ================= -->
         <LinearLayout
-            android:id="@+id/layout_tank_summary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:background="@color/secondaryContainer"
-            android:padding="12dp"
-            android:layout_marginBottom="16dp"
-            android:visibility="gone">
+            android:padding="16dp">
 
+            <!-- ================= TITRE ================= -->
             <TextView
+                android:id="@+id/title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Niveau des réservoirs"
+                android:text="@string/title_control_pumps"
+                android:textSize="24sp"
                 android:textStyle="bold"
-                android:textSize="16sp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="16dp" />
+
+            <!-- ================= MATÉRIELS ================= -->
+            <Button
+                android:id="@+id/btn_materials"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_materials"
                 android:layout_marginBottom="8dp" />
 
-            <!-- Pompe 1 -->
-            <include layout="@layout/item_tank_summary_1" />
-
-            <!-- Pompe 2 -->
-            <include layout="@layout/item_tank_summary_2" />
-
-            <!-- Pompe 3 -->
-            <include layout="@layout/item_tank_summary_3" />
-
-            <!-- Pompe 4 -->
-            <include layout="@layout/item_tank_summary_4" />
-
-        </LinearLayout>
-
-        <!-- ================= 📊 SUIVI QUOTIDIEN ================= -->
-        <LinearLayout
-            android:id="@+id/layout_daily_summary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@color/secondaryContainer"
-            android:padding="12dp"
-            android:layout_marginBottom="16dp"
-            android:visibility="gone">
-
+            <!-- ================= MODULE ACTIF ================= -->
             <TextView
+                android:id="@+id/tv_active_module"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Suivi quotidien"
-                android:textStyle="bold"
+                android:text="@string/active_module_label"
                 android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/tv_connection_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="État : inconnu"
+                android:textSize="14sp"
+                android:textColor="#666666"
                 android:layout_marginBottom="8dp" />
 
-            <!-- Pompe 1 -->
-            <include layout="@layout/item_daily_summary_1" />
+            <!-- ================= 🔴 BADGE ALERTE GLOBALE ================= -->
+            <TextView
+                android:id="@+id/tv_days_alert_badge"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="⚠️ Un ou plusieurs bidons arrivent à vide"
+                android:textColor="@color/white"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:padding="10dp"
+                android:background="@drawable/bg_badge_red"
+                android:visibility="gone"
+                android:layout_marginBottom="12dp" />
 
-            <!-- Pompe 2 -->
-            <include layout="@layout/item_daily_summary_2" />
+            <!-- ================= 🟢 NIVEAU DES RÉSERVOIRS ================= -->
+            <LinearLayout
+                android:id="@+id/layout_tank_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@color/secondaryContainer"
+                android:padding="12dp"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone">
 
-            <!-- Pompe 3 -->
-            <include layout="@layout/item_daily_summary_3" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Niveau des réservoirs"
+                    android:textStyle="bold"
+                    android:textSize="16sp"
+                    android:layout_marginBottom="8dp" />
 
-            <!-- Pompe 4 -->
-            <include layout="@layout/item_daily_summary_4" />
+                <!-- Pompe 1 -->
+                <include layout="@layout/item_tank_summary_1" />
+
+                <!-- Pompe 2 -->
+                <include layout="@layout/item_tank_summary_2" />
+
+                <!-- Pompe 3 -->
+                <include layout="@layout/item_tank_summary_3" />
+
+                <!-- Pompe 4 -->
+                <include layout="@layout/item_tank_summary_4" />
+
+            </LinearLayout>
+
+            <!-- ================= 📊 SUIVI QUOTIDIEN ================= -->
+            <LinearLayout
+                android:id="@+id/layout_daily_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@color/secondaryContainer"
+                android:padding="12dp"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Suivi quotidien"
+                    android:textStyle="bold"
+                    android:textSize="16sp"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- Pompe 1 -->
+                <include layout="@layout/item_daily_summary_1" />
+
+                <!-- Pompe 2 -->
+                <include layout="@layout/item_daily_summary_2" />
+
+                <!-- Pompe 3 -->
+                <include layout="@layout/item_daily_summary_3" />
+
+                <!-- Pompe 4 -->
+                <include layout="@layout/item_daily_summary_4" />
+
+            </LinearLayout>
+
+            <!-- ================= PROGRAMMATION ================= -->
+            <Button
+                android:id="@+id/btn_schedule"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_schedule_pumps"
+                android:layout_marginBottom="16dp" />
+
+            <!-- ================= DOSAGES MANUELS ================= -->
+            <Button
+                android:id="@+id/btn_pump1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/manual_dose_pump1"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/btn_pump2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/manual_dose_pump2"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/btn_pump3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/manual_dose_pump3"
+                android:layout_marginBottom="12dp" />
+
+            <Button
+                android:id="@+id/btn_pump4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/manual_dose_pump4"
+                android:layout_marginBottom="16dp" />
+
+            <!-- ================= ÉTALONNAGE ================= -->
+            <Button
+                android:id="@+id/btn_calibration"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_calibration"
+                android:layout_marginTop="8dp" />
 
         </LinearLayout>
-
-        <!-- ================= PROGRAMMATION ================= -->
-        <Button
-            android:id="@+id/btn_schedule"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/btn_schedule_pumps"
-            android:layout_marginBottom="16dp" />
-
-        <!-- ================= DOSAGES MANUELS ================= -->
-        <Button
-            android:id="@+id/btn_pump1"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/manual_dose_pump1"
-            android:layout_marginBottom="12dp" />
-
-        <Button
-            android:id="@+id/btn_pump2"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/manual_dose_pump2"
-            android:layout_marginBottom="12dp" />
-
-        <Button
-            android:id="@+id/btn_pump3"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/manual_dose_pump3"
-            android:layout_marginBottom="12dp" />
-
-        <Button
-            android:id="@+id/btn_pump4"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/manual_dose_pump4"
-            android:layout_marginBottom="16dp" />
-
-        <!-- ================= ÉTALONNAGE ================= -->
-        <Button
-            android:id="@+id/btn_calibration"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/btn_calibration"
-            android:layout_marginTop="8dp" />
-
-    </LinearLayout>
-</ScrollView>
+    </ScrollView>
+</com.esp32pumpwifi.app.ZoomLayout>

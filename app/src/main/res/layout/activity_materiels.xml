@@ -1,264 +1,269 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.esp32pumpwifi.app.ZoomLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:padding="16dp"
-    android:clipToPadding="false">
+    android:layout_height="match_parent">
 
-    <!-- ================= BARRE SUPÉRIEURE ================= -->
-    <LinearLayout
-        android:id="@+id/layout_top_bar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="start"
-        android:layout_marginBottom="12dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <TextView
-            android:id="@+id/tv_materiels_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Matériels"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:paddingBottom="8dp" />
-
-        <!-- ✅ Actions top : Wifi gauche, Planning centré, Refresh droite -->
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:id="@+id/layout_top_actions"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content">
-
-            <!-- Zone gauche (Wifi) -->
-            <FrameLayout
-                android:id="@+id/btn_configure_wifi"
-                android:layout_width="64dp"
-                android:layout_height="40dp"
-                android:background="@drawable/bg_pill_planning_ripple"
-                android:clickable="true"
-                android:focusable="true"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent">
-
-                <ImageView
-                    android:id="@+id/icon_wifi"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="centerInside"
-                    android:contentDescription="Configurer le Wi-Fi"
-                    android:src="@drawable/ic_wifi"
-                    android:tint="@android:color/black" />
-            </FrameLayout>
-
-            <!-- Zone droite (Refresh) -->
-            <FrameLayout
-                android:id="@+id/btn_add_module"
-                android:layout_width="64dp"
-                android:layout_height="40dp"
-                android:background="@drawable/bg_pill_planning_ripple"
-                android:clickable="true"
-                android:focusable="true"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent">
-
-                <ImageView
-                    android:id="@+id/icon_refresh"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="centerInside"
-                    android:contentDescription="Scanner le réseau"
-                    android:src="@drawable/ic_wifi_refresh"
-                    android:tint="@android:color/black" />
-            </FrameLayout>
-
-            <!-- ✅ Planning centré dans l'espace restant (entre Wifi et Refresh) -->
-            <Button
-                android:id="@+id/btn_open_planning"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:minHeight="40dp"
-                android:text="📊 Planning"
-                android:background="@drawable/bg_pill_planning_ripple"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:gravity="center"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="8dp"
-                app:layout_constraintStart_toEndOf="@id/btn_configure_wifi"
-                app:layout_constraintEnd_toStartOf="@id/btn_add_module"
-                app:layout_constraintTop_toTopOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintHorizontal_bias="0.5"
-                app:layout_constraintWidth_default="wrap" />
-
-
-        </androidx.constraintlayout.widget.ConstraintLayout>
-
-    </LinearLayout>
-
-    <!-- ================= LISTE DES MODULES ESP32 ================= -->
-    <ListView
-        android:id="@+id/list_modules"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_marginTop="16dp"
-        android:divider="?android:attr/listDivider"
-        android:dividerHeight="1dp"
-        android:overScrollMode="ifContentScrolls"
-        app:layout_constraintTop_toBottomOf="@id/layout_top_bar"
-        app:layout_constraintBottom_toTopOf="@id/layout_actions"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- ================= ZONE ACTIONS ================= -->
     <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/layout_actions"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:paddingBottom="8dp"
-        android:background="@android:color/transparent"
-        android:elevation="4dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="16dp"
+        android:clipToPadding="false">
 
-        <!-- ================= BOUTON ACCÈS POMPES ================= -->
-        <Button
-            android:id="@+id/btn_open_pumps"
-            android:layout_width="match_parent"
+        <!-- ================= BARRE SUPÉRIEURE ================= -->
+        <LinearLayout
+            android:id="@+id/layout_top_bar"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Accéder aux pompes"
+            android:orientation="vertical"
+            android:gravity="start"
             android:layout_marginBottom="12dp"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
-
-        <!-- ================= SÉPARATEUR ================= -->
-        <View
-            android:id="@+id/view_actions_separator"
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#CCCCCC"
-            android:layout_marginBottom="12dp"
-            app:layout_constraintTop_toBottomOf="@id/btn_open_pumps"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
-
-        <!-- ================= TOGGLE ALERTES TELEGRAM ================= -->
-        <LinearLayout
-            android:id="@+id/layout_telegram_toggle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:padding="8dp"
-            android:clickable="true"
-            android:focusable="true"
-            app:layout_constraintTop_toBottomOf="@id/view_actions_separator"
-            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent">
-
-            <ImageView
-                android:id="@+id/icon_telegram_toggle"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_expand_more"
-                android:rotation="-90" />
 
             <TextView
+                android:id="@+id/tv_materiels_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="Alertes Telegram"
+                android:text="Matériels"
                 android:textStyle="bold"
-                android:textSize="16sp" />
+                android:textSize="22sp"
+                android:paddingBottom="8dp" />
+
+            <!-- ✅ Actions top : Wifi gauche, Planning centré, Refresh droite -->
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/layout_top_actions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <!-- Zone gauche (Wifi) -->
+                <FrameLayout
+                    android:id="@+id/btn_configure_wifi"
+                    android:layout_width="64dp"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_pill_planning_ripple"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent">
+
+                    <ImageView
+                        android:id="@+id/icon_wifi"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerInside"
+                        android:contentDescription="Configurer le Wi-Fi"
+                        android:src="@drawable/ic_wifi"
+                        android:tint="@android:color/black" />
+                </FrameLayout>
+
+                <!-- Zone droite (Refresh) -->
+                <FrameLayout
+                    android:id="@+id/btn_add_module"
+                    android:layout_width="64dp"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_pill_planning_ripple"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent">
+
+                    <ImageView
+                        android:id="@+id/icon_refresh"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerInside"
+                        android:contentDescription="Scanner le réseau"
+                        android:src="@drawable/ic_wifi_refresh"
+                        android:tint="@android:color/black" />
+                </FrameLayout>
+
+                <!-- ✅ Planning centré dans l'espace restant (entre Wifi et Refresh) -->
+                <Button
+                    android:id="@+id/btn_open_planning"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:minHeight="40dp"
+                    android:text="📊 Planning"
+                    android:background="@drawable/bg_pill_planning_ripple"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:gravity="center"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp"
+                    app:layout_constraintStart_toEndOf="@id/btn_configure_wifi"
+                    app:layout_constraintEnd_toStartOf="@id/btn_add_module"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintHorizontal_bias="0.5"
+                    app:layout_constraintWidth_default="wrap" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
         </LinearLayout>
 
-        <!-- ================= CONTENU TELEGRAM (SCROLLABLE SI BESOIN) ================= -->
-        <androidx.core.widget.NestedScrollView
-            android:id="@+id/scroll_telegram_content"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:fillViewport="true"
+        <!-- ================= LISTE DES MODULES ESP32 ================= -->
+        <ListView
+            android:id="@+id/list_modules"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginTop="16dp"
+            android:divider="?android:attr/listDivider"
+            android:dividerHeight="1dp"
             android:overScrollMode="ifContentScrolls"
-            android:clipToPadding="false"
-            app:layout_constrainedHeight="true"
-            app:layout_constraintHeight_max="@dimen/telegram_panel_max_height"
-            app:layout_constraintTop_toBottomOf="@id/layout_telegram_toggle"
-            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/layout_top_bar"
+            app:layout_constraintBottom_toTopOf="@id/layout_actions"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent">
+            app:layout_constraintEnd_toEndOf="parent" />
 
-            <LinearLayout
-                android:id="@+id/layout_telegram_content"
+        <!-- ================= ZONE ACTIONS ================= -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/layout_actions"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:paddingBottom="8dp"
+            android:background="@android:color/transparent"
+            android:elevation="4dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent">
+
+            <!-- ================= BOUTON ACCÈS POMPES ================= -->
+            <Button
+                android:id="@+id/btn_open_pumps"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:visibility="gone"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingBottom="12dp">
+                android:text="Accéder aux pompes"
+                android:layout_marginBottom="12dp"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
 
-                <EditText
-                    android:id="@+id/edit_telegram_token"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="Token du bot Telegram"
-                    android:inputType="text"
-                    android:layout_marginTop="6dp" />
+            <!-- ================= SÉPARATEUR ================= -->
+            <View
+                android:id="@+id/view_actions_separator"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#CCCCCC"
+                android:layout_marginBottom="12dp"
+                app:layout_constraintTop_toBottomOf="@id/btn_open_pumps"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
 
-                <EditText
-                    android:id="@+id/edit_telegram_chat_id"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="Chat ID Telegram"
-                    android:inputType="text"
-                    android:layout_marginTop="6dp" />
+            <!-- ================= TOGGLE ALERTES TELEGRAM ================= -->
+            <LinearLayout
+                android:id="@+id/layout_telegram_toggle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="8dp"
+                android:clickable="true"
+                android:focusable="true"
+                app:layout_constraintTop_toBottomOf="@id/view_actions_separator"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <ImageView
+                    android:id="@+id/icon_telegram_toggle"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_expand_more"
+                    android:rotation="-90" />
 
                 <TextView
-                    android:id="@+id/tv_telegram_info"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Ces informations permettent l’envoi automatique des alertes (niveau bas, réservoir vide) vers Telegram."
-                    android:textSize="12sp"
-                    android:textColor="#666666"
-                    android:layout_marginTop="4dp" />
-
-                <Button
-                    android:id="@+id/btn_save_telegram"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Enregistrer Telegram"
-                    android:layout_marginTop="8dp" />
-
-                <Button
-                    android:id="@+id/btn_clear_telegram"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Effacer la configuration Telegram"
-                    android:layout_marginTop="8dp"
-                    android:backgroundTint="#D32F2F"
-                    android:textColor="@android:color/white" />
+                    android:layout_marginStart="8dp"
+                    android:text="Alertes Telegram"
+                    android:textStyle="bold"
+                    android:textSize="16sp" />
             </LinearLayout>
-        </androidx.core.widget.NestedScrollView>
+
+            <!-- ================= CONTENU TELEGRAM (SCROLLABLE SI BESOIN) ================= -->
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/scroll_telegram_content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fillViewport="true"
+                android:overScrollMode="ifContentScrolls"
+                android:clipToPadding="false"
+                app:layout_constrainedHeight="true"
+                app:layout_constraintHeight_max="@dimen/telegram_panel_max_height"
+                app:layout_constraintTop_toBottomOf="@id/layout_telegram_toggle"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent">
+
+                <LinearLayout
+                    android:id="@+id/layout_telegram_content"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="12dp">
+
+                    <EditText
+                        android:id="@+id/edit_telegram_token"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Token du bot Telegram"
+                        android:inputType="text"
+                        android:layout_marginTop="6dp" />
+
+                    <EditText
+                        android:id="@+id/edit_telegram_chat_id"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="Chat ID Telegram"
+                        android:inputType="text"
+                        android:layout_marginTop="6dp" />
+
+                    <TextView
+                        android:id="@+id/tv_telegram_info"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Ces informations permettent l’envoi automatique des alertes (niveau bas, réservoir vide) vers Telegram."
+                        android:textSize="12sp"
+                        android:textColor="#666666"
+                        android:layout_marginTop="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_save_telegram"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Enregistrer Telegram"
+                        android:layout_marginTop="8dp" />
+
+                    <Button
+                        android:id="@+id/btn_clear_telegram"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Effacer la configuration Telegram"
+                        android:layout_marginTop="8dp"
+                        android:backgroundTint="#D32F2F"
+                        android:textColor="@android:color/white" />
+                </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</com.esp32pumpwifi.app.ZoomLayout>
