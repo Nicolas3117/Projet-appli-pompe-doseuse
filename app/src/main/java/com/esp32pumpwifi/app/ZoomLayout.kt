@@ -106,12 +106,8 @@ class ZoomLayout @JvmOverloads constructor(
         consumedByDoubleTap = false
         gestureDetector.onTouchEvent(ev)
         scaleDetector.onTouchEvent(ev)
-
-        if (scaleDetector.isInProgress || (scaleFactor > minScale && isDragging) || consumedByDoubleTap) {
-            return true
-        }
-
-        return super.dispatchTouchEvent(ev)
+        val childResult = super.dispatchTouchEvent(ev)
+        return (consumedByDoubleTap || scaleDetector.isInProgress || (scaleFactor > minScale && isDragging) || childResult)
     }
 
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
