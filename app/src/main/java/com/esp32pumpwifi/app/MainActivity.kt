@@ -407,8 +407,9 @@ class MainActivity : AppCompatActivity() {
         val minId = resources.getIdentifier("tv_daily_min_$pumpNum", "id", packageName)
         val maxId = resources.getIdentifier("tv_daily_max_$pumpNum", "id", packageName)
         val doseId = resources.getIdentifier("tv_daily_dose_$pumpNum", "id", packageName)
+        val insideId = resources.getIdentifier("tv_daily_inside_$pumpNum", "id", packageName)
 
-        if (nameId == 0 || progressId == 0 || minId == 0 || maxId == 0 || doseId == 0) return
+        if (nameId == 0 || progressId == 0 || minId == 0 || maxId == 0 || doseId == 0 || insideId == 0) return
 
         val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
         val name = prefs.getString(
@@ -457,6 +458,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         val plannedMlRounded = plannedMlToday.roundToInt()
+        val doneMlRounded = doneMlToday.roundToInt()
+        val insideText = if (plannedMlToday == 0f || doneMlToday == 0f) {
+            "0 ml"
+        } else {
+            "$doneMlRounded ml"
+        }
 
         findViewById<TextView>(nameId).text = name
         findViewById<ProgressBar>(progressId).apply {
@@ -466,5 +473,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(minId).text = "0 ml"
         findViewById<TextView>(maxId).text = "$plannedMlRounded ml"
         findViewById<TextView>(doseId).text = doseText
+        findViewById<TextView>(insideId).text = insideText
     }
 }
