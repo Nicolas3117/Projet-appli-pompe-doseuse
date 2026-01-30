@@ -18,7 +18,7 @@
             android:layout_weight="1"
             android:text="Pompe 1"
             android:textStyle="bold"
-            android:textSize="14sp" />
+            android:textSize="16sp" />
 
         <TextView
             android:id="@+id/tv_daily_next_dose_1"
@@ -27,6 +27,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:gravity="end"
+            android:textSize="14sp"
             android:text="Prochaine dose : 08:00" />
     </LinearLayout>
 
@@ -51,7 +52,7 @@
             android:paddingHorizontal="6dp"
             android:text="0 ml"
             android:textColor="@android:color/white"
-            android:textSize="12sp"
+            android:textSize="14sp"
             android:textStyle="bold" />
     </FrameLayout>
 
@@ -67,6 +68,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:textSize="14sp"
             android:text="0 ml" />
 
         <TextView
@@ -76,6 +78,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:gravity="end"
+            android:textSize="14sp"
             android:text="0 ml" />
     </LinearLayout>
 
@@ -84,6 +87,7 @@
         style="@style/TextStatusPrimary"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:textSize="14sp"
         android:text="Dose : 0/0"
         android:layout_marginTop="2dp" />
 
