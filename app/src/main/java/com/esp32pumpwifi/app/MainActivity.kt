@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -102,6 +103,25 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.btn_materials).setOnClickListener {
             startActivity(Intent(this, MaterielsActivity::class.java))
+        }
+
+        findViewById<Button>(R.id.btn_planning).setOnClickListener {
+            val selectedEspIds =
+                Esp32Manager.getAll(this)
+                    .filter { it.isActive }
+                    .map { it.id }
+                    .toLongArray()
+
+            if (selectedEspIds.isEmpty()) {
+                Toast.makeText(this, "Sélectionnez au moins un module", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            startActivity(
+                Intent(this, PlanningActivity::class.java).apply {
+                    putExtra("esp_ids", selectedEspIds)
+                }
+            )
         }
 
         findViewById<Button>(R.id.btn_schedule).setOnClickListener {

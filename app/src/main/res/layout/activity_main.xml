@@ -35,6 +35,25 @@
                 android:text="@string/btn_materials"
                 android:layout_marginBottom="8dp" />
 
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp">
+
+                <Button
+                    android:id="@+id/btn_planning"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="40dp"
+                    android:text="📊 Planning"
+                    android:background="@drawable/bg_pill_planning_ripple"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:layout_gravity="end" />
+            </FrameLayout>
+
             <!-- ================= MODULE ACTIF ================= -->
             <TextView
                 android:id="@+id/tv_active_module"
