@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     // pour tenter un retour STA automatique sans appuyer sur "+"
     private var lastStaProbeMs = 0L
     private val STA_PROBE_INTERVAL_MS = 10_000L
+    private val UI_REFRESH_MS = 15_000L
 
     private val pumpButtons by lazy {
         listOf(
@@ -168,12 +169,12 @@ class MainActivity : AppCompatActivity() {
         uiRefreshJob?.cancel()
         uiRefreshJob = lifecycleScope.launch {
             while (true) {
-                delay(60_000)
                 Esp32Manager.getActive(this@MainActivity)?.let {
                     TankScheduleHelper.recalculateFromLastTime(this@MainActivity, it.id)
                     updateTankSummary(it)
                     updateDailySummary(it)
                 }
+                delay(UI_REFRESH_MS)
             }
         }
     }
