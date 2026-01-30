@@ -15,7 +15,6 @@
     <string name="manual_dose_pump2">Dosage manuel pompe 2</string>
     <string name="manual_dose_pump3">Dosage manuel pompe 3</string>
     <string name="manual_dose_pump4">Dosage manuel pompe 4</string>
-    <string name="open_manual_dose">Ouvrir</string>
     <string name="start_dose">Démarrer le dosage</string>
 
     <!-- Débit / Volume -->
