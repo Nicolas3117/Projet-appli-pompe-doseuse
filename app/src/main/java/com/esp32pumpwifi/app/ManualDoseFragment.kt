@@ -47,12 +47,17 @@ class ManualDoseFragment : Fragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View = inflater.inflate(R.layout.activity_manual_dose, container, false)
+    ): View {
+        val root = inflater.inflate(R.layout.activity_manual_dose, container, false)
+        return root
+    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        view.findViewById<Button>(R.id.btn_manual_back).setOnClickListener {
+        val root = view
+
+        root.findViewById<Button>(R.id.btn_manual_back).setOnClickListener {
             requireActivity().finish()
         }
 
@@ -76,9 +81,9 @@ class ManualDoseFragment : Fragment() {
         val pumpName =
             prefs.getString(pumpNameKey, "Pompe $pumpNumber") ?: "Pompe $pumpNumber"
 
-        val tvPump = view.findViewById<TextView>(R.id.tv_pump)
-        val editVolume = view.findViewById<EditText>(R.id.edit_volume)
-        val btnStart = view.findViewById<Button>(R.id.btn_start_dose)
+        val tvPump = root.findViewById<TextView>(R.id.tv_pump)
+        val editVolume = root.findViewById<EditText>(R.id.edit_volume)
+        val btnStart = root.findViewById<Button>(R.id.btn_start_dose)
 
         tvPump.text = pumpName
         QuantityInputUtils.applyInputFilter(editVolume)
