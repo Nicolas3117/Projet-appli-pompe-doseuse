@@ -7,9 +7,13 @@ import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -25,6 +29,7 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -59,10 +64,19 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        val scrollView = findViewById<ScrollView>(R.id.pump_scroll)
         tvActiveModule = findViewById(R.id.tv_active_module)
         tvConnectionStatus = findViewById(R.id.tv_connection_status)
         tankSummaryContainer = findViewById(R.id.layout_tank_summary)
         dailySummaryContainer = findViewById(R.id.layout_daily_summary)
+
+        val extraBottomPadding = resources.getDimensionPixelSize(R.dimen.pump_control_bottom_extra)
+        ViewCompat.setOnApplyWindowInsetsListener(scrollView) { view, insets ->
+            val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val systemBarsBottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
+            view.updatePadding(bottom = max(imeBottom, systemBarsBottom) + extraBottomPadding)
+            insets
+        }
 
         NotificationPermissionHelper.requestPermissionIfNeeded(this)
 
