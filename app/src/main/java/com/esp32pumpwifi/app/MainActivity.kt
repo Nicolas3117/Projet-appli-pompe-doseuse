@@ -40,6 +40,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvConnectionStatus: TextView
     private lateinit var tankSummaryContainer: LinearLayout
     private lateinit var dailySummaryContainer: View
+    private lateinit var manualDoseButton: Button
 
     private var connectionJob: Job? = null
     private val isCheckingConnection = AtomicBoolean(false)
@@ -53,15 +54,6 @@ class MainActivity : AppCompatActivity() {
     private val STA_PROBE_INTERVAL_MS = 10_000L
     private val UI_REFRESH_MS = 15_000L
 
-    private val pumpButtons by lazy {
-        listOf(
-            findViewById<Button>(R.id.btn_pump1),
-            findViewById<Button>(R.id.btn_pump2),
-            findViewById<Button>(R.id.btn_pump3),
-            findViewById<Button>(R.id.btn_pump4)
-        )
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -71,6 +63,7 @@ class MainActivity : AppCompatActivity() {
         tvConnectionStatus = findViewById(R.id.tv_connection_status)
         tankSummaryContainer = findViewById(R.id.layout_tank_summary)
         dailySummaryContainer = findViewById(R.id.layout_daily_summary)
+        manualDoseButton = findViewById(R.id.btn_manual_dose)
 
         val baseBottom = scrollView.paddingBottom
         val extraBottomPadding = resources.getDimensionPixelSize(R.dimen.pump_control_bottom_extra)
@@ -133,10 +126,9 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, CalibrationActivity::class.java))
         }
 
-        pumpButtons[0].setOnClickListener { openManualDose(1) }
-        pumpButtons[1].setOnClickListener { openManualDose(2) }
-        pumpButtons[2].setOnClickListener { openManualDose(3) }
-        pumpButtons[3].setOnClickListener { openManualDose(4) }
+        manualDoseButton.setOnClickListener {
+            startActivity(Intent(this, ManualDoseTabsActivity::class.java))
+        }
     }
 
     override fun onResume() {
@@ -155,8 +147,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         tvActiveModule.text = "Sélectionné : ${activeModule.displayName}"
-        updatePumpButtons(activeModule)
-
         DailyProgramTrackingStore.resetIfNewDay(this)
         TankScheduleHelper.recalculateFromLastTime(this, activeModule.id)
         updateTankSummary(activeModule)
@@ -389,30 +379,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setManualButtonsEnabled(enabled: Boolean) {
-        pumpButtons.forEach { it.isEnabled = enabled }
-    }
-
-    private fun openManualDose(pumpNumber: Int) {
-        startActivity(
-            Intent(this, ManualDoseActivity::class.java)
-                .putExtra("pump_number", pumpNumber)
-        )
-    }
-
-    private fun updatePumpButtons(activeModule: EspModule) {
-        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
-        for (pumpNum in 1..4) {
-            val btn = findViewById<Button>(
-                resources.getIdentifier("btn_pump$pumpNum", "id", packageName)
-            ) ?: continue
-
-            val name = prefs.getString(
-                "esp_${activeModule.id}_pump${pumpNum}_name",
-                "Pompe $pumpNum"
-            ) ?: "Pompe $pumpNum"
-
-            btn.text = "Dosage manuel – $name"
-        }
+        manualDoseButton.isEnabled = enabled
     }
 
     private fun updateTankSummary(activeModule: EspModule) {

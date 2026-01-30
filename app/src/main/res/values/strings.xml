@@ -9,6 +9,7 @@
     <string name="default_pump_name">Pompe %1$d</string>
 
     <!-- Dosage manuel -->
+    <string name="manual_dose">Dosage manuel</string>
     <string name="manual_dose_button">Dosage manuel : %1$s</string>
     <string name="manual_dose_pump1">Dosage manuel pompe 1</string>
     <string name="manual_dose_pump2">Dosage manuel pompe 2</string>

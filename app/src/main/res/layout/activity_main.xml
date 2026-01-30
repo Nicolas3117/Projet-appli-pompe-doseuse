@@ -176,34 +176,10 @@
 
             <!-- ================= DOSAGES MANUELS ================= -->
             <Button
-                android:id="@+id/btn_pump1"
+                android:id="@+id/btn_manual_dose"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/manual_dose_pump1"
-                android:textSize="16sp"
-                android:layout_marginBottom="12dp" />
-
-            <Button
-                android:id="@+id/btn_pump2"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/manual_dose_pump2"
-                android:textSize="16sp"
-                android:layout_marginBottom="12dp" />
-
-            <Button
-                android:id="@+id/btn_pump3"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/manual_dose_pump3"
-                android:textSize="16sp"
-                android:layout_marginBottom="12dp" />
-
-            <Button
-                android:id="@+id/btn_pump4"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/manual_dose_pump4"
+                android:text="@string/manual_dose"
                 android:textSize="16sp"
                 android:layout_marginBottom="16dp" />
 
