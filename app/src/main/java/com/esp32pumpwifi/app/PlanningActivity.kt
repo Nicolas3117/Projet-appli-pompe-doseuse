@@ -3,6 +3,7 @@ package com.esp32pumpwifi.app
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
+import android.widget.Button
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.checkbox.MaterialCheckBox
@@ -11,6 +12,7 @@ class PlanningActivity : AppCompatActivity() {
 
     private lateinit var planningView: PlanningView
     private lateinit var layoutEspSelector: LinearLayout
+    private lateinit var btnPlanningBack: Button
 
     /** IDs ESP actuellement visibles */
     private val selectedEspIds = mutableListOf<Long>()
@@ -19,8 +21,11 @@ class PlanningActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_planning)
 
+        btnPlanningBack = findViewById(R.id.btn_planning_back)
         planningView = findViewById(R.id.planningView)
         layoutEspSelector = findViewById(R.id.layoutEspSelector)
+
+        btnPlanningBack.setOnClickListener { finish() }
 
         setupEspSelector()
     }
