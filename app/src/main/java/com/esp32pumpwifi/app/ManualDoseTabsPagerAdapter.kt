@@ -9,6 +9,6 @@ class ManualDoseTabsPagerAdapter(activity: AppCompatActivity) : FragmentStateAda
     override fun getItemCount(): Int = 4
 
     override fun createFragment(position: Int): Fragment {
-        return ManualDoseTabStubFragment.newInstance(position + 1)
+        return ManualDoseFragment.newInstance(position + 1)
     }
 }
