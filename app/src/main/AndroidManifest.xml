@@ -72,6 +72,11 @@
             android:windowSoftInputMode="stateHidden|adjustResize" />
 
         <activity
+            android:name=".ManualDoseTabsActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
+
+        <activity
             android:name=".CalibrationActivity"
             android:exported="false"
             android:windowSoftInputMode="stateHidden|adjustResize" />
