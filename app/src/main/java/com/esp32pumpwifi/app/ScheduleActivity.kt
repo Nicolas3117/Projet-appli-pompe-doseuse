@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
-import android.widget.Button
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
@@ -43,11 +42,10 @@ class ScheduleActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_schedule)
 
-        setSupportActionBar(findViewById<MaterialToolbar>(R.id.toolbar))
-
-        findViewById<Button>(R.id.btn_schedule_back).setOnClickListener {
-            finish()
-        }
+        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        toolbar.setNavigationContentDescription("← Retour")
+        toolbar.setNavigationOnClickListener { finish() }
 
         val activeModule = Esp32Manager.getActive(this)
         if (activeModule == null) {
