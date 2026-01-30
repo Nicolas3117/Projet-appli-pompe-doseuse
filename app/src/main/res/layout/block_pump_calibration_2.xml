@@ -75,30 +75,6 @@
         android:textStyle="bold"
         android:layout_marginTop="6dp" />
 
-    <TextView
-        android:id="@+id/tv_tank_level2"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Restant : -- %" />
-
-    <EditText
-        android:id="@+id/edit_tank_capacity2"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Volume du réservoir plein (mL)"
-        android:inputType="number" />
-
-    <EditText
-        android:id="@+id/edit_tank_alert2"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Seuil d’alerte (%)"
-        android:inputType="number" />
-
-    <Button
-        android:id="@+id/btn_tank_reset2"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Réservoir rechargé" />
+    <include layout="@layout/partial_tank_level_2" />
 
 </LinearLayout>

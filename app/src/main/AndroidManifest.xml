@@ -81,6 +81,11 @@
             android:exported="false"
             android:windowSoftInputMode="stateHidden|adjustResize" />
 
+        <activity
+            android:name=".RefillTanksActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
+
         <!-- ✅ PLANNING (AJOUT OBLIGATOIRE) -->
         <activity
             android:name=".PlanningActivity"

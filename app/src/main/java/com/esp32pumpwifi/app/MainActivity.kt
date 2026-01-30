@@ -41,6 +41,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tankSummaryContainer: LinearLayout
     private lateinit var dailySummaryContainer: View
     private lateinit var manualDoseButton: Button
+    private lateinit var refillTanksButton: Button
 
     private var connectionJob: Job? = null
     private val isCheckingConnection = AtomicBoolean(false)
@@ -64,6 +65,7 @@ class MainActivity : AppCompatActivity() {
         tankSummaryContainer = findViewById(R.id.layout_tank_summary)
         dailySummaryContainer = findViewById(R.id.layout_daily_summary)
         manualDoseButton = findViewById(R.id.btn_manual_dose)
+        refillTanksButton = findViewById(R.id.btn_refill_tanks)
 
         val baseBottom = scrollView.paddingBottom
         val extraBottomPadding = resources.getDimensionPixelSize(R.dimen.pump_control_bottom_extra)
@@ -124,6 +126,10 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.btn_calibration).setOnClickListener {
             startActivity(Intent(this, CalibrationActivity::class.java))
+        }
+
+        refillTanksButton.setOnClickListener {
+            startActivity(Intent(this, RefillTanksActivity::class.java))
         }
 
         manualDoseButton.setOnClickListener {
@@ -380,6 +386,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setManualButtonsEnabled(enabled: Boolean) {
         manualDoseButton.isEnabled = enabled
+        refillTanksButton.isEnabled = enabled
     }
 
     private fun updateTankSummary(activeModule: EspModule) {

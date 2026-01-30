@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <TextView
+        android:id="@+id/tv_tank_level3"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Restant : -- %" />
+
+    <EditText
+        android:id="@+id/edit_tank_capacity3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Volume du réservoir plein (mL)"
+        android:inputType="number" />
+
+    <EditText
+        android:id="@+id/edit_tank_alert3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Seuil d’alerte (%)"
+        android:inputType="number" />
+
+    <Button
+        android:id="@+id/btn_tank_reset3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Réservoir rechargé" />
+
+</merge>

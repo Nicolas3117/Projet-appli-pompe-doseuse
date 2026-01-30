@@ -183,6 +183,15 @@
                 android:textSize="16sp"
                 android:layout_marginBottom="16dp" />
 
+            <!-- ================= RECHARGER LES RÉSERVOIRS ================= -->
+            <Button
+                android:id="@+id/btn_refill_tanks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/refill_tanks"
+                android:textSize="16sp"
+                android:layout_marginBottom="16dp" />
+
             <!-- ================= ÉTALONNAGE ================= -->
             <Button
                 android:id="@+id/btn_calibration"
