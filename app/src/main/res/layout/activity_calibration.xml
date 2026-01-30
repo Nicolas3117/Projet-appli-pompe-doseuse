@@ -18,6 +18,22 @@
             android:orientation="vertical"
             android:focusableInTouchMode="true">
 
+            <Button
+                android:id="@+id/btn_calibration_back"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="← Retour"
+                android:textSize="17sp"
+                android:background="?android:attr/selectableItemBackground"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:layout_gravity="end"
+                android:layout_marginTop="24dp"
+                android:layout_marginEnd="12dp"
+                android:layout_marginBottom="8dp" />
+
             <!-- ================= ÉTALONNAGE & RÉSERVOIRS ================= -->
 
             <!-- ================= POMPE 1 ================= -->

@@ -36,6 +36,10 @@ class CalibrationActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_calibration)
 
+        findViewById<Button>(R.id.btn_calibration_back).setOnClickListener {
+            finish()
+        }
+
         val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
         // ----------------------------------------------------------

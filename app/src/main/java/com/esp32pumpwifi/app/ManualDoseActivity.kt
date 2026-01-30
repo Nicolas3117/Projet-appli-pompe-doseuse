@@ -31,6 +31,10 @@ class ManualDoseActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_manual_dose)
 
+        findViewById<Button>(R.id.btn_manual_back).setOnClickListener {
+            finish()
+        }
+
         pumpNumber = intent.getIntExtra("pump_number", 1)
 
         val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
