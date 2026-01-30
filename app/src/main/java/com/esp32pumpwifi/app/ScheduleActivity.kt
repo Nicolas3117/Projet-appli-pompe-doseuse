@@ -1,8 +1,11 @@
 package com.esp32pumpwifi.app
 
 import android.content.Context
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.TextView
@@ -10,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
@@ -47,9 +51,30 @@ class ScheduleActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
         toolbar.setNavigationContentDescription("← Retour")
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
-        findViewById<TextView>(R.id.tv_toolbar_back).setOnClickListener {
-            onBackPressedDispatcher.onBackPressed()
+
+        val density = resources.displayMetrics.density
+        val startPaddingPx = (12 * density).toInt()
+        val marginStartPx = (56 * density).toInt()
+
+        val backTextView = TextView(this).apply {
+            text = "Retour"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            setTextColor(Color.WHITE)
+            setPaddingRelative(startPaddingPx, 0, startPaddingPx, 0)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onBackPressedDispatcher.onBackPressed() }
         }
+
+        val backTextLayoutParams = Toolbar.LayoutParams(
+            Toolbar.LayoutParams.WRAP_CONTENT,
+            Toolbar.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            marginStart = marginStartPx
+        }
+
+        toolbar.addView(backTextView, backTextLayoutParams)
 
         val activeModule = Esp32Manager.getActive(this)
         if (activeModule == null) {
