@@ -57,8 +57,13 @@ class ManualDoseFragment : Fragment() {
 
         val root = view
 
-        root.findViewById<Button>(R.id.btn_manual_back).setOnClickListener {
-            requireActivity().finish()
+        val backButton = root.findViewById<Button>(R.id.btn_manual_back)
+        if (requireActivity() is ManualDoseTabsActivity) {
+            backButton.visibility = View.GONE
+        } else {
+            backButton.setOnClickListener {
+                requireActivity().finish()
+            }
         }
 
         val prefs = requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
