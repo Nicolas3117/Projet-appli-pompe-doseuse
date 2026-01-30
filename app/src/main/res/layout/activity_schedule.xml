@@ -17,6 +17,18 @@
         app:navigationIcon="@drawable/ic_arrow_back_24"
         app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
         app:titleCentered="true">
+
+        <TextView
+            android:id="@+id/tv_toolbar_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="56dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:text="Retour"
+            android:textColor="@android:color/white"
+            android:textSize="17sp" />
     </com.google.android.material.appbar.MaterialToolbar>
 
     <!-- ✅ Onglets des pompes -->
