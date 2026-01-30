@@ -155,10 +155,7 @@ class CalibrationActivity : AppCompatActivity() {
         for (i in 0..3) {
             val pumpNum = i + 1
 
-            val name = prefs.getString(
-                "esp_${espId}_pump${pumpNum}_name",
-                "Pompe $pumpNum"
-            ) ?: "Pompe $pumpNum"
+            val name = getPumpDisplayName(prefs, espId, pumpNum)
 
             pumpNames[i].setText(name)
             pumpTitles[i].text = name
@@ -302,10 +299,11 @@ class CalibrationActivity : AppCompatActivity() {
         capacities: Array<EditText>,
         alerts: Array<EditText>
     ) {
+        val pumpName = getPumpDisplayName(prefs, espId, pumpNum)
         AlertDialog.Builder(this)
             .setTitle("Confirmation")
             .setMessage(
-                "Confirmer que le réservoir de la pompe $pumpNum a été entièrement rechargé ?"
+                "Confirmer que le réservoir de ${pumpName} a été entièrement rechargé ?"
             )
             .setPositiveButton("Oui") { _, _ ->
 
@@ -336,6 +334,16 @@ class CalibrationActivity : AppCompatActivity() {
             }
             .setNegativeButton("Annuler", null)
             .show()
+    }
+
+    private fun getPumpDisplayName(
+        prefs: SharedPreferences,
+        espId: Long,
+        pumpNum: Int
+    ): String {
+        val fallback = "Pompe $pumpNum"
+        val name = prefs.getString("esp_${espId}_pump${pumpNum}_name", fallback)
+        return if (name.isNullOrBlank()) fallback else name
     }
 
     // ----------------------------------------------------------

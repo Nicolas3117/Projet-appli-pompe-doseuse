@@ -25,7 +25,7 @@
         android:id="@+id/et_quantity"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Quantité (mL)"
+        android:hint="Volume (mL)"
         android:inputType="numberDecimal"
         android:digits="0123456789.," />
 
