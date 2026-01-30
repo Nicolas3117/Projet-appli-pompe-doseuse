@@ -9,13 +9,17 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.appbar.MaterialToolbar
 
 class RefillTanksActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_refill_tanks)
-        supportActionBar?.title = getString(R.string.refill_tanks)
+        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.title = getString(R.string.tanks_title)
 
         val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
@@ -90,6 +94,11 @@ class RefillTanksActivity : AppCompatActivity() {
                 )
             }
         }
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        finish()
+        return true
     }
 
     private fun confirmTankReset(
