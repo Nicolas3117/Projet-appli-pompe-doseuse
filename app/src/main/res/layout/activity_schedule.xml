@@ -14,7 +14,7 @@
         android:background="?attr/colorPrimary"
         android:title="@string/btn_schedule_pumps"
         android:titleTextColor="@android:color/white"
-        app:navigationIcon="@drawable/ic_arrow_back_24"
+        app:navigationIcon="@drawable/ic_arrow_back_32"
         app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
         app:titleCentered="true" />
 

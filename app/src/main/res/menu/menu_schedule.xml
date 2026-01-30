@@ -5,7 +5,7 @@
     <item
         android:id="@+id/action_send"
         android:title="Envoyer"
-        android:icon="@android:drawable/ic_menu_send"
+        android:icon="@drawable/ic_menu_send_32"
         app:showAsAction="ifRoom" />
 
 </menu>
