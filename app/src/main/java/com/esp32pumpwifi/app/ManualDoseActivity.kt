@@ -4,6 +4,10 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 
 class ManualDoseActivity : AppCompatActivity() {
+    companion object {
+        const val MIN_PUMP_DURATION_MS: Int = 50
+        const val MAX_PUMP_DURATION_MS: Int = 600_000
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
