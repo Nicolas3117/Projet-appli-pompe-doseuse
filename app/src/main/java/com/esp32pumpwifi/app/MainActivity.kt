@@ -70,11 +70,19 @@ class MainActivity : AppCompatActivity() {
         tankSummaryContainer = findViewById(R.id.layout_tank_summary)
         dailySummaryContainer = findViewById(R.id.layout_daily_summary)
 
+        val baseBottom = scrollView.paddingBottom
         val extraBottomPadding = resources.getDimensionPixelSize(R.dimen.pump_control_bottom_extra)
         ViewCompat.setOnApplyWindowInsetsListener(scrollView) { view, insets ->
             val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
             val systemBarsBottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
-            view.updatePadding(bottom = max(imeBottom, systemBarsBottom) + extraBottomPadding)
+            val navBarsBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val keyboardBottom = if (imeBottom == 0) {
+                max(systemBarsBottom, navBarsBottom)
+            } else {
+                max(imeBottom, systemBarsBottom)
+            }
+            val target = baseBottom + keyboardBottom + extraBottomPadding
+            view.updatePadding(bottom = target)
             insets
         }
 

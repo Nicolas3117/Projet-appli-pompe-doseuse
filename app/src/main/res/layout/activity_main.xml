@@ -179,6 +179,11 @@
                 android:text="@string/btn_calibration"
                 android:layout_marginTop="8dp" />
 
+            <!-- BONUS fallback: espace fixe bas pour appareils récalcitrants -->
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/pump_control_bottom_extra" />
+
         </LinearLayout>
     </ScrollView>
 </com.esp32pumpwifi.app.ZoomLayout>
