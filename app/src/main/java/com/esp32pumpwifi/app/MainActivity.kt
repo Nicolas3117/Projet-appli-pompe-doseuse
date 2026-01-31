@@ -129,7 +129,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         refillTanksButton.setOnClickListener {
-            startActivity(Intent(this, RefillTanksActivity::class.java))
+            startActivity(Intent(this, TanksTabsActivity::class.java))
         }
 
         manualDoseButton.setOnClickListener {
