@@ -48,10 +48,14 @@ class PumpScheduleFragment : Fragment() {
             inflater.inflate(R.layout.fragment_pump_schedule, container, false)
 
         adapter =
-            PumpScheduleAdapter(requireContext(), schedules) {
-                saveSchedules()
-                syncToProgramStore()
-            }
+            PumpScheduleAdapter(
+                context = requireContext(),
+                schedules = schedules,
+                onScheduleChanged = {
+                    saveSchedules()
+                    syncToProgramStore()
+                }
+            )
 
         view.findViewById<ListView>(R.id.lv_schedules).adapter = adapter
 
