@@ -88,9 +88,8 @@ class TankFragment : Fragment() {
     }
 
     private fun showThresholdSaved() {
-        val root = requireView().findViewById<View>(R.id.root_refill)
         Snackbar.make(
-            root,
+            requireView(),
             getString(R.string.threshold_saved),
             Snackbar.LENGTH_SHORT
         ).show()
