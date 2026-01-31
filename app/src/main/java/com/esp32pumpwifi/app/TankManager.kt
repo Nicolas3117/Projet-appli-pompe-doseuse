@@ -14,7 +14,7 @@ object TankManager {
 
     data class TankLevel(
         val capacityMl: Int,
-        val remainingMl: Int,
+        val remainingMl: Float,
         val percent: Int
     )
 
@@ -144,7 +144,7 @@ object TankManager {
 
         return TankLevel(
             capacityMl = capacity,
-            remainingMl = remaining.toInt(),
+            remainingMl = remaining,
             percent = percent
         )
     }

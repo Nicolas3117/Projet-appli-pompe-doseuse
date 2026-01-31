@@ -5,6 +5,7 @@ import android.graphics.drawable.LayerDrawable
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import java.util.Locale
 
 /**
  * Helper UI des réservoirs
@@ -15,6 +16,9 @@ import androidx.core.content.ContextCompat
  * - AFFICHAGE UNIQUEMENT
  */
 object TankUiHelper {
+
+    private fun formatMl(value: Float): String =
+        String.format(Locale.FRANCE, "%.1f", value)
 
     fun update(
         context: Context,
@@ -84,7 +88,7 @@ object TankUiHelper {
         // --------------------------------------------------
         tvMl?.text =
             if (level.capacityMl > 0)
-                "${level.remainingMl} / ${level.capacityMl} mL"
+                "${formatMl(level.remainingMl)} / ${formatMl(level.capacityMl.toFloat())} mL"
             else
                 "—"
 

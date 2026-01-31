@@ -161,7 +161,7 @@ object TankScheduleHelper {
                     context = context,
                     espId = espId,
                     pumpNum = pumpNum,
-                    remainingMl = level.remainingMl.toFloat(),
+                    remainingMl = level.remainingMl,
                     capacityMl = level.capacityMl,
                     thresholdPercent = threshold,
                     lowAlertSent = prefs.getBoolean(lowAlertKey, false),

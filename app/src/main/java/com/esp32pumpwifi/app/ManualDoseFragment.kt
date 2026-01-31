@@ -206,7 +206,7 @@ class ManualDoseFragment : Fragment() {
                         context = requireContext(),
                         espId = espId,
                         pumpNum = pumpNumber,
-                        remainingMl = level.remainingMl.toFloat(),
+                        remainingMl = level.remainingMl,
                         capacityMl = level.capacityMl,
                         thresholdPercent = thresholdPercent,
                         lowAlertSent = lowAlertSent,

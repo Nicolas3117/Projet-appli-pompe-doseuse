@@ -472,6 +472,9 @@ class MainActivity : AppCompatActivity() {
         return "Prochaine dose : $formattedTime"
     }
 
+    private fun formatMl(value: Float): String =
+        String.format(Locale.FRANCE, "%.1f", value)
+
     private fun updateOneDaily(espId: Long, pumpNum: Int) {
         val nameId = resources.getIdentifier("tv_daily_name_$pumpNum", "id", packageName)
         val progressId = resources.getIdentifier("pb_daily_$pumpNum", "id", packageName)
@@ -519,12 +522,10 @@ class MainActivity : AppCompatActivity() {
             doseText = "Dose : $doneDoseCountToday/$plannedDoseCountToday"
         }
 
-        val plannedMlRounded = plannedMlToday.roundToInt()
-        val doneMlRounded = doneMlToday.roundToInt()
         val insideText = if (plannedMlToday == 0f || doneMlToday == 0f) {
-            "0 ml"
+            "${formatMl(0f)} ml"
         } else {
-            "$doneMlRounded ml"
+            "${formatMl(doneMlToday)} ml"
         }
 
         findViewById<TextView>(nameId).text = name
@@ -534,8 +535,8 @@ class MainActivity : AppCompatActivity() {
             max = 100
             progress = progressValue
         }
-        findViewById<TextView>(minId).text = "0 ml"
-        findViewById<TextView>(maxId).text = "$plannedMlRounded ml"
+        findViewById<TextView>(minId).text = "${formatMl(0f)} ml"
+        findViewById<TextView>(maxId).text = "${formatMl(plannedMlToday)} ml"
         findViewById<TextView>(doseId).text = doseText
         insideLabel.text = insideText
         findViewById<TextView>(nextDoseId).text = getNextDoseText(espId, pumpNum)
