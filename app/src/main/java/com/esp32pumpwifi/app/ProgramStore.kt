@@ -237,6 +237,20 @@ object ProgramStore {
     }
 
     // ---------------------------------------------------------------------
+    // ✅ DERNIÈRE PROTECTION — strict ESP32 (12 digits + active/pump)
+    // - accepte PLACEHOLDER
+    // - sinon active doit être '1'
+    // - pompe doit être 1..4
+    // ---------------------------------------------------------------------
+    private fun sanitizeEncodedLineForEsp32Strict(line: String): String {
+        if (line == PLACEHOLDER) return PLACEHOLDER
+        if (line.length != 12 || !line.all(Char::isDigit)) return PLACEHOLDER
+        if (line[0] != '1') return PLACEHOLDER
+        if (line[1] !in '1'..'4') return PLACEHOLDER
+        return line
+    }
+
+    // ---------------------------------------------------------------------
     // 🔒 SÉCURITÉ 1 — INTERDICTION même pompe (BLOQUANT)
     // ---------------------------------------------------------------------
     fun hasBlockingConflict(
@@ -357,8 +371,9 @@ object ProgramStore {
             Log.e("PROGRAM_BUILD", "Pompe $pump : ${lines.size} ligne(s)")
 
             for (line in lines) {
-                sb.append(line)
-                Log.e("PROGRAM_BUILD", "  ✔ $line")
+                val sanitized = sanitizeEncodedLineForEsp32Strict(line)
+                sb.append(sanitized)
+                Log.e("PROGRAM_BUILD", "  ✔ $sanitized")
             }
 
             repeat(MAX_LINES_PER_PUMP - lines.size) {
