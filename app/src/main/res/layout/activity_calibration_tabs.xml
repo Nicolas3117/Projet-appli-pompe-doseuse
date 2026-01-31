@@ -12,7 +12,7 @@
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:background="?attr/colorPrimary"
-        android:title="@string/manual_dose"
+        android:title="@string/btn_calibration"
         android:titleTextColor="@android:color/white"
         app:navigationIcon="@drawable/ic_arrow_back_32"
         app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
