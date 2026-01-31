@@ -82,7 +82,7 @@ class TankFragment : Fragment() {
                 prefs.edit()
                     .putInt("esp_${espId}_pump${pumpNumber}_low_threshold", value)
                     .apply()
-                showThresholdSaved()
+                Toast.makeText(requireContext(), "Seuil pris en compte", Toast.LENGTH_SHORT).show()
             }
         }
     }
