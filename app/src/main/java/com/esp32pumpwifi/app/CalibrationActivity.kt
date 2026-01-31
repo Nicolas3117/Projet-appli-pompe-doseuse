@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -39,6 +40,8 @@ class CalibrationActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btn_calibration_back).setOnClickListener {
             finish()
         }
+
+        val hasTankUi = findViewById<View?>(R.id.tv_tank_level1) != null
 
         val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
@@ -121,33 +124,40 @@ class CalibrationActivity : AppCompatActivity() {
         // ----------------------------------------------------------
         // 🔋 UI – RÉSERVOIRS
         // ----------------------------------------------------------
-        val tankLevels = arrayOf(
-            findViewById<TextView>(R.id.tv_tank_level1),
-            findViewById(R.id.tv_tank_level2),
-            findViewById(R.id.tv_tank_level3),
-            findViewById(R.id.tv_tank_level4)
-        )
+        var tankLevels: Array<TextView>? = null
+        var tankCapacities: Array<EditText>? = null
+        var tankAlerts: Array<EditText>? = null
+        var tankResetButtons: Array<Button>? = null
 
-        val tankCapacities = arrayOf(
-            findViewById<EditText>(R.id.edit_tank_capacity1),
-            findViewById(R.id.edit_tank_capacity2),
-            findViewById(R.id.edit_tank_capacity3),
-            findViewById(R.id.edit_tank_capacity4)
-        )
+        if (hasTankUi) {
+            tankLevels = arrayOf(
+                findViewById<TextView>(R.id.tv_tank_level1),
+                findViewById(R.id.tv_tank_level2),
+                findViewById(R.id.tv_tank_level3),
+                findViewById(R.id.tv_tank_level4)
+            )
 
-        val tankAlerts = arrayOf(
-            findViewById<EditText>(R.id.edit_tank_alert1),
-            findViewById(R.id.edit_tank_alert2),
-            findViewById(R.id.edit_tank_alert3),
-            findViewById(R.id.edit_tank_alert4)
-        )
+            tankCapacities = arrayOf(
+                findViewById<EditText>(R.id.edit_tank_capacity1),
+                findViewById(R.id.edit_tank_capacity2),
+                findViewById(R.id.edit_tank_capacity3),
+                findViewById(R.id.edit_tank_capacity4)
+            )
 
-        val tankResetButtons = arrayOf(
-            findViewById<Button>(R.id.btn_tank_reset1),
-            findViewById(R.id.btn_tank_reset2),
-            findViewById(R.id.btn_tank_reset3),
-            findViewById(R.id.btn_tank_reset4)
-        )
+            tankAlerts = arrayOf(
+                findViewById<EditText>(R.id.edit_tank_alert1),
+                findViewById(R.id.edit_tank_alert2),
+                findViewById(R.id.edit_tank_alert3),
+                findViewById(R.id.edit_tank_alert4)
+            )
+
+            tankResetButtons = arrayOf(
+                findViewById<Button>(R.id.btn_tank_reset1),
+                findViewById(R.id.btn_tank_reset2),
+                findViewById(R.id.btn_tank_reset3),
+                findViewById(R.id.btn_tank_reset4)
+            )
+        }
 
         // ----------------------------------------------------------
         // 📌 CHARGEMENT INITIAL
@@ -167,14 +177,16 @@ class CalibrationActivity : AppCompatActivity() {
                 pumpResults[i].text = "Débit : ${formatFlow(flow)} mL/s"
             }
 
-            loadTankUI(
-                prefs,
-                espId,
-                pumpNum,
-                tankLevels[i],
-                tankCapacities[i],
-                tankAlerts[i]
-            )
+            if (hasTankUi) {
+                loadTankUI(
+                    prefs,
+                    espId,
+                    pumpNum,
+                    tankLevels!![i],
+                    tankCapacities!![i],
+                    tankAlerts!![i]
+                )
+            }
         }
 
         // ----------------------------------------------------------
@@ -256,16 +268,18 @@ class CalibrationActivity : AppCompatActivity() {
                     .show()
             }
 
-            tankResetButtons[i].setOnClickListener {
-                confirmTankReset(
-                    prefs,
-                    espId,
-                    pumpNum,
-                    i,
-                    tankLevels,
-                    tankCapacities,
-                    tankAlerts
-                )
+            if (hasTankUi) {
+                tankResetButtons!![i].setOnClickListener {
+                    confirmTankReset(
+                        prefs,
+                        espId,
+                        pumpNum,
+                        i,
+                        tankLevels!!,
+                        tankCapacities!!,
+                        tankAlerts!!
+                    )
+                }
             }
         }
 
