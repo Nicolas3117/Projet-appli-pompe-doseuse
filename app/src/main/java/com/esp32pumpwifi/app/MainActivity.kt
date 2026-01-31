@@ -453,23 +453,28 @@ class MainActivity : AppCompatActivity() {
             .getString("esp_${espId}_pump$pumpNum", null)
             ?: return "Aucune dose prévue"
 
-        val minutesList = PumpScheduleJson.fromJson(json)
+        val schedules = PumpScheduleJson.fromJson(json)
             .asSequence()
             .filter { it.enabled && it.pumpNumber == pumpNum }
-            .mapNotNull { parseTimeToMinutesOrNull(it.time) }
-            .sorted()
+            .mapNotNull { schedule ->
+                parseTimeToMinutesOrNull(schedule.time)?.let { minutes -> minutes to schedule }
+            }
+            .sortedBy { it.first }
             .toList()
 
-        if (minutesList.isEmpty()) return "Aucune dose prévue"
+        if (schedules.isEmpty()) return "Aucune dose prévue"
 
         val now = Calendar.getInstance()
         val nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
 
-        val nextMinutes = minutesList.firstOrNull { it > nowMinutes } ?: minutesList.first()
+        val (nextMinutes, nextSchedule) =
+            schedules.firstOrNull { it.first > nowMinutes } ?: schedules.first()
         val nextHours = nextMinutes / 60
         val nextMins = nextMinutes % 60
         val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", nextHours, nextMins)
-        return "Prochaine dose : $formattedTime"
+        val doseMl = nextSchedule.quantityMl
+        val doseText = formatMl(doseMl)
+        return "Prochaine dose : $doseText mL à $formattedTime"
     }
 
     private fun formatMl(value: Float): String =
