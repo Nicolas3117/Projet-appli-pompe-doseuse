@@ -125,7 +125,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btn_calibration).setOnClickListener {
-            startActivity(Intent(this, CalibrationActivity::class.java))
+            startActivity(Intent(this, CalibrationTabsActivity::class.java))
         }
 
         refillTanksButton.setOnClickListener {
