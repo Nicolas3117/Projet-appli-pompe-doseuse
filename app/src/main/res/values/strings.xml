@@ -21,6 +21,7 @@
     <string name="volume_hint">Volume (mL)</string>
     <string name="flow_result">Débit mesuré : %.1f mL/s</string>
     <string name="flow_saved">Débit sauvegardé : %.1f mL/s</string>
+    <string name="threshold_saved">Seuil pris en compte</string>
 
     <!-- Messages pompe -->
     <string name="pump_start">Pompe %1$d : %2$.1f mL (~%3$d s)</string>
