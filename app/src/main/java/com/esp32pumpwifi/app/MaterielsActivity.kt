@@ -664,7 +664,9 @@ class MaterielsActivity : AppCompatActivity() {
             .setTitle("Renommer le module")
             .setView(input)
             .setPositiveButton("OK") { _, _ ->
-                module.displayName = input.text.toString().trim()
+                val trimmedName = input.text.toString().trim()
+                module.displayName =
+                    if (trimmedName.isBlank()) module.internalName else trimmedName
                 Esp32Manager.update(this, module)
                 loadList()
             }

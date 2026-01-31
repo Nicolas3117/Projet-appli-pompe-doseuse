@@ -38,7 +38,8 @@ class EspModuleAdapter(
         // -------------------------------------------------------------------
         // 🎨 AFFICHAGE
         // -------------------------------------------------------------------
-        txtName.text = module.displayName
+        val displayName = module.displayName.ifBlank { module.internalName }
+        txtName.text = displayName
         txtIp.text   = module.ip
 
         // Couleur verte = module actif
