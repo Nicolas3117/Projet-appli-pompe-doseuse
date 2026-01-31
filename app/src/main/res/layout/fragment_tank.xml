@@ -29,7 +29,66 @@
                 android:textStyle="bold"
                 android:layout_marginTop="6dp" />
 
-            <include layout="@layout/partial_tank_level_1" />
+            <TextView
+                android:id="@+id/tv_tank_level"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Restant : -- %" />
+
+            <EditText
+                android:id="@+id/edit_tank_capacity"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Volume du réservoir plein (mL)"
+                android:inputType="number" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Volume du réservoir plein en mL"
+                android:textSize="12sp"
+                android:textColor="#666666"
+                android:layout_marginBottom="6dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/edit_tank_alert"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Seuil d’alerte (%)"
+                    android:inputType="number"
+                    android:imeOptions="actionDone"
+                    android:singleLine="true" />
+
+                <ImageButton
+                    android:id="@+id/btn_save_tank_alert"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="@string/save_threshold"
+                    android:padding="8dp"
+                    android:src="@android:drawable/checkbox_on_background" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Alerte déclenchée sous ce pourcentage du volume total"
+                android:textSize="12sp"
+                android:textColor="#666666"
+                android:layout_marginBottom="6dp" />
+
+            <Button
+                android:id="@+id/btn_tank_reset"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Réservoir rechargé" />
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

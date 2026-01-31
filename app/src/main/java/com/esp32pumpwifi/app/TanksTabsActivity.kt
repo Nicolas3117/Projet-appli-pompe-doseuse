@@ -23,6 +23,7 @@ class TanksTabsActivity : AppCompatActivity() {
         val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.title = getString(R.string.tanks_title)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toolbar.setNavigationContentDescription("← Retour")
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
@@ -54,5 +55,10 @@ class TanksTabsActivity : AppCompatActivity() {
         val fallback = "Pompe $pumpNum"
         val name = prefs.getString("esp_${espId}_pump${pumpNum}_name", fallback)
         return if (name.isNullOrBlank()) fallback else name
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        finish()
+        return true
     }
 }

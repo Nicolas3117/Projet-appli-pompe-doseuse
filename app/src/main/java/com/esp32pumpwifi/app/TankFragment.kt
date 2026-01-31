@@ -57,11 +57,11 @@ class TankFragment : Fragment() {
 
         val espId = activeModule.id
 
-        val tankLevel = view.findViewById<TextView>(R.id.tv_tank_level1)
-        val tankCapacity = view.findViewById<EditText>(R.id.edit_tank_capacity1)
-        val tankAlert = view.findViewById<EditText>(R.id.edit_tank_alert1)
-        val tankReset = view.findViewById<View>(R.id.btn_tank_reset1)
-        val tankAlertSave = view.findViewById<View>(R.id.btn_save_tank_alert1)
+        val tankLevel = view.findViewById<TextView>(R.id.tv_tank_level)
+        val tankCapacity = view.findViewById<EditText>(R.id.edit_tank_capacity)
+        val tankAlert = view.findViewById<EditText>(R.id.edit_tank_alert)
+        val tankReset = view.findViewById<View>(R.id.btn_tank_reset)
+        val tankAlertSave = view.findViewById<View>(R.id.btn_save_tank_alert)
 
         loadTankUI(prefs, espId, pumpNumber, tankLevel, tankCapacity, tankAlert)
 
