@@ -98,19 +98,47 @@ class ScheduleActivity : AppCompatActivity() {
                         return
                     }
 
-                    // ✅ Popup existante : "Programmation non envoyée"
+                    // ✅ Popup : programmation modifiée
                     AlertDialog.Builder(this@ScheduleActivity)
-                        .setTitle("Programmation non envoyée")
+                        .setTitle("Programmation modifiée")
                         .setMessage(
-                            "Vous avez modifié la programmation.\n" +
-                                    "Pensez à l’envoyer avant de quitter."
+                            "La programmation a été modifiée.\n" +
+                                    "Pour garantir la cohérence entre l’application et la pompe, " +
+                                    "elle sera envoyée automatiquement à la fermeture de cette page."
                         )
-                        .setPositiveButton("Rester") { dialog, _ ->
+                        .setPositiveButton("Envoyer et quitter") { dialog, _ ->
                             dialog.dismiss()
+                            exitInProgress = true
+                            val active = Esp32Manager.getActive(this@ScheduleActivity)
+                            if (active == null) {
+                                Toast.makeText(
+                                    this@ScheduleActivity,
+                                    "Pompe non connectée — impossible d’envoyer",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                                exitInProgress = false
+                                return@setPositiveButton
+                            }
+
+                            lifecycleScope.launch {
+                                val ok = verifyEsp32Connection(active)
+                                if (!ok) {
+                                    Toast.makeText(
+                                        this@ScheduleActivity,
+                                        "Pompe non connectée — impossible d’envoyer",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    exitInProgress = false
+                                    return@launch
+                                }
+
+                                sendSchedulesToESP32(active) {
+                                    finish()
+                                }
+                            }
                         }
-                        .setNegativeButton("Quitter") { _, _ ->
-                            // ✅ Peu importe : check final /read puis exit
-                            finalCheckOnExitThenFinish()
+                        .setNegativeButton("Rester") { dialog, _ ->
+                            dialog.dismiss()
                         }
                         .create()
                         .also { dlg ->
@@ -143,6 +171,18 @@ class ScheduleActivity : AppCompatActivity() {
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.menu_schedule, menu)
         return true
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
+        val sendItem = menu?.findItem(R.id.action_send)
+        if (isReadOnly) {
+            sendItem?.isEnabled = false
+            sendItem?.isVisible = false
+        } else {
+            sendItem?.isEnabled = true
+            sendItem?.isVisible = true
+        }
+        return super.onPrepareOptionsMenu(menu)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -270,7 +310,7 @@ class ScheduleActivity : AppCompatActivity() {
     // ------------------------------------------------------------
     // 2️⃣ ENVOI PROGRAMMATION
     // ------------------------------------------------------------
-    private fun sendSchedulesToESP32(active: EspModule) {
+    private fun sendSchedulesToESP32(active: EspModule, onSuccess: () -> Unit = {}) {
         val message = ProgramStore.buildMessageMs(this)
         Log.i("SCHEDULE_SEND", "➡️ Envoi programmation via NetworkHelper")
 
@@ -286,6 +326,7 @@ class ScheduleActivity : AppCompatActivity() {
 
             // ✅ Après envoi, on met à jour la référence "envoyée"
             lastProgramHash = ProgramStore.buildMessageMs(this@ScheduleActivity)
+            onSuccess()
         }
     }
 
