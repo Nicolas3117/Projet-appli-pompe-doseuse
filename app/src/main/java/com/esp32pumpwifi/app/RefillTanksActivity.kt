@@ -71,6 +71,13 @@ class RefillTanksActivity : AppCompatActivity() {
             findViewById(R.id.btn_tank_reset4)
         )
 
+        val tankAlertSaveButtons = arrayOf(
+            findViewById<Button>(R.id.btn_save_tank_alert1),
+            findViewById(R.id.btn_save_tank_alert2),
+            findViewById(R.id.btn_save_tank_alert3),
+            findViewById(R.id.btn_save_tank_alert4)
+        )
+
         for (i in 0..3) {
             val pumpNum = i + 1
             val name = getPumpDisplayName(prefs, espId, pumpNum)
@@ -95,6 +102,16 @@ class RefillTanksActivity : AppCompatActivity() {
                     tankCapacities,
                     tankAlerts
                 )
+            }
+
+            tankAlertSaveButtons[i].setOnClickListener {
+                val value = tankAlerts[i].text.toString().toIntOrNull()
+                if (value != null) {
+                    prefs.edit()
+                        .putInt("esp_${espId}_pump${pumpNum}_low_threshold", value)
+                        .apply()
+                    showThresholdSaved()
+                }
             }
         }
     }
