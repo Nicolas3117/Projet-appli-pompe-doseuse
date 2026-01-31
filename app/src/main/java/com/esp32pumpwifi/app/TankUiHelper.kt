@@ -88,7 +88,7 @@ object TankUiHelper {
         // --------------------------------------------------
         tvMl?.text =
             if (level.capacityMl > 0)
-                "${formatMl(level.remainingMl)} / ${formatMl(level.capacityMl.toFloat())} mL"
+                "${formatMl(level.remainingMl)} / ${level.capacityMl} mL"
             else
                 "—"
 

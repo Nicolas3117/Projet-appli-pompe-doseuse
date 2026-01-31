@@ -535,7 +535,7 @@ class MainActivity : AppCompatActivity() {
             max = 100
             progress = progressValue
         }
-        findViewById<TextView>(minId).text = "${formatMl(0f)} ml"
+        findViewById<TextView>(minId).text = "0 ml"
         findViewById<TextView>(maxId).text = "${formatMl(plannedMlToday)} ml"
         findViewById<TextView>(doseId).text = doseText
         insideLabel.text = insideText
