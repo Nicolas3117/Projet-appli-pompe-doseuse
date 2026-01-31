@@ -57,9 +57,12 @@ class CalibrationPumpFragment : Fragment() {
         val pumpFlowKey = "esp_${moduleId}_pump${pumpNum}_flow"
 
         val currentName = prefs.getString(pumpNameKey, "")
-        if (!currentName.isNullOrBlank()) {
-            editPumpName.setText(currentName)
+        val displayName = if (!currentName.isNullOrBlank()) {
+            currentName
+        } else {
+            "Pompe $pumpNum"
         }
+        editPumpName.setText(displayName)
 
         if (prefs.contains(pumpFlowKey)) {
             val flow = prefs.getFloat(pumpFlowKey, 0f)
