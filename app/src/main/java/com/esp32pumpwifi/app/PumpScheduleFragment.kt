@@ -18,6 +18,8 @@ class PumpScheduleFragment : Fragment() {
     private lateinit var adapter: PumpScheduleAdapter
     private var pumpNumber: Int = 1
     private val gson = Gson()
+    private var isReadOnly: Boolean = false
+    private var addButton: Button? = null
 
     companion object {
         const val MAX_PUMP_DURATION_SEC = 600
@@ -53,12 +55,14 @@ class PumpScheduleFragment : Fragment() {
 
         view.findViewById<ListView>(R.id.lv_schedules).adapter = adapter
 
-        view.findViewById<Button>(R.id.btn_add_schedule).setOnClickListener {
+        addButton = view.findViewById<Button>(R.id.btn_add_schedule)
+        addButton?.setOnClickListener {
             showAddScheduleDialog()
         }
 
         loadSchedules()
         syncToProgramStore()
+        applyReadOnlyState()
 
         return view
     }
@@ -110,6 +114,7 @@ class PumpScheduleFragment : Fragment() {
     // ➕ AJOUT PROGRAMMATION
     // ---------------------------------------------------------------------
     private fun showAddScheduleDialog() {
+        if (isReadOnly) return
 
         val dialogView =
             layoutInflater.inflate(R.layout.dialog_add_schedule, null)
@@ -520,4 +525,24 @@ class PumpScheduleFragment : Fragment() {
     }
 
     fun getSchedules(): List<PumpSchedule> = schedules
+
+    fun replaceSchedules(newSchedules: List<PumpSchedule>) {
+        schedules.clear()
+        schedules.addAll(newSchedules)
+        adapter.notifyDataSetChanged()
+    }
+
+    fun setReadOnly(readOnly: Boolean) {
+        isReadOnly = readOnly
+        applyReadOnlyState()
+    }
+
+    private fun applyReadOnlyState() {
+        val enabled = !isReadOnly
+        addButton?.isEnabled = enabled
+        addButton?.alpha = if (enabled) 1f else 0.5f
+        if (this::adapter.isInitialized) {
+            adapter.setReadOnly(isReadOnly)
+        }
+    }
 }

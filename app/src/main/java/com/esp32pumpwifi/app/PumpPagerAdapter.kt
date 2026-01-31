@@ -26,6 +26,18 @@ class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activ
         }
     }
 
+    fun updateSchedules(pumpNumber: Int, schedules: List<PumpSchedule>) {
+        val index = pumpNumber - 1
+        if (index !in fragments.indices) return
+        fragments[index].replaceSchedules(schedules)
+    }
+
+    fun setReadOnly(readOnly: Boolean) {
+        fragments.forEach { fragment ->
+            fragment.setReadOnly(readOnly)
+        }
+    }
+
     // 🔵 Renvoie le nom personnalisé d'une pompe (pour les onglets)
     fun getPumpName(position: Int): String {
 

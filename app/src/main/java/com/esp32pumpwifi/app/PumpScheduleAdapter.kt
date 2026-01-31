@@ -11,7 +11,8 @@ import kotlin.math.roundToInt
 class PumpScheduleAdapter(
     private val context: Context,
     private val schedules: MutableList<PumpSchedule>,
-    private val onScheduleChanged: () -> Unit
+    private val onScheduleChanged: () -> Unit,
+    private var readOnly: Boolean = false
 ) : BaseAdapter() {
 
     companion object {
@@ -55,10 +56,19 @@ class PumpScheduleAdapter(
         // --- Switch ON/OFF ---
         swEnabled.setOnCheckedChangeListener(null)
         swEnabled.isChecked = schedule.enabled
-        swEnabled.setOnCheckedChangeListener { _, checked ->
-            schedule.enabled = checked
-            onScheduleChanged()
+        swEnabled.isEnabled = !readOnly
+        if (!readOnly) {
+            swEnabled.setOnCheckedChangeListener { _, checked ->
+                schedule.enabled = checked
+                onScheduleChanged()
+            }
         }
+        btnEdit.isEnabled = !readOnly
+        btnDelete.isEnabled = !readOnly
+        val actionAlpha = if (readOnly) 0.5f else 1f
+        swEnabled.alpha = actionAlpha
+        btnEdit.alpha = actionAlpha
+        btnDelete.alpha = actionAlpha
 
         // -----------------------------------------------------------------
         // ✅ Parse + validation HH:MM (00-23 / 00-59)
@@ -79,6 +89,7 @@ class PumpScheduleAdapter(
         // ✏ MODIFIER (AVEC CONTRÔLE CONFLITS)
         // -----------------------------------------------------------------
         btnEdit.setOnClickListener {
+            if (readOnly) return@setOnClickListener
 
             val dialogView = LayoutInflater.from(context)
                 .inflate(R.layout.dialog_add_schedule, null)
@@ -157,6 +168,7 @@ class PumpScheduleAdapter(
         // 🗑 SUPPRIMER (CORRECT)
         // -----------------------------------------------------------------
         btnDelete.setOnClickListener {
+            if (readOnly) return@setOnClickListener
             schedules.removeAt(sourceIndex)
             notifyDataSetChanged()
             onScheduleChanged()
@@ -313,4 +325,9 @@ class PumpScheduleAdapter(
         val blockingMessage: String? = null,
         val warningMessage: String? = null
     )
+
+    fun setReadOnly(readOnly: Boolean) {
+        this.readOnly = readOnly
+        notifyDataSetChanged()
+    }
 }

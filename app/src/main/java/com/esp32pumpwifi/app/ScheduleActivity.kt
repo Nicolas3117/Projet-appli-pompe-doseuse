@@ -15,17 +15,20 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.math.roundToInt
 
 class ScheduleActivity : AppCompatActivity() {
 
     private lateinit var viewPager: ViewPager2
     private lateinit var tabLayout: TabLayout
     private lateinit var adapter: PumpPagerAdapter
+    private lateinit var toolbar: MaterialToolbar
 
     // ✅ Empreinte de la programmation envoyée / chargée
     private var lastProgramHash: String? = null
@@ -38,12 +41,13 @@ class ScheduleActivity : AppCompatActivity() {
 
     // ✅ Anti double-finish / double popup (back spam)
     private var exitInProgress = false
+    private var isReadOnly = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_schedule)
 
-        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
+        toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
         toolbar.setNavigationContentDescription("← Retour")
         toolbar.setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
@@ -189,25 +193,24 @@ class ScheduleActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val espProgram = fetchProgramFromEsp(active.ip)
 
-            if (espProgram == null) {
-                AlertDialog.Builder(this@ScheduleActivity)
-                    .setTitle("Pompe déconnectée")
-                    .setMessage("⚠️ Pompe déconnectée.\nImpossible de lire la programmation.")
-                    .setPositiveButton("OK", null)
-                    .create()
-                    .also { dlg ->
-                        if (isFinishing || isDestroyed) return@launch
-                        dlg.show()
-                    }
+            if (espProgram == null || espProgram.length < 48 * 12) {
+                setConnectionState(false)
                 return@launch
             }
 
-            val localProgram = ProgramStore.buildMessageMs(this@ScheduleActivity)
-
-            if (espProgram != localProgram) {
-                val diffs = computeAllDiffs(localProgram, espProgram)
-                showAllDiffsDialog(diffs) // ✅ popup détaillée
+            val activeSchedulesResult = buildActiveSchedulesFromEsp(espProgram, active.id)
+            if (activeSchedulesResult.needsCalibration) {
+                setReadOnlyState("Débit non calibré — volumes indisponibles")
+            } else {
+                setConnectionState(true)
             }
+            val mergedByPump = mergeSchedulesFromEsp(espProgram, active.id, activeSchedulesResult)
+            persistMergedSchedules(active.id, mergedByPump)
+            updateUiSchedules(mergedByPump)
+            syncProgramStoreFromEsp(espProgram)
+
+            // ✅ Référence après sync
+            lastProgramHash = ProgramStore.buildMessageMs(this@ScheduleActivity)
         }
     }
 
@@ -472,5 +475,175 @@ class ScheduleActivity : AppCompatActivity() {
                 if (isFinishing || isDestroyed) return
                 dlg.show()
             }
+    }
+
+    // ------------------------------------------------------------
+    // 🔄 Synchronisation /read_ms → schedules (active + local disabled)
+    // ------------------------------------------------------------
+    private fun mergeSchedulesFromEsp(
+        espProgram: String,
+        espId: Long,
+        activeSchedulesResult: ActiveSchedulesResult
+    ): Map<Int, List<PumpSchedule>> {
+        val activeFromEsp = activeSchedulesResult.schedulesByPump
+        val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
+        val mergedByPump = mutableMapOf<Int, List<PumpSchedule>>()
+
+        for (pump in 1..4) {
+            val localJson = schedulesPrefs.getString("esp_${espId}_pump$pump", null)
+            val localSchedules = localJson?.let { PumpScheduleJson.fromJson(it) } ?: emptyList()
+            val suspendedLocal = localSchedules.filter { !it.enabled }
+
+            val activeSchedules = activeFromEsp[pump].orEmpty()
+            val activeKeys = activeSchedules
+                .map { it.time to it.quantityTenth }
+                .toSet()
+            val filteredSuspendedLocal = suspendedLocal.filter {
+                it.time to it.quantityTenth !in activeKeys
+            }
+            val merged = (filteredSuspendedLocal + activeSchedules)
+                .sortedBy { it.time }
+            mergedByPump[pump] = merged
+        }
+
+        return mergedByPump
+    }
+
+    private data class ActiveSchedulesResult(
+        val schedulesByPump: Map<Int, List<PumpSchedule>>,
+        val needsCalibration: Boolean
+    )
+
+    private fun buildActiveSchedulesFromEsp(
+        espProgram: String,
+        espId: Long
+    ): ActiveSchedulesResult {
+        val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        val byPump = (1..4).associateWith { mutableListOf<PumpSchedule>() }.toMutableMap()
+        val seen = (1..4).associateWith { mutableSetOf<Pair<String, Int>>() }.toMutableMap()
+        var needsCalibration = false
+
+        if (espProgram.length < 48 * 12) {
+            return ActiveSchedulesResult(emptyMap(), false)
+        }
+
+        for (lineIndex in 0 until 48) {
+            val start = lineIndex * 12
+            val line = espProgram.substring(start, start + 12)
+            if (line == "000000000000" || line.length != 12) continue
+            if (line[0] != '1') continue
+
+            val pump = line.substring(1, 2).toIntOrNull() ?: continue
+            if (pump !in 1..4) continue
+
+            val hour = line.substring(2, 4).toIntOrNull() ?: continue
+            val minute = line.substring(4, 6).toIntOrNull() ?: continue
+            val durationMs = line.substring(6, 12).toIntOrNull() ?: continue
+
+            if (hour !in 0..23 || minute !in 0..59) continue
+            if (durationMs !in 50..600000) continue
+
+            val flow = prefs.getFloat("esp_${espId}_pump${pump}_flow", 0f)
+            if (flow <= 0f) {
+                needsCalibration = true
+                continue
+            }
+            val qtyTenth = (flow * (durationMs / 1000f) * 10f).roundToInt()
+
+            val time = "%02d:%02d".format(hour, minute)
+            val key = time to qtyTenth
+            if (seen[pump]?.add(key) != true) continue
+
+            byPump[pump]?.add(
+                PumpSchedule(
+                    pumpNumber = pump,
+                    time = time,
+                    quantityTenth = qtyTenth,
+                    enabled = true
+                )
+            )
+        }
+
+        return ActiveSchedulesResult(byPump.mapValues { it.value.toList() }, needsCalibration)
+    }
+
+    private fun persistMergedSchedules(
+        espId: Long,
+        mergedByPump: Map<Int, List<PumpSchedule>>
+    ) {
+        val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
+        val editor = schedulesPrefs.edit()
+        val gson = Gson()
+        for ((pump, schedules) in mergedByPump) {
+            editor.putString(
+                "esp_${espId}_pump$pump",
+                PumpScheduleJson.toJson(schedules, gson)
+            )
+        }
+        editor.apply()
+    }
+
+    private fun updateUiSchedules(mergedByPump: Map<Int, List<PumpSchedule>>) {
+        for (pump in 1..4) {
+            val schedules = mergedByPump[pump].orEmpty()
+            adapter.updateSchedules(pump, schedules)
+        }
+    }
+
+    private fun syncProgramStoreFromEsp(espProgram: String) {
+        if (espProgram.length < 48 * 12) return
+
+        for (pump in 1..4) {
+            while (ProgramStore.count(this, pump) > 0) {
+                ProgramStore.removeLine(this, pump, 0)
+            }
+        }
+
+        for (lineIndex in 0 until 48) {
+            val start = lineIndex * 12
+            val line = espProgram.substring(start, start + 12)
+            if (line == "000000000000" || line.length != 12) continue
+            if (line[0] != '1') continue
+
+            val pump = line.substring(1, 2).toIntOrNull() ?: continue
+            if (pump !in 1..4) continue
+
+            val hour = line.substring(2, 4).toIntOrNull() ?: continue
+            val minute = line.substring(4, 6).toIntOrNull() ?: continue
+            val durationMs = line.substring(6, 12).toIntOrNull() ?: continue
+
+            if (hour !in 0..23 || minute !in 0..59) continue
+            if (durationMs !in 50..600000) continue
+
+            ProgramStore.addLine(
+                this,
+                pump,
+                ProgramLine(
+                    enabled = true,
+                    pump = pump,
+                    hour = hour,
+                    minute = minute,
+                    qtyMs = durationMs
+                )
+            )
+        }
+    }
+
+    private fun setConnectionState(connected: Boolean) {
+        toolbar.subtitle = if (connected) null else "Non connecté"
+        setReadOnlyMode(!connected, toolbar.subtitle?.toString())
+    }
+
+    private fun setReadOnlyMode(readOnly: Boolean, subtitle: String?) {
+        val subtitleChanged = toolbar.subtitle?.toString() != subtitle
+        if (isReadOnly == readOnly && !subtitleChanged) return
+        isReadOnly = readOnly
+        toolbar.subtitle = subtitle
+        adapter.setReadOnly(readOnly)
+        invalidateOptionsMenu()
+    }
+
+    private fun setReadOnlyState(message: String) {
+        setReadOnlyMode(true, message)
     }
 }
