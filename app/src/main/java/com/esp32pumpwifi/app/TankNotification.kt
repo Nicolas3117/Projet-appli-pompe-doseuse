@@ -15,32 +15,27 @@ object TankNotification {
     private const val LOW_CHANNEL_ID = "tank_low_alert"
 
     // =====================================================
-    // 🧠 NOM COMPLET : MODULE (displayName) + POMPE
+    // ✅ NOM MODULE (displayName)
     // =====================================================
-    private fun getFullPumpName(
-        context: Context,
-        espId: Long,
-        pumpNum: Int
-    ): String {
+    private fun getModuleName(context: Context, espId: Long): String {
+        return Esp32Manager.getById(context, espId)?.displayName ?: "Module"
+    }
 
-        // ✅ NOM MODULE (SOURCE OFFICIELLE)
-        val moduleName =
-            Esp32Manager.getById(context, espId)?.displayName
-                ?: "Module"
-
-        // ✅ NOM POMPE (PERSONNALISÉ)
+    // =====================================================
+    // ✅ NOM POMPE (PERSONNALISÉ) — pompe seulement
+    // =====================================================
+    private fun getPumpNameOnly(context: Context, espId: Long, pumpNum: Int): String {
         val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
-        val pumpName =
-            prefs.getString(
-                "esp_${espId}_pump${pumpNum}_name",
-                "Pompe $pumpNum"
-            ) ?: "Pompe $pumpNum"
-
-        return "$moduleName – $pumpName"
+        return prefs.getString(
+            "esp_${espId}_pump${pumpNum}_name",
+            "Pompe $pumpNum"
+        ) ?: "Pompe $pumpNum"
     }
 
     // =====================================================
     // 🚨 RÉSERVOIR VIDE
+    // - Titre : "🚨 Réservoir vide — Pompe X"
+    // - Texte : "Module • 0%"
     // =====================================================
     fun showTankEmpty(
         context: Context,
@@ -49,12 +44,14 @@ object TankNotification {
     ) {
         ensureChannels(context)
 
-        val fullName = getFullPumpName(context, espId, pumpNum)
+        val pumpName = getPumpNameOnly(context, espId, pumpNum)
+        val moduleName = getModuleName(context, espId)
 
         val notification = NotificationCompat.Builder(context, EMPTY_CHANNEL_ID)
+            // TODO optionnel: remplace par ton icône gyrophare custom si tu en as une
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("🚨 $fullName")
-            .setContentText("Réservoir vide – distribution impossible")
+            .setContentTitle("🚨 Réservoir vide — $pumpName")
+            .setContentText("$moduleName • 0%")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()
@@ -65,6 +62,8 @@ object TankNotification {
 
     // =====================================================
     // ⚠️ NIVEAU BAS
+    // - Titre : "⚠️ Niveau bas — Pompe X"
+    // - Texte : "Module • 18%"
     // =====================================================
     fun showTankLowLevel(
         context: Context,
@@ -74,12 +73,14 @@ object TankNotification {
     ) {
         ensureChannels(context)
 
-        val fullName = getFullPumpName(context, espId, pumpNum)
+        val pumpName = getPumpNameOnly(context, espId, pumpNum)
+        val moduleName = getModuleName(context, espId)
 
         val notification = NotificationCompat.Builder(context, LOW_CHANNEL_ID)
+            // TODO optionnel: remplace par ton icône panneau attention custom si tu en as une
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("⚠️ $fullName")
-            .setContentText("$percent % restant")
+            .setContentTitle("⚠️ Niveau bas — $pumpName")
+            .setContentText("$moduleName • ${percent}%")
             .setAutoCancel(true)
             .build()
 
@@ -114,9 +115,9 @@ object TankNotification {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
         val manager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE)
-                    as NotificationManager
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+        // ⚠️ Android ne met pas à jour le nom d’un canal existant
         if (manager.getNotificationChannel(channelId) != null) return
 
         val soundUri =
