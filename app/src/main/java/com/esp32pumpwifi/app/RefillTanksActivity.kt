@@ -3,6 +3,8 @@ package com.esp32pumpwifi.app
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.view.KeyEvent
+import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -10,6 +12,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.snackbar.Snackbar
 
 class RefillTanksActivity : AppCompatActivity() {
 
@@ -101,6 +104,14 @@ class RefillTanksActivity : AppCompatActivity() {
         return true
     }
 
+    private fun showThresholdSaved() {
+        Snackbar.make(
+            findViewById(R.id.root_refill),
+            getString(R.string.threshold_saved),
+            Snackbar.LENGTH_SHORT
+        ).show()
+    }
+
     private fun confirmTankReset(
         prefs: SharedPreferences,
         espId: Long,
@@ -189,8 +200,13 @@ class RefillTanksActivity : AppCompatActivity() {
         capacityEt.setText(if (capacity > 0) capacity.toString() else "")
         alertEt.setText(threshold.toString())
 
+        var skipNextFocusSave = false
         alertEt.setOnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) {
+                if (skipNextFocusSave) {
+                    skipNextFocusSave = false
+                    return@setOnFocusChangeListener
+                }
                 alertEt.text.toString().toIntOrNull()?.let {
                     prefs.edit()
                         .putInt(
@@ -198,8 +214,30 @@ class RefillTanksActivity : AppCompatActivity() {
                             it
                         )
                         .apply()
+                    showThresholdSaved()
                 }
             }
+        }
+
+        alertEt.setOnEditorActionListener { _, actionId, event ->
+            val isDone = actionId == EditorInfo.IME_ACTION_DONE
+            val isEnter = event != null &&
+                event.keyCode == KeyEvent.KEYCODE_ENTER &&
+                event.action == KeyEvent.ACTION_DOWN
+            if (isDone || isEnter) {
+                alertEt.text.toString().toIntOrNull()?.let {
+                    skipNextFocusSave = true
+                    prefs.edit()
+                        .putInt(
+                            "esp_${espId}_pump${pumpNum}_low_threshold",
+                            it
+                        )
+                        .apply()
+                    showThresholdSaved()
+                }
+                return@setOnEditorActionListener true
+            }
+            false
         }
     }
 }
