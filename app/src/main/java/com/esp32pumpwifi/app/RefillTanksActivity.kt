@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
@@ -72,7 +73,7 @@ class RefillTanksActivity : AppCompatActivity() {
         )
 
         val tankAlertSaveButtons = arrayOf(
-            findViewById<Button>(R.id.btn_save_tank_alert1),
+            findViewById<View>(R.id.btn_save_tank_alert1),
             findViewById(R.id.btn_save_tank_alert2),
             findViewById(R.id.btn_save_tank_alert3),
             findViewById(R.id.btn_save_tank_alert4)
