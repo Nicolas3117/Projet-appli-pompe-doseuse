@@ -125,6 +125,21 @@ object ProgramStore {
     }
 
     // ---------------------------------------------------------------------
+    // 💾 Sauvegarde lignes encodées — espId explicite
+    // ---------------------------------------------------------------------
+    private fun saveEncodedLines(
+        context: Context,
+        espId: Long,
+        pump: Int,
+        lines: List<String>
+    ) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(key(context, espId, pump), lines.joinToString(";"))
+            .apply()
+    }
+
+    // ---------------------------------------------------------------------
     // ➕ Ajout ligne (max 12 par pompe)
     // ---------------------------------------------------------------------
     fun addLine(
@@ -141,6 +156,27 @@ object ProgramStore {
         saveEncodedLines(context, pump, list)
 
         Log.e("PROGRAM_STORE", "➕ P$pump ADD → $encoded")
+        return true
+    }
+
+    // ---------------------------------------------------------------------
+    // ➕ Ajout ligne (max 12 par pompe) — espId explicite
+    // ---------------------------------------------------------------------
+    fun addLine(
+        context: Context,
+        espId: Long,
+        pump: Int,
+        line: ProgramLine
+    ): Boolean {
+        val list = loadEncodedLines(context, espId, pump)
+        if (list.size >= MAX_LINES_PER_PUMP) return false
+
+        val encoded = line.toEsp12()
+        list.add(encoded)
+
+        saveEncodedLines(context, espId, pump, list)
+
+        Log.e("PROGRAM_STORE", "➕ P$pump ADD → $encoded (espId=$espId)")
         return true
     }
 
@@ -163,10 +199,35 @@ object ProgramStore {
     }
 
     // ---------------------------------------------------------------------
+    // ❌ Suppression ligne — espId explicite
+    // ---------------------------------------------------------------------
+    fun removeLine(
+        context: Context,
+        espId: Long,
+        pump: Int,
+        index: Int
+    ): Boolean {
+        val list = loadEncodedLines(context, espId, pump)
+        if (index !in list.indices) return false
+
+        val removed = list.removeAt(index)
+        saveEncodedLines(context, espId, pump, list)
+
+        Log.e("PROGRAM_STORE", "❌ P$pump REMOVE → $removed (espId=$espId)")
+        return true
+    }
+
+    // ---------------------------------------------------------------------
     // 📊 Nombre de lignes (UI)
     // ---------------------------------------------------------------------
     fun count(context: Context, pump: Int): Int =
         loadEncodedLines(context, pump).size
+
+    // ---------------------------------------------------------------------
+    // 📊 Nombre de lignes (UI) — espId explicite
+    // ---------------------------------------------------------------------
+    fun count(context: Context, espId: Long, pump: Int): Int =
+        loadEncodedLines(context, espId, pump).size
 
     // ---------------------------------------------------------------------
     // 🔍 OUTILS INTERNES — calcul de plage

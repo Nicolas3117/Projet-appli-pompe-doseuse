@@ -460,8 +460,8 @@ class PumpScheduleFragment : Fragment() {
         val prefs =
             requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
-        while (ProgramStore.count(requireContext(), pumpNumber) > 0) {
-            ProgramStore.removeLine(requireContext(), pumpNumber, 0)
+        while (ProgramStore.count(requireContext(), active.id, pumpNumber) > 0) {
+            ProgramStore.removeLine(requireContext(), active.id, pumpNumber, 0)
         }
 
         val flow =
@@ -520,6 +520,7 @@ class PumpScheduleFragment : Fragment() {
 
             ProgramStore.addLine(
                 requireContext(),
+                active.id,
                 pumpNumber,
                 line
             )

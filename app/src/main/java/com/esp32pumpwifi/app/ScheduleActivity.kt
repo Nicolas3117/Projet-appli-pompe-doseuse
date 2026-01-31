@@ -593,9 +593,11 @@ class ScheduleActivity : AppCompatActivity() {
     private fun syncProgramStoreFromEsp(espProgram: String) {
         if (espProgram.length < 48 * 12) return
 
+        val active = Esp32Manager.getActive(this) ?: return
+
         for (pump in 1..4) {
-            while (ProgramStore.count(this, pump) > 0) {
-                ProgramStore.removeLine(this, pump, 0)
+            while (ProgramStore.count(this, active.id, pump) > 0) {
+                ProgramStore.removeLine(this, active.id, pump, 0)
             }
         }
 
@@ -617,6 +619,7 @@ class ScheduleActivity : AppCompatActivity() {
 
             ProgramStore.addLine(
                 this,
+                active.id,
                 pump,
                 ProgramLine(
                     enabled = true,
