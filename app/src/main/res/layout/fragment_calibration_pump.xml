@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <EditText
+            android:id="@+id/edit_duration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Durée (s)"
+            android:inputType="numberDecimal" />
+
+        <EditText
+            android:id="@+id/edit_volume"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Volume (mL)"
+            android:inputType="numberDecimal"
+            android:digits="0123456789.," />
+
+        <EditText
+            android:id="@+id/edit_volume_bis"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Volume bis (mL) - optionnel"
+            android:inputType="numberDecimal"
+            android:digits="0123456789.," />
+
+        <Button
+            android:id="@+id/btn_start"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Démarrer" />
+
+        <Button
+            android:id="@+id/btn_calc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Calculer" />
+
+        <TextView
+            android:id="@+id/tv_result"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Renommer la pompe"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/edit_pump_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Nom de la pompe" />
+
+            <ImageButton
+                android:id="@+id/btn_save_pump_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="Sauvegarder le nom"
+                android:src="@android:drawable/ic_menu_save"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

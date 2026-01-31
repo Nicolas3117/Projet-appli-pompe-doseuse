@@ -4,11 +4,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.viewpager2.adapter.FragmentStateAdapter
 
-class CalibrationTabsPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activity) {
+class CalibrationTabsPagerAdapter(
+    activity: AppCompatActivity,
+    private val moduleId: Long
+) : FragmentStateAdapter(activity) {
 
     override fun getItemCount(): Int = 4
 
     override fun createFragment(position: Int): Fragment {
-        return Fragment()
+        return CalibrationPumpFragment.newInstance(moduleId, position + 1)
     }
 }

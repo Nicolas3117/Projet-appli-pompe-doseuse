@@ -44,7 +44,7 @@ class CalibrationTabsActivity : AppCompatActivity() {
         viewPager = findViewById(R.id.view_pager_calibration)
         tabLayout = findViewById(R.id.tab_layout_calibration)
 
-        adapter = CalibrationTabsPagerAdapter(this)
+        adapter = CalibrationTabsPagerAdapter(this, moduleId)
         viewPager.adapter = adapter
 
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
