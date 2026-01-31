@@ -202,7 +202,10 @@ class PumpScheduleFragment : Fragment() {
             )
         )
 
-        adapter.notifyDataSetChanged()
+        // ✅ Garde safe : évite crash si appelé avant init (cas limite)
+        if (this::adapter.isInitialized) {
+            adapter.notifyDataSetChanged()
+        }
         saveSchedules()
         syncToProgramStore()
     }
@@ -440,7 +443,10 @@ class PumpScheduleFragment : Fragment() {
         schedules.clear()
         schedules.addAll(loaded)
 
-        adapter.notifyDataSetChanged()
+        // ✅ Garde safe : évite crash si loadSchedules est appelé avant init (cas limite)
+        if (this::adapter.isInitialized) {
+            adapter.notifyDataSetChanged()
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -533,7 +539,9 @@ class PumpScheduleFragment : Fragment() {
     fun replaceSchedules(newSchedules: List<PumpSchedule>) {
         schedules.clear()
         schedules.addAll(newSchedules)
-        adapter.notifyDataSetChanged()
+        if (this::adapter.isInitialized) {
+            adapter.notifyDataSetChanged()
+        }
     }
 
     fun setReadOnly(readOnly: Boolean) {
