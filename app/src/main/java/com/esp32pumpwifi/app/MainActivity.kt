@@ -52,8 +52,21 @@ class MainActivity : AppCompatActivity() {
 
     // pour tenter un retour STA automatique sans appuyer sur "+"
     private var lastStaProbeMs = 0L
-    private val STA_PROBE_INTERVAL_MS = 10_000L
-    private val UI_REFRESH_MS = 15_000L
+
+    private companion object {
+        private const val AP_IP = "192.168.4.1"
+        private const val CONNECTION_POLL_MS = 2000L
+        private const val STA_PROBE_INTERVAL_MS = 10_000L
+        private const val UI_REFRESH_MS = 15_000L
+
+        private const val ID_ENDPOINT = "/id"
+        private const val HTTP_TIMEOUT_MS = 2000
+
+        // Program line: "1HHMMDDDDDD" (12 digits)
+        private const val LINE_LEN = 12
+        private const val MIN_DURATION_MS = 50
+        private const val MAX_DURATION_MS = 600_000
+    }
 
     // ================== FUTUR PLAN (Option A) ==================
     private data class FuturePlan(val count: Int, val ml: Float)
@@ -77,15 +90,13 @@ class MainActivity : AppCompatActivity() {
 
         for (line in encodedLines) {
             val t = line.trim()
-            if (t.length != 12 || !t.all(Char::isDigit)) continue
-            if (t.all { it == '0' }) continue
-            if (t.firstOrNull() != '1') continue
+            if (!isValidEnabledProgramLine(t)) continue
 
             val hh = t.substring(2, 4).toIntOrNull() ?: continue
             val mm = t.substring(4, 6).toIntOrNull() ?: continue
             val durationMs = t.substring(6, 12).toIntOrNull() ?: continue
             if (hh !in 0..23 || mm !in 0..59) continue
-            if (durationMs !in 50..600000) continue
+            if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) continue
 
             val minutes = hh * 60 + mm
 
@@ -117,13 +128,11 @@ class MainActivity : AppCompatActivity() {
             val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
             val systemBarsBottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
             val navBarsBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            val keyboardBottom = if (imeBottom == 0) {
-                max(systemBarsBottom, navBarsBottom)
-            } else {
-                max(imeBottom, systemBarsBottom)
-            }
-            val target = baseBottom + keyboardBottom + extraBottomPadding
-            view.updatePadding(bottom = target)
+
+            val keyboardBottom =
+                if (imeBottom == 0) max(systemBarsBottom, navBarsBottom) else max(imeBottom, systemBarsBottom)
+
+            view.updatePadding(bottom = baseBottom + keyboardBottom + extraBottomPadding)
             insets
         }
 
@@ -197,8 +206,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         tvActiveModule.text = "Sélectionné : ${activeModule.displayName}"
+
         DailyProgramTrackingStore.resetIfNewDay(this)
         TankScheduleHelper.recalculateFromLastTime(this, activeModule.id)
+
         updateTankSummary(activeModule)
         updateDailySummary(activeModule)
 
@@ -207,16 +218,17 @@ class MainActivity : AppCompatActivity() {
         startConnectionWatcher()
 
         uiRefreshJob?.cancel()
-        uiRefreshJob = lifecycleScope.launch {
-            while (true) {
-                Esp32Manager.getActive(this@MainActivity)?.let {
-                    TankScheduleHelper.recalculateFromLastTime(this@MainActivity, it.id)
-                    updateTankSummary(it)
-                    updateDailySummary(it)
+        uiRefreshJob =
+            lifecycleScope.launch {
+                while (true) {
+                    Esp32Manager.getActive(this@MainActivity)?.let {
+                        TankScheduleHelper.recalculateFromLastTime(this@MainActivity, it.id)
+                        updateTankSummary(it)
+                        updateDailySummary(it)
+                    }
+                    delay(UI_REFRESH_MS)
                 }
-                delay(UI_REFRESH_MS)
             }
-        }
     }
 
     override fun onPause() {
@@ -226,51 +238,52 @@ class MainActivity : AppCompatActivity() {
         uiRefreshJob = null
     }
 
-    // ================== WATCHER (corrigé) ==================
+    // ================== WATCHER ==================
     private fun startConnectionWatcher() {
         if (connectionJob?.isActive == true) return
 
-        connectionJob = lifecycleScope.launch {
-            while (true) {
+        connectionJob =
+            lifecycleScope.launch {
+                while (true) {
 
-                val active = Esp32Manager.getActive(this@MainActivity)
-                if (active == null) {
-                    updateConnectionUi(false)
-                    setManualButtonsEnabled(false)
-                    delay(2000)
-                    continue
-                }
+                    val active = Esp32Manager.getActive(this@MainActivity)
+                    if (active == null) {
+                        updateConnectionUi(false)
+                        setManualButtonsEnabled(false)
+                        delay(CONNECTION_POLL_MS)
+                        continue
+                    }
 
-                if (!isCheckingConnection.compareAndSet(false, true)) {
-                    delay(2000)
-                    continue
-                }
+                    if (!isCheckingConnection.compareAndSet(false, true)) {
+                        delay(CONNECTION_POLL_MS)
+                        continue
+                    }
 
-                try {
-                    val result = testConnectionWithFallbackAndStaReturn(active)
+                    try {
+                        val result = testConnectionWithFallbackAndStaReturn(active)
 
-                    if (result.connected) {
-                        consecutiveFailures = 0
-                        updateConnectionUi(true)
-                        setManualButtonsEnabled(true)
-                        hasShownNotFoundPopup = false
-                    } else {
-                        consecutiveFailures++
-                        if (consecutiveFailures >= 2) {
-                            updateConnectionUi(false)
-                            setManualButtonsEnabled(false)
-                            if (result.fallbackAttempted && !result.fallbackSucceeded) {
-                                maybeShowEsp32NotFoundPopup()
+                        if (result.connected) {
+                            consecutiveFailures = 0
+                            updateConnectionUi(true)
+                            setManualButtonsEnabled(true)
+                            hasShownNotFoundPopup = false
+                        } else {
+                            consecutiveFailures++
+                            if (consecutiveFailures >= 2) {
+                                updateConnectionUi(false)
+                                setManualButtonsEnabled(false)
+                                if (result.fallbackAttempted && !result.fallbackSucceeded) {
+                                    maybeShowEsp32NotFoundPopup()
+                                }
                             }
                         }
+                    } finally {
+                        isCheckingConnection.set(false)
                     }
-                } finally {
-                    isCheckingConnection.set(false)
-                }
 
-                delay(2000)
+                    delay(CONNECTION_POLL_MS)
+                }
             }
-        }
     }
 
     private fun stopConnectionWatcher() {
@@ -280,21 +293,28 @@ class MainActivity : AppCompatActivity() {
         lastStaProbeMs = 0L
     }
 
+    private data class ConnectionCheckResult(
+        val connected: Boolean,
+        val fallbackAttempted: Boolean,
+        val fallbackSucceeded: Boolean
+    )
+
     // ================== RÉSEAU ==================
     private suspend fun testConnectionWithFallbackAndStaReturn(module: EspModule): ConnectionCheckResult =
         withContext(Dispatchers.IO) {
 
-            val primaryPumpName = fetchPumpNameForIp(module.ip)
-            if (primaryPumpName == module.internalName) {
+            val primaryName = fetchPumpNameForIp(module.ip)
+            if (primaryName == module.internalName) {
 
-                if (module.ip != "192.168.4.1") {
+                if (module.ip != AP_IP) {
                     saveLastStaIp(module.id, module.ip)
                 } else {
                     val now = System.currentTimeMillis()
                     if (now - lastStaProbeMs >= STA_PROBE_INTERVAL_MS) {
                         lastStaProbeMs = now
+
                         val lastSta = loadLastStaIp(module.id)
-                        if (!lastSta.isNullOrBlank() && lastSta != "192.168.4.1") {
+                        if (!lastSta.isNullOrBlank() && lastSta != AP_IP) {
                             val staName = fetchPumpNameForIp(lastSta)
                             if (staName == module.internalName) {
                                 module.ip = lastSta
@@ -309,12 +329,10 @@ class MainActivity : AppCompatActivity() {
                 return@withContext ConnectionCheckResult(true, false, false)
             }
 
-            val fallbackIp = "192.168.4.1"
-            val fallbackPumpName = fetchPumpNameForIp(fallbackIp)
-
-            if (fallbackPumpName == module.internalName) {
-                if (module.ip != fallbackIp) {
-                    module.ip = fallbackIp
+            val fallbackName = fetchPumpNameForIp(AP_IP)
+            if (fallbackName == module.internalName) {
+                if (module.ip != AP_IP) {
+                    module.ip = AP_IP
                     Esp32Manager.update(this@MainActivity, module)
                 }
                 return@withContext ConnectionCheckResult(true, true, true)
@@ -326,13 +344,14 @@ class MainActivity : AppCompatActivity() {
     private fun fetchPumpNameForIp(ip: String): String? {
         var conn: HttpURLConnection? = null
         return try {
-            val url = URL("http://$ip/id")
-            conn = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 2000
-                readTimeout = 2000
-                useCaches = false
-                setRequestProperty("Connection", "close")
-            }
+            val url = URL("http://$ip$ID_ENDPOINT")
+            conn =
+                (url.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = HTTP_TIMEOUT_MS
+                    readTimeout = HTTP_TIMEOUT_MS
+                    useCaches = false
+                    setRequestProperty("Connection", "close")
+                }
             val response = conn.inputStream.bufferedReader().use { it.readText() }
             extractPumpName(response)
         } catch (_: Exception) {
@@ -361,10 +380,9 @@ class MainActivity : AppCompatActivity() {
             .apply()
     }
 
-    private fun loadLastStaIp(moduleId: Long): String? {
-        return getSharedPreferences("prefs", MODE_PRIVATE)
+    private fun loadLastStaIp(moduleId: Long): String? =
+        getSharedPreferences("prefs", MODE_PRIVATE)
             .getString("esp_${moduleId}_last_sta_ip", null)
-    }
 
     // ================== UI ==================
     private fun maybeShowEsp32NotFoundPopup() {
@@ -390,12 +408,6 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Annuler", null)
             .show()
     }
-
-    private data class ConnectionCheckResult(
-        val connected: Boolean,
-        val fallbackAttempted: Boolean,
-        val fallbackSucceeded: Boolean
-    )
 
     private fun updateConnectionUi(connected: Boolean?) {
         when (connected) {
@@ -447,49 +459,43 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateDailySummary(activeModule: EspModule) {
         dailySummaryContainer.visibility = View.VISIBLE
-        for (pumpNum in 1..4) {
-            updateOneDaily(activeModule.id, pumpNum)
-        }
+        for (pumpNum in 1..4) updateOneDaily(activeModule.id, pumpNum)
     }
 
-    // ✅ IMPORTANT : Suivi quotidien doit utiliser la vérité (synced), pas le brouillon (draft)
-    private fun getPlannedDoseCount(espId: Long, pumpNum: Int): Int {
-        val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
-        val activeLines = encodedLines.filter { line ->
-            val trimmed = line.trim()
-            val isValidFormat = trimmed.length == 12 && trimmed.all(Char::isDigit)
-            val isPlaceholder = trimmed.all { it == '0' }
-            val isEnabled = trimmed.firstOrNull() == '1'
-            isValidFormat && !isPlaceholder && isEnabled
-        }
-        return activeLines.size.coerceAtMost(12)
+    private fun formatMl(value: Float): String =
+        String.format(Locale.FRANCE, "%.1f", value)
+
+    private fun isValidEnabledProgramLine(t: String): Boolean {
+        if (t.length != LINE_LEN) return false
+        if (!t.all(Char::isDigit)) return false
+        if (t.all { it == '0' }) return false
+        return t.firstOrNull() == '1'
     }
 
-    // ✅ IMPORTANT : prochaine dose basée sur ProgramStoreSynced (synced), pas "schedules" (draft)
+    // ✅ prochaine dose basée sur ProgramStoreSynced (synced)
     private fun getNextDoseText(espId: Long, pumpNum: Int): String {
         val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
         if (encodedLines.isEmpty()) return "Aucune dose prévue"
 
         data class Entry(val minutes: Int, val hh: Int, val mm: Int, val durationMs: Int)
 
-        val entries = encodedLines
-            .asSequence()
-            .mapNotNull { line ->
-                val t = line.trim()
-                if (t.length != 12 || !t.all(Char::isDigit)) return@mapNotNull null
-                if (t.all { it == '0' }) return@mapNotNull null
-                if (t.firstOrNull() != '1') return@mapNotNull null
+        val entries =
+            encodedLines
+                .asSequence()
+                .mapNotNull { line ->
+                    val t = line.trim()
+                    if (!isValidEnabledProgramLine(t)) return@mapNotNull null
 
-                val hh = t.substring(2, 4).toIntOrNull() ?: return@mapNotNull null
-                val mm = t.substring(4, 6).toIntOrNull() ?: return@mapNotNull null
-                val durationMs = t.substring(6, 12).toIntOrNull() ?: return@mapNotNull null
-                if (hh !in 0..23 || mm !in 0..59) return@mapNotNull null
-                if (durationMs !in 50..600000) return@mapNotNull null
+                    val hh = t.substring(2, 4).toIntOrNull() ?: return@mapNotNull null
+                    val mm = t.substring(4, 6).toIntOrNull() ?: return@mapNotNull null
+                    val durationMs = t.substring(6, 12).toIntOrNull() ?: return@mapNotNull null
+                    if (hh !in 0..23 || mm !in 0..59) return@mapNotNull null
+                    if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) return@mapNotNull null
 
-                Entry(minutes = hh * 60 + mm, hh = hh, mm = mm, durationMs = durationMs)
-            }
-            .sortedBy { it.minutes }
-            .toList()
+                    Entry(minutes = hh * 60 + mm, hh = hh, mm = mm, durationMs = durationMs)
+                }
+                .sortedBy { it.minutes }
+                .toList()
 
         if (entries.isEmpty()) return "Aucune dose prévue"
 
@@ -507,9 +513,6 @@ class MainActivity : AppCompatActivity() {
         return "Prochaine dose : $doseText\u202FmL à $formattedTime"
     }
 
-    private fun formatMl(value: Float): String =
-        String.format(Locale.FRANCE, "%.1f", value)
-
     // ================== ✅ UPDATE DAILY (Option A "béton") ==================
     private fun updateOneDaily(espId: Long, pumpNum: Int) {
         val nameId = resources.getIdentifier("tv_daily_name_$pumpNum", "id", packageName)
@@ -523,10 +526,8 @@ class MainActivity : AppCompatActivity() {
         if (nameId == 0 || progressId == 0 || minId == 0 || maxId == 0 || doseId == 0 || insideId == 0 || nextDoseId == 0) return
 
         val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
-        val name = prefs.getString(
-            "esp_${espId}_pump${pumpNum}_name",
-            "Pompe $pumpNum"
-        ) ?: "Pompe $pumpNum"
+        val name =
+            prefs.getString("esp_${espId}_pump${pumpNum}_name", "Pompe $pumpNum") ?: "Pompe $pumpNum"
 
         // Done (immuable aujourd’hui)
         val rawDoneDoseCountToday =
@@ -544,33 +545,22 @@ class MainActivity : AppCompatActivity() {
         val plannedDoseCountToday = rawDoneDoseCountToday + future.count
         val plannedMlToday = rawDoneMlToday + future.ml
 
-        val doneDoseCountToday: Int
-        val doneMlToday: Float
-        val progressValue: Int
-        val doseText: String
+        val (doneDoseCountToday, doneMlToday, progressValue, doseText) =
+            if (plannedDoseCountToday <= 0 || plannedMlToday <= 0f) {
+                Quad(0, 0f, 0, "Dose : 0/0")
+            } else {
+                val safeDoneDose = min(rawDoneDoseCountToday, plannedDoseCountToday)
+                val safeDoneMl = min(rawDoneMlToday, plannedMlToday)
+                val pct = (safeDoneMl / plannedMlToday * 100f).roundToInt()
+                Quad(safeDoneDose, safeDoneMl, pct, "Dose : $safeDoneDose/$plannedDoseCountToday")
+            }
 
-        if (plannedDoseCountToday <= 0 || plannedMlToday <= 0f) {
-            // Rien de prévu aujourd'hui
-            doneDoseCountToday = 0
-            doneMlToday = 0f
-            progressValue = 0
-            doseText = "Dose : 0/0"
-        } else {
-            // done ne doit jamais dépasser planned (sécurité)
-            doneDoseCountToday = min(rawDoneDoseCountToday, plannedDoseCountToday)
-            doneMlToday = min(rawDoneMlToday, plannedMlToday)
-
-            progressValue = (doneMlToday / plannedMlToday * 100f).roundToInt()
-            doseText = "Dose : $doneDoseCountToday/$plannedDoseCountToday"
-        }
-
-        val insideText = if (plannedMlToday <= 0f || doneMlToday <= 0f) {
-            "${formatMl(0f)} ml"
-        } else {
-            "${formatMl(doneMlToday)} ml"
-        }
+        val insideText =
+            if (plannedMlToday <= 0f || doneMlToday <= 0f) "${formatMl(0f)} ml"
+            else "${formatMl(doneMlToday)} ml"
 
         findViewById<TextView>(nameId).text = name
+
         val progressBar = findViewById<ProgressBar>(progressId)
         val insideLabel = findViewById<TextView>(insideId)
 
@@ -588,22 +578,31 @@ class MainActivity : AppCompatActivity() {
         progressBar.post {
             val barWidth = progressBar.width - progressBar.paddingLeft - progressBar.paddingRight
             if (barWidth <= 0) return@post
+
             val labelWidth = insideLabel.width
             val minX = progressBar.paddingLeft.toFloat()
             val maxX = (progressBar.width - progressBar.paddingRight - labelWidth).toFloat()
             val centeredX = progressBar.paddingLeft + (barWidth - labelWidth) / 2f
 
-            val targetX = when {
-                plannedMlToday <= 0f -> centeredX
-                progressValue == 0 -> centeredX
-                else -> {
-                    val x = progressBar.paddingLeft + (barWidth * (progressValue / 100f))
-                    x - labelWidth / 2f
+            val targetX =
+                when {
+                    plannedMlToday <= 0f -> centeredX
+                    progressValue == 0 -> centeredX
+                    else -> {
+                        val x = progressBar.paddingLeft + (barWidth * (progressValue / 100f))
+                        x - labelWidth / 2f
+                    }
                 }
-            }
 
-            val clampedX = targetX.coerceIn(minX, maxX)
-            insideLabel.translationX = clampedX - insideLabel.left
+            insideLabel.translationX = (targetX.coerceIn(minX, maxX)) - insideLabel.left
         }
     }
+
+    // Petit helper interne pour éviter 4 variables mutables
+    private data class Quad(
+        val a: Int,
+        val b: Float,
+        val c: Int,
+        val d: String
+    )
 }
