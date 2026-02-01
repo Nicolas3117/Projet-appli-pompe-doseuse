@@ -474,7 +474,9 @@ class MainActivity : AppCompatActivity() {
         val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", nextHours, nextMins)
         val doseMl = nextSchedule.quantityMl
         val doseText = formatMl(doseMl)
-        return "Prochaine dose : $doseText mL à $formattedTime"
+
+        // ✅ Correction : espace insécable fine entre la valeur et l’unité
+        return "Prochaine dose : $doseText\u202FmL à $formattedTime"
     }
 
     private fun formatMl(value: Float): String =
