@@ -18,13 +18,13 @@ import com.google.android.material.tabs.TabLayoutMediator
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.net.HttpURLConnection
 import java.net.URL
-import kotlin.math.roundToInt
 import kotlin.coroutines.resume
+import kotlin.math.roundToInt
 
 class ScheduleActivity : AppCompatActivity() {
 
@@ -248,6 +248,9 @@ class ScheduleActivity : AppCompatActivity() {
         }
     }
 
+    // ------------------------------------------------------------
+    // ✅ À l’ouverture : /read_ms + compare
+    // ------------------------------------------------------------
     private fun autoCheckProgramOnOpen() {
         val active = Esp32Manager.getActive(this) ?: return
 
@@ -269,18 +272,23 @@ class ScheduleActivity : AppCompatActivity() {
                 setConnectionState(true)
             }
 
+            // ✅ FIX MINIMAL :
+            // On fige d’abord la "vérité" dans ProgramStoreSynced (atomique),
+            // avant toute mise à jour UI/fragments (pump1 en premier).
+            syncProgramStoreFromEsp(espProgram)
+
             val mergedByPump = mergeSchedulesFromEsp(espProgram, active.id, activeSchedulesResult)
             persistMergedSchedules(active.id, mergedByPump)
             updateUiSchedules(mergedByPump)
-
-            // ✅ Vérité ESP32 : alimente ProgramStoreSynced uniquement après /read_ms OK
-            syncProgramStoreFromEsp(espProgram)
 
             // ✅ Vérité de référence = programme ESP lu
             lastProgramHash = espProgram
         }
     }
 
+    // ------------------------------------------------------------
+    // ✅ À la fermeture : /read_ms + compare
+    // ------------------------------------------------------------
     private fun finalCheckOnExitThenFinish() {
         if (exitInProgress) return
         exitInProgress = true
@@ -314,16 +322,15 @@ class ScheduleActivity : AppCompatActivity() {
             if (espProgram != localProgram) {
                 val diffs = computeAllDiffs(localProgram, espProgram)
                 showAllDiffsDialog(diffs)
-
-                // On ferme après OK
-                // (le showAllDiffsDialog a un OK simple ; on garde ton comportement “mode avertissement”)
-                // Note : ne pas faire finish() immédiat sinon le dialog ne s’affiche pas.
             } else {
                 finish()
             }
         }
     }
 
+    // ------------------------------------------------------------
+    // 2️⃣ ENVOI PROGRAMMATION (timeout applicatif)
+    // ------------------------------------------------------------
     private suspend fun sendSchedulesToESP32(active: EspModule, timeoutMs: Long = 4000L): Boolean {
         val message = ProgramStore.buildMessageMs(this)
         Log.i("SCHEDULE_SEND", "➡️ Envoi programmation via NetworkHelper")
@@ -358,6 +365,9 @@ class ScheduleActivity : AppCompatActivity() {
         }
     }
 
+    // ------------------------------------------------------------
+    // 🔍 Vérification ESP32 (/id)
+    // ------------------------------------------------------------
     private suspend fun verifyEsp32Connection(module: EspModule): Boolean =
         withContext(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
@@ -386,6 +396,9 @@ class ScheduleActivity : AppCompatActivity() {
             }
         }
 
+    // ------------------------------------------------------------
+    // 📥 Lecture programme sur ESP32 : GET /read_ms
+    // ------------------------------------------------------------
     private suspend fun fetchProgramFromEsp(ip: String): String? =
         withContext(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
@@ -492,7 +505,10 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     private fun showAllDiffsDialog(diffs: List<LineDiff>) {
-        if (diffs.isEmpty()) return
+        if (diffs.isEmpty()) {
+            finish()
+            return
+        }
 
         val maxToShow = 30
         val shown = diffs.take(maxToShow)
@@ -530,12 +546,13 @@ class ScheduleActivity : AppCompatActivity() {
     // 🔄 Synchronisation /read_ms OU /program_ms OK → ProgramStoreSynced
     // ------------------------------------------------------------
     private fun syncProgramStoreFromEsp(espProgram: String) {
-        // ✅ on s'appuie sur ProgramStoreSynced.setFromMessage576
-        // => évite duplication + garde-fous centralisés
         val active = Esp32Manager.getActive(this) ?: return
         val ok = ProgramStoreSynced.setFromMessage576(this, active.id, espProgram)
         if (!ok) {
-            Log.w("SCHEDULE_SYNC", "ProgramStoreSynced.setFromMessage576 failed (len=${espProgram.length})")
+            Log.w(
+                "SCHEDULE_SYNC",
+                "ProgramStoreSynced.setFromMessage576 failed (len=${espProgram.length})"
+            )
         }
     }
 

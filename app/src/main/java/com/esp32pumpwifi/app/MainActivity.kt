@@ -55,6 +55,50 @@ class MainActivity : AppCompatActivity() {
     private val STA_PROBE_INTERVAL_MS = 10_000L
     private val UI_REFRESH_MS = 15_000L
 
+    // ================== FUTUR PLAN (Option A) ==================
+    private data class FuturePlan(val count: Int, val ml: Float)
+
+    /**
+     * Calcule le "reste à faire aujourd'hui" (strictement futur) à partir de ProgramStoreSynced.
+     * - Ne touche pas aux compteurs "done" (DailyProgramTrackingStore)
+     * - Évite le double comptage en excluant les lignes à la minute "now"
+     */
+    private fun computeFuturePlan(espId: Long, pumpNum: Int, flow: Float): FuturePlan {
+        if (flow <= 0f) return FuturePlan(0, 0f)
+
+        val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
+        if (encodedLines.isEmpty()) return FuturePlan(0, 0f)
+
+        val now = Calendar.getInstance()
+        val nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+
+        var futureCount = 0
+        var futureMl = 0f
+
+        for (line in encodedLines) {
+            val t = line.trim()
+            if (t.length != 12 || !t.all(Char::isDigit)) continue
+            if (t.all { it == '0' }) continue
+            if (t.firstOrNull() != '1') continue
+
+            val hh = t.substring(2, 4).toIntOrNull() ?: continue
+            val mm = t.substring(4, 6).toIntOrNull() ?: continue
+            val durationMs = t.substring(6, 12).toIntOrNull() ?: continue
+            if (hh !in 0..23 || mm !in 0..59) continue
+            if (durationMs !in 50..600000) continue
+
+            val minutes = hh * 60 + mm
+
+            // Strictement dans le futur (après maintenant)
+            if (minutes <= nowMinutes) continue
+
+            futureCount++
+            futureMl += (durationMs / 1000f) * flow
+        }
+
+        return FuturePlan(futureCount, futureMl)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -466,6 +510,7 @@ class MainActivity : AppCompatActivity() {
     private fun formatMl(value: Float): String =
         String.format(Locale.FRANCE, "%.1f", value)
 
+    // ================== ✅ UPDATE DAILY (Option A "béton") ==================
     private fun updateOneDaily(espId: Long, pumpNum: Int) {
         val nameId = resources.getIdentifier("tv_daily_name_$pumpNum", "id", packageName)
         val progressId = resources.getIdentifier("pb_daily_$pumpNum", "id", packageName)
@@ -483,37 +528,43 @@ class MainActivity : AppCompatActivity() {
             "Pompe $pumpNum"
         ) ?: "Pompe $pumpNum"
 
-        val plannedDoseCountToday = getPlannedDoseCount(espId, pumpNum)
-
-        val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
-        val plannedMlToday =
-            if (flow > 0f && plannedDoseCountToday > 0)
-                TankScheduleHelper.getDailyConsumption(this, espId, pumpNum)
-            else
-                0f
-
+        // Done (immuable aujourd’hui)
         val rawDoneDoseCountToday =
             DailyProgramTrackingStore.getDoneDoseCountToday(this, espId, pumpNum)
-        val rawDoneMlToday = DailyProgramTrackingStore.getDoneMlToday(this, espId, pumpNum)
+        val rawDoneMlToday =
+            DailyProgramTrackingStore.getDoneMlToday(this, espId, pumpNum)
+
+        // Flow (calibration)
+        val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
+
+        // Future (selon programmation actuelle synced)
+        val future = computeFuturePlan(espId, pumpNum, flow)
+
+        // ✅ Total journée = done + future
+        val plannedDoseCountToday = rawDoneDoseCountToday + future.count
+        val plannedMlToday = rawDoneMlToday + future.ml
 
         val doneDoseCountToday: Int
         val doneMlToday: Float
         val progressValue: Int
         val doseText: String
 
-        if (plannedDoseCountToday == 0 || plannedMlToday == 0f) {
+        if (plannedDoseCountToday <= 0 || plannedMlToday <= 0f) {
+            // Rien de prévu aujourd'hui
             doneDoseCountToday = 0
             doneMlToday = 0f
             progressValue = 0
             doseText = "Dose : 0/0"
         } else {
+            // done ne doit jamais dépasser planned (sécurité)
             doneDoseCountToday = min(rawDoneDoseCountToday, plannedDoseCountToday)
             doneMlToday = min(rawDoneMlToday, plannedMlToday)
+
             progressValue = (doneMlToday / plannedMlToday * 100f).roundToInt()
             doseText = "Dose : $doneDoseCountToday/$plannedDoseCountToday"
         }
 
-        val insideText = if (plannedMlToday == 0f || doneMlToday == 0f) {
+        val insideText = if (plannedMlToday <= 0f || doneMlToday <= 0f) {
             "${formatMl(0f)} ml"
         } else {
             "${formatMl(doneMlToday)} ml"
@@ -522,15 +573,18 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(nameId).text = name
         val progressBar = findViewById<ProgressBar>(progressId)
         val insideLabel = findViewById<TextView>(insideId)
+
         progressBar.apply {
             max = 100
-            progress = progressValue
+            progress = progressValue.coerceIn(0, 100)
         }
+
         findViewById<TextView>(minId).text = "0 ml"
         findViewById<TextView>(maxId).text = "${formatMl(plannedMlToday)} ml"
         findViewById<TextView>(doseId).text = doseText
         insideLabel.text = insideText
         findViewById<TextView>(nextDoseId).text = getNextDoseText(espId, pumpNum)
+
         progressBar.post {
             val barWidth = progressBar.width - progressBar.paddingLeft - progressBar.paddingRight
             if (barWidth <= 0) return@post
@@ -538,14 +592,16 @@ class MainActivity : AppCompatActivity() {
             val minX = progressBar.paddingLeft.toFloat()
             val maxX = (progressBar.width - progressBar.paddingRight - labelWidth).toFloat()
             val centeredX = progressBar.paddingLeft + (barWidth - labelWidth) / 2f
+
             val targetX = when {
-                plannedMlToday == 0f -> centeredX
+                plannedMlToday <= 0f -> centeredX
                 progressValue == 0 -> centeredX
                 else -> {
                     val x = progressBar.paddingLeft + (barWidth * (progressValue / 100f))
                     x - labelWidth / 2f
                 }
             }
+
             val clampedX = targetX.coerceIn(minX, maxX)
             insideLabel.translationX = clampedX - insideLabel.left
         }

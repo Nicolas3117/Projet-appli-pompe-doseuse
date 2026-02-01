@@ -9,7 +9,6 @@ class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activ
 
     private val context = activity
 
-    // 🔵 Création des 4 fragments (1 par pompe)
     private val fragments = List(4) { index ->
         val pumpNumber = index + 1
         PumpScheduleFragment.newInstance(pumpNumber)
@@ -19,7 +18,6 @@ class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activ
 
     override fun createFragment(position: Int): Fragment = fragments[position]
 
-    // 🔵 Récupère toutes les programmations de toutes les pompes
     fun getAllSchedules(): List<List<PumpSchedule>> {
         return fragments.map { fragment ->
             fragment.getSchedules()
@@ -38,13 +36,11 @@ class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activ
         }
     }
 
-    // 🔵 Renvoie le nom personnalisé d'une pompe (pour les onglets)
     fun getPumpName(position: Int): String {
 
         val pumpNumber = position + 1
         val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
-        // 🔑 ESP actif obligatoire
         val activeModule = Esp32Manager
             .getAll(context)
             .firstOrNull { it.isActive }

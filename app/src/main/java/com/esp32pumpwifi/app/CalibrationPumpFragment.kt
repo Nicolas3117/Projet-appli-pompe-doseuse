@@ -105,7 +105,7 @@ class CalibrationPumpFragment : Fragment() {
                     .setTitle("Impossible")
                     .setMessage(
                         "Durée trop longue : maximum ${MAX_CALIBRATION_DURATION_SEC}s\n" +
-                            "Réduis la durée pour l’étalonnage."
+                                "Réduis la durée pour l’étalonnage."
                     )
                     .setPositiveButton("OK", null)
                     .show()
@@ -149,6 +149,13 @@ class CalibrationPumpFragment : Fragment() {
             prefs.edit()
                 .putFloat("esp_${moduleId}_pump${pumpNum}_flow", flowFinal)
                 .apply()
+
+            // ✅ Popup d’information (texte uniquement)
+            AlertDialog.Builder(requireContext())
+                .setTitle("Attention")
+                .setMessage("Pour appliquer ce nouveau débit, renvoyez la programmation à la pompe.")
+                .setPositiveButton("OK", null)
+                .show()
         }
     }
 

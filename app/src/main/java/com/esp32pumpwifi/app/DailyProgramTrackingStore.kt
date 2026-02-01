@@ -1,10 +1,14 @@
 package com.esp32pumpwifi.app
 
 import android.content.Context
-import java.time.LocalDate
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 /**
  * Stockage persistant pour le suivi quotidien (programmation uniquement).
+ *
+ * ✅ Compat API 24+ : pas de java.time (LocalDate)
  */
 object DailyProgramTrackingStore {
     private const val PREFS_NAME = "daily_program_tracking"
@@ -17,8 +21,9 @@ object DailyProgramTrackingStore {
      */
     fun resetIfNewDay(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val today = LocalDate.now().toString() // yyyy-MM-dd
+        val today = todayKey() // yyyy-MM-dd (API 24 safe)
         val lastDate = prefs.getString(KEY_LAST_DATE, null)
+
         if (lastDate == null || lastDate != today) {
             val keysToRemove = prefs.all.keys.filter { key ->
                 key.startsWith(DONE_DOSE_PREFIX) || key.startsWith(DONE_ML_PREFIX)
@@ -37,8 +42,10 @@ object DailyProgramTrackingStore {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val doseKey = doseKey(espId, pumpNum)
         val mlKey = mlKey(espId, pumpNum)
+
         val currentDoseCount = prefs.getInt(doseKey, 0)
         val currentMl = prefs.getFloat(mlKey, 0f)
+
         prefs.edit()
             .putInt(doseKey, currentDoseCount + 1)
             .putFloat(mlKey, currentMl + volumeMl)
@@ -67,5 +74,11 @@ object DailyProgramTrackingStore {
 
     private fun mlKey(espId: Long, pumpNum: Int): String {
         return "${DONE_ML_PREFIX}${espId}_pump_${pumpNum}"
+    }
+
+    private fun todayKey(): String {
+        val cal = Calendar.getInstance()
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        return sdf.format(cal.time)
     }
 }
