@@ -26,7 +26,7 @@ object TankScheduleHelper {
         var totalMl = 0f
 
         // ✅ IMPORTANT : lecture par espId explicite (multi-modules safe)
-        val encodedLines = ProgramStore.loadEncodedLines(context, espId, pumpNum)
+        val encodedLines = ProgramStoreSynced.loadEncodedLines(context, espId, pumpNum)
 
         for (line in encodedLines) {
             if (line == PLACEHOLDER) continue
@@ -66,7 +66,7 @@ object TankScheduleHelper {
             }
 
             // ✅ IMPORTANT : lecture par espId explicite (multi-modules safe)
-            val encodedLines = ProgramStore.loadEncodedLines(context, espId, pumpNum)
+            val encodedLines = ProgramStoreSynced.loadEncodedLines(context, espId, pumpNum)
 
             // ✅ FIX: trie par heure/minute (évite de “sauter” des doses si l’ordre n’est pas garanti)
             val sortedLines =

@@ -284,7 +284,7 @@ class ScheduleActivity : AppCompatActivity() {
             updateUiSchedules(mergedByPump)
             syncProgramStoreFromEsp(espProgram)
 
-            lastProgramHash = ProgramStore.buildMessageMs(this@ScheduleActivity)
+            lastProgramHash = espProgram
         }
     }
 
@@ -358,7 +358,8 @@ class ScheduleActivity : AppCompatActivity() {
                                 .apply()
                         }
 
-                        lastProgramHash = ProgramStore.buildMessageMs(this@ScheduleActivity)
+                        syncProgramStoreFromEsp(message)
+                        lastProgramHash = message
 
                         if (continuation.isActive) {
                             continuation.resume(true)
@@ -666,9 +667,7 @@ class ScheduleActivity : AppCompatActivity() {
         val active = Esp32Manager.getActive(this) ?: return
 
         for (pump in 1..4) {
-            while (ProgramStore.count(this, active.id, pump) > 0) {
-                ProgramStore.removeLine(this, active.id, pump, 0)
-            }
+            ProgramStoreSynced.clearPump(this, active.id, pump)
         }
 
         for (lineIndex in 0 until 48) {
@@ -687,18 +686,7 @@ class ScheduleActivity : AppCompatActivity() {
             if (hour !in 0..23 || minute !in 0..59) continue
             if (durationMs !in 50..600000) continue
 
-            ProgramStore.addLine(
-                this,
-                active.id,
-                pump,
-                ProgramLine(
-                    enabled = true,
-                    pump = pump,
-                    hour = hour,
-                    minute = minute,
-                    qtyMs = durationMs
-                )
-            )
+            ProgramStoreSynced.addEncodedLine(this, active.id, pump, line)
         }
     }
 
