@@ -3,8 +3,8 @@ package com.esp32pumpwifi.app
 import android.content.Context
 
 private const val PREFS = "prefs"
-
 private const val MAX_LINES_PER_PUMP = 12
+private const val PUMP_COUNT = 4
 
 /** Ligne OFF = désactivée (12 caractères EXACTS) */
 private const val PLACEHOLDER = "000000000000"
@@ -38,6 +38,7 @@ object ProgramStoreSynced {
         return raw.split(';')
             .map { it.trim() }
             .mapNotNull { normalizeEncodedLine(it) }
+            .filter { it != PLACEHOLDER } // ✅ ne jamais exposer le placeholder au consommateur
             .toMutableList()
     }
 
@@ -68,6 +69,17 @@ object ProgramStoreSynced {
     }
 
     // ---------------------------------------------------------------------
+    // 🧹 Effacement total module (optionnel, utile)
+    // ---------------------------------------------------------------------
+    fun clearAll(context: Context, espId: Long) {
+        val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        for (pump in 1..PUMP_COUNT) {
+            editor.putString(keyForEsp(espId, pump), "")
+        }
+        editor.apply()
+    }
+
+    // ---------------------------------------------------------------------
     // ➕ Ajout ligne encodée (max 12 par pompe)
     // ---------------------------------------------------------------------
     fun addEncodedLine(
@@ -84,6 +96,51 @@ object ProgramStoreSynced {
 
         list.add(normalized)
         saveEncodedLines(context, espId, pump, list)
+        return true
+    }
+
+    // ---------------------------------------------------------------------
+    // ✅ NOUVEAU : alimenter la vérité depuis message 576 digits
+    // ---------------------------------------------------------------------
+    fun setFromMessage576(
+        context: Context,
+        espId: Long,
+        message576: String
+    ): Boolean {
+        if (message576.length != 576) return false
+        if (!message576.all(Char::isDigit)) return false
+
+        // Prépare un buffer par pompe (max 12 lignes)
+        val perPump = Array(PUMP_COUNT) { mutableListOf<String>() }
+
+        for (lineIndex in 0 until 48) {
+            val start = lineIndex * 12
+            val rawLine = message576.substring(start, start + 12)
+            val line = normalizeEncodedLine(rawLine) ?: return false
+
+            if (line == PLACEHOLDER) continue
+            if (line[0] != '1') continue
+
+            val pump = line.substring(1, 2).toIntOrNull() ?: continue
+            if (pump !in 1..PUMP_COUNT) continue
+
+            // garde-fous HH/MM/MS
+            val hh = line.substring(2, 4).toIntOrNull() ?: continue
+            val mm = line.substring(4, 6).toIntOrNull() ?: continue
+            val ms = line.substring(6, 12).toIntOrNull() ?: continue
+            if (hh !in 0..23 || mm !in 0..59) continue
+            if (ms !in 50..600000) continue
+
+            val list = perPump[pump - 1]
+            if (list.size >= MAX_LINES_PER_PUMP) continue
+            list.add(line)
+        }
+
+        // Écrit atomiquement pompe par pompe
+        for (pump in 1..PUMP_COUNT) {
+            saveEncodedLines(context, espId, pump, perPump[pump - 1])
+        }
+
         return true
     }
 

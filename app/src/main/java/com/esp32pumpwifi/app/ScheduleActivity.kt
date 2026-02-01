@@ -33,7 +33,7 @@ class ScheduleActivity : AppCompatActivity() {
     private lateinit var adapter: PumpPagerAdapter
     private lateinit var toolbar: MaterialToolbar
 
-    // ✅ Empreinte de la programmation envoyée / chargée
+    // ✅ Empreinte de la programmation envoyée / chargée (vérité)
     private var lastProgramHash: String? = null
 
     // ✅ /read_ms : 48 lignes de 12 chiffres
@@ -83,8 +83,9 @@ class ScheduleActivity : AppCompatActivity() {
             )
         }.attach()
 
-        // ✅ Référence de départ (programme "considéré envoyé/chargé")
-        lastProgramHash = ProgramStore.buildMessageMs(this)
+        // ✅ IMPORTANT : ne pas initialiser lastProgramHash sur le brouillon (ProgramStore)
+        // La vérité arrive via /read_ms (à l’ouverture) ou /program_ms OK (après envoi).
+        lastProgramHash = null
 
         // ✅ Sortie : toujours check final
         onBackPressedDispatcher.addCallback(
@@ -179,9 +180,6 @@ class ScheduleActivity : AppCompatActivity() {
         didAutoCheckOnResume = false
     }
 
-    // ------------------------------------------------------------
-    // 🛫 MENU (on garde uniquement Envoyer)
-    // ------------------------------------------------------------
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.menu_schedule, menu)
         return true
@@ -205,16 +203,11 @@ class ScheduleActivity : AppCompatActivity() {
                 verifyIpThenSend()
                 true
             }
-
             else -> super.onOptionsItemSelected(item)
         }
     }
 
-    // ------------------------------------------------------------
-    // 1️⃣ Vérification ESP32 puis envoi
-    // ------------------------------------------------------------
     private fun verifyIpThenSend() {
-        // ✅ Défense en profondeur (même si le menu est caché)
         if (isReadOnly || isUnsynced) {
             Toast.makeText(
                 this,
@@ -255,9 +248,6 @@ class ScheduleActivity : AppCompatActivity() {
         }
     }
 
-    // ------------------------------------------------------------
-    // ✅ À l’ouverture : /read_ms + compare
-    // ------------------------------------------------------------
     private fun autoCheckProgramOnOpen() {
         val active = Esp32Manager.getActive(this) ?: return
 
@@ -282,15 +272,15 @@ class ScheduleActivity : AppCompatActivity() {
             val mergedByPump = mergeSchedulesFromEsp(espProgram, active.id, activeSchedulesResult)
             persistMergedSchedules(active.id, mergedByPump)
             updateUiSchedules(mergedByPump)
+
+            // ✅ Vérité ESP32 : alimente ProgramStoreSynced uniquement après /read_ms OK
             syncProgramStoreFromEsp(espProgram)
 
+            // ✅ Vérité de référence = programme ESP lu
             lastProgramHash = espProgram
         }
     }
 
-    // ------------------------------------------------------------
-    // ✅ À la fermeture : /read_ms + compare
-    // ------------------------------------------------------------
     private fun finalCheckOnExitThenFinish() {
         if (exitInProgress) return
         exitInProgress = true
@@ -322,25 +312,18 @@ class ScheduleActivity : AppCompatActivity() {
             }
 
             if (espProgram != localProgram) {
-                AlertDialog.Builder(this@ScheduleActivity)
-                    .setTitle("Programmation différente")
-                    .setMessage("⚠️ Programmation différente entre l'appli et la pompe.")
-                    .setPositiveButton("OK") { _, _ -> finish() }
-                    .setOnDismissListener { finish() }
-                    .create()
-                    .also { dlg ->
-                        if (isFinishing || isDestroyed) return@launch
-                        dlg.show()
-                    }
+                val diffs = computeAllDiffs(localProgram, espProgram)
+                showAllDiffsDialog(diffs)
+
+                // On ferme après OK
+                // (le showAllDiffsDialog a un OK simple ; on garde ton comportement “mode avertissement”)
+                // Note : ne pas faire finish() immédiat sinon le dialog ne s’affiche pas.
             } else {
                 finish()
             }
         }
     }
 
-    // ------------------------------------------------------------
-    // 2️⃣ ENVOI PROGRAMMATION (timeout applicatif)
-    // ------------------------------------------------------------
     private suspend fun sendSchedulesToESP32(active: EspModule, timeoutMs: Long = 4000L): Boolean {
         val message = ProgramStore.buildMessageMs(this)
         Log.i("SCHEDULE_SEND", "➡️ Envoi programmation via NetworkHelper")
@@ -358,7 +341,10 @@ class ScheduleActivity : AppCompatActivity() {
                                 .apply()
                         }
 
+                        // ✅ Vérité ESP32 : après /program_ms OK, on fige EXACTEMENT le message envoyé
                         syncProgramStoreFromEsp(message)
+
+                        // ✅ Référence de vérité = message réellement envoyé
                         lastProgramHash = message
 
                         if (continuation.isActive) {
@@ -372,9 +358,6 @@ class ScheduleActivity : AppCompatActivity() {
         }
     }
 
-    // ------------------------------------------------------------
-    // 🔍 Vérification ESP32 (/id)
-    // ------------------------------------------------------------
     private suspend fun verifyEsp32Connection(module: EspModule): Boolean =
         withContext(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
@@ -403,9 +386,6 @@ class ScheduleActivity : AppCompatActivity() {
             }
         }
 
-    // ------------------------------------------------------------
-    // 📥 Lecture programme sur ESP32 : GET /read_ms
-    // ------------------------------------------------------------
     private suspend fun fetchProgramFromEsp(ip: String): String? =
         withContext(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
@@ -444,9 +424,6 @@ class ScheduleActivity : AppCompatActivity() {
         return if (joined.length == 576) joined else null
     }
 
-    // ------------------------------------------------------------
-    // 🔎 Décodage ligne 12 chiffres + affichage propre
-    // ------------------------------------------------------------
     private fun decodePumpFromLine12(line12: String): Int? {
         if (line12.length != 12 || line12 == "000000000000") return null
         val pump = line12.substring(1, 2).toIntOrNull() ?: return null
@@ -540,7 +517,8 @@ class ScheduleActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Vérifier programme")
             .setMessage(msg)
-            .setPositiveButton("OK", null)
+            .setPositiveButton("OK") { _, _ -> finish() }
+            .setOnDismissListener { finish() }
             .create()
             .also { dlg ->
                 if (isFinishing || isDestroyed) return
@@ -549,8 +527,72 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------
-    // 🔄 Synchronisation /read_ms → schedules (active + local disabled)
+    // 🔄 Synchronisation /read_ms OU /program_ms OK → ProgramStoreSynced
     // ------------------------------------------------------------
+    private fun syncProgramStoreFromEsp(espProgram: String) {
+        // ✅ on s'appuie sur ProgramStoreSynced.setFromMessage576
+        // => évite duplication + garde-fous centralisés
+        val active = Esp32Manager.getActive(this) ?: return
+        val ok = ProgramStoreSynced.setFromMessage576(this, active.id, espProgram)
+        if (!ok) {
+            Log.w("SCHEDULE_SYNC", "ProgramStoreSynced.setFromMessage576 failed (len=${espProgram.length})")
+        }
+    }
+
+    private fun setConnectionState(connected: Boolean) {
+        toolbar.subtitle = if (connected) null else "Non connecté"
+        setReadOnlyMode(!connected, toolbar.subtitle?.toString())
+    }
+
+    private fun setUnsyncedState(on: Boolean, subtitle: String? = null) {
+        isUnsynced = on
+        setReadOnlyMode(isReadOnly, subtitle)
+        invalidateOptionsMenu()
+    }
+
+    private fun setReadOnlyMode(readOnly: Boolean, subtitle: String?) {
+        val subtitleChanged = toolbar.subtitle?.toString() != subtitle
+        if (isReadOnly == readOnly && !subtitleChanged) return
+        isReadOnly = readOnly
+        toolbar.subtitle = subtitle
+        adapter.setReadOnly(readOnly || isUnsynced)
+        invalidateOptionsMenu()
+    }
+
+    private fun setReadOnlyState(message: String) {
+        setReadOnlyMode(true, message)
+    }
+
+    private fun showUnsyncedDialog() {
+        if (unsyncedDialogShowing) return
+        unsyncedDialogShowing = true
+
+        AlertDialog.Builder(this)
+            .setTitle("⚠️ Synchronisation impossible")
+            .setMessage(
+                "Un problème est survenu et la programmation n’a pas pu être synchronisée avec la pompe.\n" +
+                        "Tant que la synchronisation n’est pas faite, aucune modification ne sera possible pour éviter toute incohérence."
+            )
+            .setPositiveButton("Rester (recommandé)") { dialog, _ -> dialog.dismiss() }
+            .setNegativeButton("Quitter (mode dégradé)") { dialog, _ ->
+                dialog.dismiss()
+                finish()
+            }
+            .setOnDismissListener { unsyncedDialogShowing = false }
+            .create()
+            .also { dlg ->
+                if (isFinishing || isDestroyed) {
+                    unsyncedDialogShowing = false
+                    return
+                }
+                dlg.show()
+            }
+    }
+
+    // ------------------------------------------------------------
+    // ✅ Le reste de tes fonctions merge/persist/buildActive... restent inchangées
+    // ------------------------------------------------------------
+
     private fun mergeSchedulesFromEsp(
         espProgram: String,
         espId: Long,
@@ -659,85 +701,5 @@ class ScheduleActivity : AppCompatActivity() {
             val schedules = mergedByPump[pump].orEmpty()
             adapter.updateSchedules(pump, schedules)
         }
-    }
-
-    private fun syncProgramStoreFromEsp(espProgram: String) {
-        if (espProgram.length < 48 * 12) return
-
-        val active = Esp32Manager.getActive(this) ?: return
-
-        for (pump in 1..4) {
-            ProgramStoreSynced.clearPump(this, active.id, pump)
-        }
-
-        for (lineIndex in 0 until 48) {
-            val start = lineIndex * 12
-            val line = espProgram.substring(start, start + 12)
-            if (line == "000000000000" || line.length != 12) continue
-            if (line[0] != '1') continue
-
-            val pump = line.substring(1, 2).toIntOrNull() ?: continue
-            if (pump !in 1..4) continue
-
-            val hour = line.substring(2, 4).toIntOrNull() ?: continue
-            val minute = line.substring(4, 6).toIntOrNull() ?: continue
-            val durationMs = line.substring(6, 12).toIntOrNull() ?: continue
-
-            if (hour !in 0..23 || minute !in 0..59) continue
-            if (durationMs !in 50..600000) continue
-
-            ProgramStoreSynced.addEncodedLine(this, active.id, pump, line)
-        }
-    }
-
-    private fun setConnectionState(connected: Boolean) {
-        toolbar.subtitle = if (connected) null else "Non connecté"
-        setReadOnlyMode(!connected, toolbar.subtitle?.toString())
-    }
-
-    private fun setUnsyncedState(on: Boolean, subtitle: String? = null) {
-        isUnsynced = on
-        // ✅ UNSYNCED domine via setReadOnlyMode(readOnly || isUnsynced)
-        setReadOnlyMode(isReadOnly, subtitle)
-        invalidateOptionsMenu()
-    }
-
-    private fun setReadOnlyMode(readOnly: Boolean, subtitle: String?) {
-        val subtitleChanged = toolbar.subtitle?.toString() != subtitle
-        if (isReadOnly == readOnly && !subtitleChanged) return
-        isReadOnly = readOnly
-        toolbar.subtitle = subtitle
-        adapter.setReadOnly(readOnly || isUnsynced)
-        invalidateOptionsMenu()
-    }
-
-    private fun setReadOnlyState(message: String) {
-        setReadOnlyMode(true, message)
-    }
-
-    private fun showUnsyncedDialog() {
-        if (unsyncedDialogShowing) return
-        unsyncedDialogShowing = true
-
-        AlertDialog.Builder(this)
-            .setTitle("⚠️ Synchronisation impossible")
-            .setMessage(
-                "Un problème est survenu et la programmation n’a pas pu être synchronisée avec la pompe.\n" +
-                        "Tant que la synchronisation n’est pas faite, aucune modification ne sera possible pour éviter toute incohérence."
-            )
-            .setPositiveButton("Rester (recommandé)") { dialog, _ -> dialog.dismiss() }
-            .setNegativeButton("Quitter (mode dégradé)") { dialog, _ ->
-                dialog.dismiss()
-                finish()
-            }
-            .setOnDismissListener { unsyncedDialogShowing = false }
-            .create()
-            .also { dlg ->
-                if (isFinishing || isDestroyed) {
-                    unsyncedDialogShowing = false
-                    return
-                }
-                dlg.show()
-            }
     }
 }

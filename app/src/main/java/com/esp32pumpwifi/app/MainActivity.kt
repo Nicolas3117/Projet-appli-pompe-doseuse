@@ -183,8 +183,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ================== WATCHER (corrigé) ==================
-    // IMPORTANT : ne capture plus un "module" figé.
-    // On relit le module actif à chaque boucle => pas de faux statuts pour d'autres modules.
     private fun startConnectionWatcher() {
         if (connectionJob?.isActive == true) return
 
@@ -239,24 +237,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ================== RÉSEAU ==================
-    /**
-     * Règle :
-     * - Connecté = /id répond ET POMPE_NAME == module.internalName
-     * - Fallback AP = test 192.168.4.1 avec identité
-     * - Retour STA auto = si on est en AP, tester périodiquement le dernier IP STA connu
-     */
     private suspend fun testConnectionWithFallbackAndStaReturn(module: EspModule): ConnectionCheckResult =
         withContext(Dispatchers.IO) {
 
-            // 1) test sur IP actuelle (STA ou AP) avec identité stricte
             val primaryPumpName = fetchPumpNameForIp(module.ip)
             if (primaryPumpName == module.internalName) {
 
-                // mémorise last STA IP si on est en STA (pas 192.168.4.1)
                 if (module.ip != "192.168.4.1") {
                     saveLastStaIp(module.id, module.ip)
                 } else {
-                    // on est en AP : tenter un retour STA automatique (sans scan +)
                     val now = System.currentTimeMillis()
                     if (now - lastStaProbeMs >= STA_PROBE_INTERVAL_MS) {
                         lastStaProbeMs = now
@@ -276,7 +265,6 @@ class MainActivity : AppCompatActivity() {
                 return@withContext ConnectionCheckResult(true, false, false)
             }
 
-            // 2) fallback AP
             val fallbackIp = "192.168.4.1"
             val fallbackPumpName = fetchPumpNameForIp(fallbackIp)
 
@@ -288,7 +276,6 @@ class MainActivity : AppCompatActivity() {
                 return@withContext ConnectionCheckResult(true, true, true)
             }
 
-            // 3) rien trouvé pour CE module
             ConnectionCheckResult(false, true, false)
         }
 
@@ -366,7 +353,6 @@ class MainActivity : AppCompatActivity() {
         val fallbackSucceeded: Boolean
     )
 
-    // ✅ Couleurs OK
     private fun updateConnectionUi(connected: Boolean?) {
         when (connected) {
             null -> {
@@ -422,13 +408,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ✅ IMPORTANT : Suivi quotidien doit utiliser la vérité (synced), pas le brouillon (draft)
     private fun getPlannedDoseCount(espId: Long, pumpNum: Int): Int {
-        val encodedLines = ProgramStore.loadEncodedLines(this, espId, pumpNum)
+        val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
         val activeLines = encodedLines.filter { line ->
             val trimmed = line.trim()
-            // 12 chars digités requis par le format ESP32 (sinon on ignore).
             val isValidFormat = trimmed.length == 12 && trimmed.all(Char::isDigit)
-            // Ignorer les placeholders (ligne vide/0) et ne garder que enabled=1.
             val isPlaceholder = trimmed.all { it == '0' }
             val isEnabled = trimmed.firstOrNull() == '1'
             isValidFormat && !isPlaceholder && isEnabled
@@ -436,46 +421,45 @@ class MainActivity : AppCompatActivity() {
         return activeLines.size.coerceAtMost(12)
     }
 
+    // ✅ IMPORTANT : prochaine dose basée sur ProgramStoreSynced (synced), pas "schedules" (draft)
     private fun getNextDoseText(espId: Long, pumpNum: Int): String {
-        fun parseTimeToMinutesOrNull(time: String): Int? {
-            val trimmed = time.trim()
-            if (!trimmed.matches(Regex("""\d{2}:\d{2}"""))) return null
-            val parts = trimmed.split(":")
-            if (parts.size != 2) return null
-            val hours = parts[0].toIntOrNull() ?: return null
-            val minutes = parts[1].toIntOrNull() ?: return null
-            if (hours !in 0..23) return null
-            if (minutes !in 0..59) return null
-            return hours * 60 + minutes
-        }
+        val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
+        if (encodedLines.isEmpty()) return "Aucune dose prévue"
 
-        val json = getSharedPreferences("schedules", MODE_PRIVATE)
-            .getString("esp_${espId}_pump$pumpNum", null)
-            ?: return "Aucune dose prévue"
+        data class Entry(val minutes: Int, val hh: Int, val mm: Int, val durationMs: Int)
 
-        val schedules = PumpScheduleJson.fromJson(json)
+        val entries = encodedLines
             .asSequence()
-            .filter { it.enabled && it.pumpNumber == pumpNum }
-            .mapNotNull { schedule ->
-                parseTimeToMinutesOrNull(schedule.time)?.let { minutes -> minutes to schedule }
+            .mapNotNull { line ->
+                val t = line.trim()
+                if (t.length != 12 || !t.all(Char::isDigit)) return@mapNotNull null
+                if (t.all { it == '0' }) return@mapNotNull null
+                if (t.firstOrNull() != '1') return@mapNotNull null
+
+                val hh = t.substring(2, 4).toIntOrNull() ?: return@mapNotNull null
+                val mm = t.substring(4, 6).toIntOrNull() ?: return@mapNotNull null
+                val durationMs = t.substring(6, 12).toIntOrNull() ?: return@mapNotNull null
+                if (hh !in 0..23 || mm !in 0..59) return@mapNotNull null
+                if (durationMs !in 50..600000) return@mapNotNull null
+
+                Entry(minutes = hh * 60 + mm, hh = hh, mm = mm, durationMs = durationMs)
             }
-            .sortedBy { it.first }
+            .sortedBy { it.minutes }
             .toList()
 
-        if (schedules.isEmpty()) return "Aucune dose prévue"
+        if (entries.isEmpty()) return "Aucune dose prévue"
 
         val now = Calendar.getInstance()
         val nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
 
-        val (nextMinutes, nextSchedule) =
-            schedules.firstOrNull { it.first > nowMinutes } ?: schedules.first()
-        val nextHours = nextMinutes / 60
-        val nextMins = nextMinutes % 60
-        val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", nextHours, nextMins)
-        val doseMl = nextSchedule.quantityMl
+        val next = entries.firstOrNull { it.minutes > nowMinutes } ?: entries.first()
+        val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", next.hh, next.mm)
+
+        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
+        val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f) // mL/s
+        val doseMl = if (flow > 0f) (next.durationMs / 1000f) * flow else 0f
         val doseText = formatMl(doseMl)
 
-        // ✅ Correction : espace insécable fine entre la valeur et l’unité
         return "Prochaine dose : $doseText\u202FmL à $formattedTime"
     }
 
