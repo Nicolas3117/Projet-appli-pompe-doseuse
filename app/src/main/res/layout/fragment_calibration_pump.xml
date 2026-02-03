@@ -77,5 +77,15 @@
                 android:src="@android:drawable/ic_menu_save"
                 android:background="?attr/selectableItemBackgroundBorderless" />
         </LinearLayout>
+
+        <!-- Visible uniquement pour la pompe 4 -->
+        <Button
+            android:id="@+id/btn_info"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="ℹ️ Infos"
+            android:visibility="gone" />
+
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
