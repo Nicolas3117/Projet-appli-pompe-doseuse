@@ -38,6 +38,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var tvActiveModule: TextView
     private lateinit var tvConnectionStatus: TextView
+    private lateinit var tvRtcTime: TextView
     private lateinit var tankSummaryContainer: LinearLayout
     private lateinit var dailySummaryContainer: View
     private lateinit var manualDoseButton: Button
@@ -49,6 +50,8 @@ class MainActivity : AppCompatActivity() {
 
     private var uiRefreshJob: Job? = null
     private var hasShownNotFoundPopup = false
+    private var lastRtcIp: String? = null
+    private var rtcFetchJob: Job? = null
 
     // pour tenter un retour STA automatique sans appuyer sur "+"
     private var lastStaProbeMs = 0L
@@ -117,6 +120,7 @@ class MainActivity : AppCompatActivity() {
         val scrollView = findViewById<ScrollView>(R.id.pump_scroll)
         tvActiveModule = findViewById(R.id.tv_active_module)
         tvConnectionStatus = findViewById(R.id.tv_connection_status)
+        tvRtcTime = findViewById(R.id.tvRtcTime)
         tankSummaryContainer = findViewById(R.id.layout_tank_summary)
         dailySummaryContainer = findViewById(R.id.layout_daily_summary)
         manualDoseButton = findViewById(R.id.btn_manual_dose)
@@ -193,6 +197,11 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
 
+        tvRtcTime.text = "RTC : --:--"
+        lastRtcIp = null
+        rtcFetchJob?.cancel()
+        rtcFetchJob = null
+
         val activeModule = Esp32Manager.getActive(this)
 
         if (activeModule == null) {
@@ -234,6 +243,8 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         stopConnectionWatcher()
+        rtcFetchJob?.cancel()
+        rtcFetchJob = null
         uiRefreshJob?.cancel()
         uiRefreshJob = null
     }
@@ -267,6 +278,7 @@ class MainActivity : AppCompatActivity() {
                             updateConnectionUi(true)
                             setManualButtonsEnabled(true)
                             hasShownNotFoundPopup = false
+                            requestRtcTimeIfNeeded(active)
                         } else {
                             consecutiveFailures++
                             if (consecutiveFailures >= 2) {
@@ -362,6 +374,50 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {
             }
         }
+    }
+
+    private fun requestRtcTimeIfNeeded(module: EspModule) {
+        val ip = module.ip
+        if (ip.isBlank() || ip == lastRtcIp) return
+        lastRtcIp = ip
+        rtcFetchJob?.cancel()
+        rtcFetchJob =
+            lifecycleScope.launch {
+                val time = fetchRtcTimeForIp(ip) ?: "--:--"
+                tvRtcTime.text = "RTC : $time"
+
+            }
+    }
+
+    private suspend fun fetchRtcTimeForIp(ip: String): String? =
+        withContext(Dispatchers.IO) {
+            var conn: HttpURLConnection? = null
+            return@withContext try {
+                val url = URL("http://$ip/time")
+                conn =
+                    (url.openConnection() as HttpURLConnection).apply {
+                        connectTimeout = HTTP_TIMEOUT_MS
+                        readTimeout = HTTP_TIMEOUT_MS
+                        useCaches = false
+                        setRequestProperty("Connection", "close")
+                    }
+                val response = conn.inputStream.bufferedReader().use { it.readText() }
+                extractRtcTime(response)
+            } catch (_: Exception) {
+                null
+            } finally {
+                try {
+                    conn?.disconnect()
+                } catch (_: Exception) {
+                }
+            }
+        }
+
+    private fun extractRtcTime(response: String): String? {
+        val match =
+            Regex("""\b([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?\b""")
+                .find(response)
+        return match?.value
     }
 
     private fun extractPumpName(response: String): String? {
