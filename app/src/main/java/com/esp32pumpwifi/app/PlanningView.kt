@@ -32,11 +32,10 @@ class PlanningView @JvmOverloads constructor(
     private val bottomMargin = 40f
     private val rightMargin = 40f
 
-    // ✅ Hauteur fixe des barres (tu voulais hauteur fixe)
+    // ✅ Hauteur fixe des barres
     private val barHeight = 28f
 
-    // Diagnostic: largeur calculée ici (widthForDose), appelée dans rebuildBlocks() pour chaque barre.
-    // Ancienne logique basée sur la durée + min/max élevés (6dp..120dp) + boost => barres trop longues.
+    // Largeur des barres = paliers compacts par volume (Version A : 3–16dp)
     private fun widthForDose(quantityMl: Float): Float {
         val density = resources.displayMetrics.density
         val minW = 3f * density
@@ -169,22 +168,6 @@ class PlanningView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
     }
 
-    private val overlapFlagPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#FF3B30")
-        style = Paint.Style.FILL
-        alpha = 255
-    }
-
-    private val debugOverlapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#FF3B30")
-        textSize = 20f
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-    }
-
-    // DEBUG: mettre à false après validation visuelle.
-    private val DEBUG_FORCE_OVERLAP_FLAG = false
-    private var debugOverlapCount = 0
-
     // ================= DONNÉES =================
 
     private var visibleEspIds: List<Long> = emptyList()
@@ -200,8 +183,7 @@ class PlanningView @JvmOverloads constructor(
         val startMsOfDay: Long,
         val endMsOfDay: Long,
         val durationMs: Long,
-        val quantityMl: Float,
-        var hasSamePumpOverlap: Boolean = false
+        val quantityMl: Float
     )
 
     // ================= API =================
@@ -263,15 +245,6 @@ class PlanningView @JvmOverloads constructor(
         }
 
         drawBlocks(canvas)
-
-        if (DEBUG_FORCE_OVERLAP_FLAG) {
-            canvas.drawText(
-                "overlaps=$debugOverlapCount",
-                8f,
-                24f,
-                debugOverlapPaint
-            )
-        }
 
         canvas.restore()
     }
@@ -341,7 +314,7 @@ class PlanningView @JvmOverloads constructor(
     }
 
     private fun drawHourLabels(canvas: Canvas) {
-        // ✅ toutes les heures (pas une heure sur deux)
+        // ✅ toutes les heures
         for (h in 0..totalHours) {
             val x = leftMargin + h * hourWidth
             canvas.drawText(
@@ -445,30 +418,7 @@ class PlanningView @JvmOverloads constructor(
             }
         }
 
-        markSamePumpOverlaps()
         blocksDirty = false
-    }
-
-    private fun markSamePumpOverlaps() {
-        debugOverlapCount = 0
-        blocks.forEach { it.hasSamePumpOverlap = false }
-        blocks.groupBy { it.espId to it.pumpNum }.values.forEach { group ->
-            val sorted = group.sortedBy { it.startMsOfDay }
-            var activeEndMs = Long.MIN_VALUE
-            var activeBlockWithMaxEnd: PlanningBlock? = null
-            for (block in sorted) {
-                if (block.startMsOfDay < activeEndMs && activeBlockWithMaxEnd != null) {
-                    // overlap = same pump uniquement
-                    block.hasSamePumpOverlap = true
-                    activeBlockWithMaxEnd.hasSamePumpOverlap = true
-                    debugOverlapCount += 1
-                }
-                if (block.endMsOfDay > activeEndMs) {
-                    activeEndMs = block.endMsOfDay
-                    activeBlockWithMaxEnd = block
-                }
-            }
-        }
     }
 
     private data class PumpEvent(
@@ -561,34 +511,11 @@ class PlanningView @JvmOverloads constructor(
             canvas.drawRoundRect(b.rect, 10f, 10f, blockStrokePaint)
 
             drawBlockLabel(canvas, b)
-            if (b.hasSamePumpOverlap || DEBUG_FORCE_OVERLAP_FLAG) {
-                drawOverlapFlag(canvas, b.rect)
-            }
         }
-    }
-
-    private fun drawOverlapFlag(canvas: Canvas, rect: RectF) {
-        // overlap = same pump uniquement
-        // indicateur = mini drapeau rouge qui déborde à droite (visible sur barres fines)
-        val density = resources.displayMetrics.density
-        val inset = 1f * density
-        val flagW = (4f * density).coerceIn(4f * density, 6f * density)
-        val rectFlag = RectF(
-            rect.right - inset,
-            rect.top,
-            rect.right + flagW,
-            rect.bottom
-        )
-        canvas.drawRect(rectFlag, overlapFlagPaint)
     }
 
     // ✅ texte volume (sans unité si pas la place, avec "mL" si y'a la place)
     private fun drawBlockLabel(canvas: Canvas, block: PlanningBlock) {
-        // Diagnostic: le texte "flotte" car l'alignement horizontal peut être contraint par
-        // des largeurs conditionnelles et la baseline est approximée via textSize/3, ce qui
-        // décale visuellement les petites doses.
-        // Diagnostic: pour la lisibilité des chevauchements, le texte doit être centré sur
-        // la géométrie du rectangle (centerX/centerY) même si le label déborde.
         val w = block.rect.width()
 
         val density = resources.displayMetrics.density
