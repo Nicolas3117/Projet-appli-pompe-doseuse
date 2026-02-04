@@ -72,12 +72,12 @@
         <!-- Bouton Modifier -->
         <Button
             android:id="@+id/btn_edit"
+            style="@style/Widget.App.ScheduleActionButton"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
             android:layout_marginEnd="4dp"
             android:text="Modifier"
-            android:textSize="13sp"
             android:maxLines="1"
             android:ellipsize="end"
             android:textColor="@color/textPrimary"/>
@@ -85,11 +85,11 @@
         <!-- Bouton Supprimer -->
         <Button
             android:id="@+id/btn_delete"
+            style="@style/Widget.App.ScheduleActionButton"
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
             android:text="Supprimer"
-            android:textSize="13sp"
             android:maxLines="1"
             android:ellipsize="end"
             android:textColor="@color/textPrimary"/>

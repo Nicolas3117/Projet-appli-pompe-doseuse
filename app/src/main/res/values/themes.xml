@@ -30,6 +30,18 @@
         <item name="backgroundTint">@color/primary</item> <!-- Gris foncé -->
     </style>
 
+    <style name="Widget.App.ScheduleActionButton" parent="Widget.Material3.Button">
+        <item name="android:minHeight">36dp</item>
+        <item name="android:paddingTop">6dp</item>
+        <item name="android:paddingBottom">6dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/textPrimary</item>
+        <item name="insetTop">0dp</item>
+        <item name="insetBottom">0dp</item>
+    </style>
+
     <style name="TextStatusPrimary">
         <item name="android:textStyle">bold</item>
         <item name="android:textSize">12sp</item>
