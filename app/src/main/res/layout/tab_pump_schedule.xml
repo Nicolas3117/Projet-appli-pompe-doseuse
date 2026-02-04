@@ -2,6 +2,10 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
+    android:clickable="false"
+    android:focusable="false"
+    android:focusableInTouchMode="false"
+    android:duplicateParentState="true"
     android:gravity="center"
     android:orientation="vertical">
 
@@ -9,7 +13,11 @@
         android:id="@+id/tv_tab_name"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:clickable="false"
         android:ellipsize="end"
+        android:focusable="false"
+        android:focusableInTouchMode="false"
+        android:duplicateParentState="true"
         android:maxLines="1"
         android:textColor="?android:attr/textColorPrimary"
         android:textSize="14sp" />
@@ -18,7 +26,11 @@
         android:id="@+id/tv_tab_total"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:clickable="false"
         android:ellipsize="end"
+        android:focusable="false"
+        android:focusableInTouchMode="false"
+        android:duplicateParentState="true"
         android:maxLines="1"
         android:textColor="?android:attr/textColorSecondary"
         android:textSize="12sp" />

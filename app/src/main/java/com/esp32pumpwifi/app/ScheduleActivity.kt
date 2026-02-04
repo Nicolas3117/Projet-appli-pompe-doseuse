@@ -90,13 +90,20 @@ class ScheduleActivity : AppCompatActivity() {
             ) ?: "Pompe $pumpNumber"
 
             val tabView = layoutInflater.inflate(R.layout.tab_pump_schedule, tabLayout, false)
-            tabView.findViewById<TextView>(R.id.tv_tab_name).text = pumpName
+            val tvName = tabView.findViewById<TextView>(R.id.tv_tab_name)
+            val tvTotal = tabView.findViewById<TextView>(R.id.tv_tab_total)
+            tvName.text = pumpName
 
             // ✅ TEXTE COURT (onglet petit) + tooltip texte complet
             val (shortText, fullText) = formatActiveTotalShort(0)
-            tabView.findViewById<TextView>(R.id.tv_tab_total).text = shortText
+            tvTotal.text = shortText
+
+            // Tooltip + accessibilité (sur la vue du tab)
             tabView.tooltipText = fullText
             tabView.contentDescription = "$pumpName. $fullText"
+
+            // ✅ IMPORTANT : rendre la customView "transparente" aux interactions
+            disableTabCustomViewInteraction(tabView, tvName, tvTotal)
 
             tab.customView = tabView
             tabViews[pumpNumber] = tabView
@@ -758,7 +765,7 @@ class ScheduleActivity : AppCompatActivity() {
         val (shortText, fullText) = formatActiveTotalShort(totalTenth)
         tvTotal.text = shortText
 
-        // Tooltip + accessibilité
+        // Tooltip + accessibilité (sur la vue du tab)
         tabView.tooltipText = fullText
         tabView.contentDescription = "${tvName.text}. $fullText"
     }
@@ -773,7 +780,7 @@ class ScheduleActivity : AppCompatActivity() {
         return "Total actif : $totalText mL"
     }
 
-    // ✅ Nouveau : format compact pour tabs + texte complet pour tooltip
+    // ✅ Format compact pour tabs + texte complet pour tooltip
     private fun formatActiveTotalShort(totalTenth: Int): Pair<String, String> {
         val valueText = if (totalTenth % 10 == 0) {
             "${totalTenth / 10}"
@@ -782,7 +789,30 @@ class ScheduleActivity : AppCompatActivity() {
         }
 
         val full = "Total actif : $valueText mL"
-        val short = "Actif $valueText mL" // plus court pour tab petit
+        val short = "$valueText mL"
         return short to full
+    }
+
+    private fun disableTabCustomViewInteraction(
+        tabView: View,
+        tvName: TextView,
+        tvTotal: TextView
+    ) {
+        tabView.isClickable = false
+        tabView.isFocusable = false
+        tabView.isFocusableInTouchMode = false
+
+        tvName.isClickable = false
+        tvName.isFocusable = false
+        tvName.isFocusableInTouchMode = false
+
+        tvTotal.isClickable = false
+        tvTotal.isFocusable = false
+        tvTotal.isFocusableInTouchMode = false
+
+        // ✅ crucial : ne jamais consommer les touch events
+        tabView.setOnTouchListener { _, _ -> false }
+        tvName.setOnTouchListener { _, _ -> false }
+        tvTotal.setOnTouchListener { _, _ -> false }
     }
 }
