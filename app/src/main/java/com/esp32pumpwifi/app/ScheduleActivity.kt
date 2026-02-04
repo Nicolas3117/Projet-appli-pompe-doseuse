@@ -2,6 +2,7 @@ package com.esp32pumpwifi.app
 
 import android.content.Context
 import android.os.Bundle
+import android.os.Build
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
@@ -12,6 +13,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
@@ -99,8 +101,7 @@ class ScheduleActivity : AppCompatActivity() {
             tvTotal.text = shortText
 
             // Tooltip + accessibilité (sur la vue du tab)
-            tabView.tooltipText = fullText
-            tabView.contentDescription = "$pumpName. $fullText"
+            applyTabAccessibility(tabView, pumpName, fullText)
 
             // ✅ IMPORTANT : rendre la customView "transparente" aux interactions
             disableTabCustomViewInteraction(tabView, tvName, tvTotal)
@@ -766,8 +767,7 @@ class ScheduleActivity : AppCompatActivity() {
         tvTotal.text = shortText
 
         // Tooltip + accessibilité (sur la vue du tab)
-        tabView.tooltipText = fullText
-        tabView.contentDescription = "${tvName.text}. $fullText"
+        applyTabAccessibility(tabView, tvName.text, fullText)
     }
 
     // ✅ Gardé (si utilisé ailleurs), mais plus utilisé dans les tabs
@@ -801,18 +801,37 @@ class ScheduleActivity : AppCompatActivity() {
         tabView.isClickable = false
         tabView.isFocusable = false
         tabView.isFocusableInTouchMode = false
+        tabView.isLongClickable = false
 
         tvName.isClickable = false
         tvName.isFocusable = false
         tvName.isFocusableInTouchMode = false
+        tvName.isLongClickable = false
 
         tvTotal.isClickable = false
         tvTotal.isFocusable = false
         tvTotal.isFocusableInTouchMode = false
+        tvTotal.isLongClickable = false
 
-        // ✅ crucial : ne jamais consommer les touch events
-        tabView.setOnTouchListener { _, _ -> false }
-        tvName.setOnTouchListener { _, _ -> false }
-        tvTotal.setOnTouchListener { _, _ -> false }
+        tabView.setOnClickListener(null)
+        tvName.setOnClickListener(null)
+        tvTotal.setOnClickListener(null)
+
+        tabView.setOnTouchListener(null)
+        tvName.setOnTouchListener(null)
+        tvTotal.setOnTouchListener(null)
+    }
+
+    private fun applyTabAccessibility(
+        tabView: View,
+        pumpName: CharSequence,
+        fullText: String
+    ) {
+        tabView.contentDescription = "$pumpName. $fullText"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ViewCompat.setTooltipText(tabView, fullText)
+        } else {
+            ViewCompat.setTooltipText(tabView, null)
+        }
     }
 }
