@@ -22,7 +22,10 @@ class PlanningActivity : AppCompatActivity() {
         setContentView(R.layout.activity_planning)
 
         btnPlanningBack = findViewById(R.id.btn_planning_back)
-        planningView = findViewById(R.id.planningView)
+
+        // ✅ IMPORTANT : typer le findViewById sinon la méthode setVisibleEspModules peut être "introuvable"
+        planningView = findViewById<PlanningView>(R.id.planningView)
+
         layoutEspSelector = findViewById(R.id.layoutEspSelector)
 
         btnPlanningBack.setOnClickListener { finish() }
