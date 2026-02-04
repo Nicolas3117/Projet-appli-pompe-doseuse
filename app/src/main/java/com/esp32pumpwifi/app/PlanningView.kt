@@ -36,25 +36,30 @@ class PlanningView @JvmOverloads constructor(
     // ✅ Hauteur fixe des barres (tu voulais hauteur fixe)
     private val barHeight = 28f
 
-    // Diagnostic: ancien mapping volume-only (min 10dp, max 140dp + boost 12dp)
-    // rendait 3 mL et 60 mL visuellement trop longs malgré des durées réelles courtes.
+    // NOTES: paliers 0-250ms(minW..+6dp), 250-1000ms(+6..+14dp), 1-3s(+14..+22dp), 3-8s(+22..+34dp),
+    // 8-20s(+34..+46dp), 20-60s(+46..+60dp), >60s compression sqrt vers maxW; minW=6dp; maxW=min(hourWidth*0.25,120dp).
+    // boost volume max +4dp; hauteur fixe barHeight confirmée.
+    // Diagnostic: largeur calculée dans widthForDose(), utilisée dans rebuildBlocks() pour width des barres.
+    // Ancien min/max/boost trop élevés => durées courtes devenaient visuellement énormes.
     private fun widthForDose(durationMs: Long, quantityMl: Float): Float {
         val density = resources.displayMetrics.density
         val minW = 6f * density
-        val maxW = minOf(hourWidth * 0.30f, 160f * density)
+        val maxW = minOf(hourWidth * 0.25f, 120f * density)
 
         val t = durationMs.coerceAtLeast(0L).toFloat()
         val t0 = 250f
-        val t1 = 2000f
-        val t2 = 8000f
-        val t3 = 20000f
-        val t4 = 60000f
+        val t1 = 1000f
+        val t2 = 3000f
+        val t3 = 8000f
+        val t4 = 20000f
+        val t5 = 60000f
 
         val stepA = minW + 6f * density
-        val stepB = minW + 20f * density
-        val stepC = minW + 40f * density
-        val stepD = minW + 65f * density
-        val stepE = minW + 85f * density
+        val stepB = minW + 14f * density
+        val stepC = minW + 22f * density
+        val stepD = minW + 34f * density
+        val stepE = minW + 46f * density
+        val stepF = minW + 60f * density
 
         val base = when {
             t <= t0 -> lerp(minW, stepA, t / t0)
@@ -62,14 +67,16 @@ class PlanningView @JvmOverloads constructor(
             t <= t2 -> lerp(stepB, stepC, (t - t1) / (t2 - t1))
             t <= t3 -> lerp(stepC, stepD, (t - t2) / (t3 - t2))
             t <= t4 -> lerp(stepD, stepE, (t - t3) / (t4 - t3))
+            t <= t5 -> lerp(stepE, stepF, (t - t4) / (t5 - t4))
             else -> {
-                val extra = sqrt(((t - t4) / t4).coerceIn(0f, 4f))
-                (stepE + (maxW - stepE) * (extra / 2f))
+                val ratio = ((t - t5) / t5).coerceIn(0f, 4f)
+                val soft = sqrt(ratio / 4f)
+                stepF + (maxW - stepF) * soft
             }
         }
 
-        val q = quantityMl.coerceIn(0f, 80f)
-        val volumeBoost = (sqrt(q / 80f)) * (6f * density)
+        val q = quantityMl.coerceAtLeast(0f)
+        val volumeBoost = (sqrt(q / 50f) * (4f * density)).coerceAtMost(4f * density)
 
         return (base + volumeBoost).coerceIn(minW, maxW)
     }
