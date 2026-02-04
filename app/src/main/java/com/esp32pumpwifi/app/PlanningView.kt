@@ -175,6 +175,16 @@ class PlanningView @JvmOverloads constructor(
         alpha = 255
     }
 
+    private val debugOverlapPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FF3B30")
+        textSize = 20f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+
+    // DEBUG: mettre à false après validation visuelle.
+    private val DEBUG_FORCE_OVERLAP_FLAG = false
+    private var debugOverlapCount = 0
+
     // ================= DONNÉES =================
 
     private var visibleEspIds: List<Long> = emptyList()
@@ -253,6 +263,15 @@ class PlanningView @JvmOverloads constructor(
         }
 
         drawBlocks(canvas)
+
+        if (DEBUG_FORCE_OVERLAP_FLAG) {
+            canvas.drawText(
+                "overlaps=$debugOverlapCount",
+                8f,
+                24f,
+                debugOverlapPaint
+            )
+        }
 
         canvas.restore()
     }
@@ -431,6 +450,7 @@ class PlanningView @JvmOverloads constructor(
     }
 
     private fun markSamePumpOverlaps() {
+        debugOverlapCount = 0
         blocks.forEach { it.hasSamePumpOverlap = false }
         blocks.groupBy { it.espId to it.pumpNum }.values.forEach { group ->
             val sorted = group.sortedBy { it.startMsOfDay }
@@ -441,6 +461,7 @@ class PlanningView @JvmOverloads constructor(
                     // overlap = same pump uniquement
                     block.hasSamePumpOverlap = true
                     activeBlockWithMaxEnd.hasSamePumpOverlap = true
+                    debugOverlapCount += 1
                 }
                 if (block.endMsOfDay > activeEndMs) {
                     activeEndMs = block.endMsOfDay
@@ -518,7 +539,8 @@ class PlanningView @JvmOverloads constructor(
     ): PumpEvent? {
         val startMs = ((hh * 3600L) + (mm * 60L)) * 1000L
         if (startMs >= DAY_MS) return null
-        val endMs = (startMs + durationMs).coerceAtMost(DAY_MS)
+        val safeDurationMs = max(durationMs, 100L)
+        val endMs = (startMs + safeDurationMs).coerceAtMost(DAY_MS)
         val effectiveDurationMs = endMs - startMs
         if (effectiveDurationMs <= 0L) return null
         return PumpEvent(
@@ -539,7 +561,7 @@ class PlanningView @JvmOverloads constructor(
             canvas.drawRoundRect(b.rect, 10f, 10f, blockStrokePaint)
 
             drawBlockLabel(canvas, b)
-            if (b.hasSamePumpOverlap) {
+            if (b.hasSamePumpOverlap || DEBUG_FORCE_OVERLAP_FLAG) {
                 drawOverlapFlag(canvas, b.rect)
             }
         }
@@ -547,13 +569,14 @@ class PlanningView @JvmOverloads constructor(
 
     private fun drawOverlapFlag(canvas: Canvas, rect: RectF) {
         // overlap = same pump uniquement
-        // indicateur = mini drapeau rouge 2dp à droite
+        // indicateur = mini drapeau rouge qui déborde à droite (visible sur barres fines)
         val density = resources.displayMetrics.density
-        val flagW = (2f * density).coerceIn(2f * density, 3f * density)
+        val inset = 1f * density
+        val flagW = (4f * density).coerceIn(4f * density, 6f * density)
         val rectFlag = RectF(
-            rect.right - flagW,
+            rect.right - inset,
             rect.top,
-            rect.right,
+            rect.right + flagW,
             rect.bottom
         )
         canvas.drawRect(rectFlag, overlapFlagPaint)
