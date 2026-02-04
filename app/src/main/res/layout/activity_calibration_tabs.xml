@@ -47,6 +47,7 @@
     <!-- ✅ Onglets calibration -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tab_layout_calibration"
+        style="@style/Widget.App.Tabs"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:tabMode="fixed"
