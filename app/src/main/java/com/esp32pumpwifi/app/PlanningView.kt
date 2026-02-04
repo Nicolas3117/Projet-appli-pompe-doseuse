@@ -527,37 +527,47 @@ class PlanningView @JvmOverloads constructor(
         val w = block.rect.width()
         val h = block.rect.height()
 
-        val d = resources.displayMetrics.density
-        val minW = 12f * d
-        val minH = 12f * d
+        // NOTE: les dimensions des barres sont déjà en px "bruts" (barHeight = 28f).
+        // L'ancien minH utilisait dp (12f * density), ce qui dépassait souvent 28px
+        // sur écrans denses (x3 => 36px) -> condition toujours vraie, texte jamais dessiné.
+        val minW = 14f
+        val minH = 12f
         if (w < minW || h < minH) return
 
-        val padding = 6f * d
+        val padding = 6f
         val maxTextWidth = (w - padding * 2f).coerceAtLeast(0f)
 
-        val baseValue = if (block.quantityMl < 10f) {
-            String.format(Locale.getDefault(), "%.1f", block.quantityMl)
+        val quantityMl = if (block.quantityMl.isFinite()) block.quantityMl else 0f
+        val baseValue = if (quantityMl < 10f) {
+            String.format(Locale.getDefault(), "%.1f", quantityMl)
         } else {
-            String.format(Locale.getDefault(), "%.0f", block.quantityMl)
+            String.format(Locale.getDefault(), "%.0f", quantityMl)
         }
 
         var text = baseValue
         val withUnit = "$baseValue mL"
 
+        val previousTextSize = blockTextPaint.textSize
+        val maxTextHeight = h * 0.7f
+        if (maxTextHeight < previousTextSize) {
+            blockTextPaint.textSize = maxTextHeight.coerceAtLeast(10f)
+        }
+
         // si on a la place, on met l'unité
-        if (blockTextPaint.measureText(withUnit) <= maxTextWidth && w >= 55f * d) {
+        if (blockTextPaint.measureText(withUnit) <= maxTextWidth && w >= 55f) {
             text = withUnit
         } else {
             // sinon sans unité
             text = baseValue
             // si ça dépasse encore (très rare), on raccourcit
             if (blockTextPaint.measureText(text) > maxTextWidth) {
-                text = String.format(Locale.getDefault(), "%.1f", block.quantityMl)
+                text = String.format(Locale.getDefault(), "%.1f", quantityMl)
             }
         }
 
         val textY = block.rect.centerY() + (blockTextPaint.textSize / 3f)
         canvas.drawText(text, block.rect.centerX(), textY, blockTextPaint)
+        blockTextPaint.textSize = previousTextSize
     }
 
     // ================= TOUCH =================
