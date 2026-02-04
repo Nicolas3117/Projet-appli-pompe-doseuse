@@ -41,5 +41,12 @@
         <item name="tabIndicatorHeight">2dp</item>
         <item name="tabRippleColor">@color/tab_selected_red_pale</item>
         <item name="tabBackground">@drawable/tab_selected_background</item>
+        <item name="tabTextColor">@color/textPrimary</item>
+        <item name="tabSelectedTextColor">@color/textPrimary</item>
+        <item name="tabTextAppearance">@style/Widget.App.TabText</item>
+    </style>
+
+    <style name="Widget.App.TabText" parent="TextAppearance.MaterialComponents.Body2">
+        <item name="android:textStyle">bold</item>
     </style>
 </resources>
