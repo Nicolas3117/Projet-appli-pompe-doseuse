@@ -2,18 +2,15 @@ package com.esp32pumpwifi.app
 
 import android.content.Context
 import android.os.Bundle
-import android.os.Build
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
-import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
@@ -38,7 +35,7 @@ class ScheduleActivity : AppCompatActivity() {
     private lateinit var adapter: PumpPagerAdapter
     private lateinit var toolbar: MaterialToolbar
 
-    private val tabViews = mutableMapOf<Int, View>()
+    private val pumpNames = mutableMapOf<Int, String>()
     private val tabsViewModel: ScheduleTabsViewModel by viewModels()
 
     // ✅ Empreinte de la programmation envoyée / chargée (vérité)
@@ -91,23 +88,10 @@ class ScheduleActivity : AppCompatActivity() {
                 "Pompe $pumpNumber"
             ) ?: "Pompe $pumpNumber"
 
-            val tabView = layoutInflater.inflate(R.layout.tab_pump_schedule, tabLayout, false)
-            val tvName = tabView.findViewById<TextView>(R.id.tv_tab_name)
-            val tvTotal = tabView.findViewById<TextView>(R.id.tv_tab_total)
-            tvName.text = pumpName
-
-            // ✅ TEXTE COURT (onglet petit) + tooltip texte complet
             val (shortText, fullText) = formatActiveTotalShort(0)
-            tvTotal.text = shortText
-
-            // Tooltip + accessibilité (sur la vue du tab)
-            applyTabAccessibility(tabView, pumpName, fullText)
-
-            // ✅ IMPORTANT : rendre la customView "transparente" aux interactions
-            disableTabCustomViewInteraction(tabView, tvName, tvTotal)
-
-            tab.customView = tabView
-            tabViews[pumpNumber] = tabView
+            tab.text = buildTabText(pumpName, shortText)
+            tab.contentDescription = buildTabContentDescription(pumpName, fullText)
+            pumpNames[pumpNumber] = pumpName
         }.attach()
 
         tabsViewModel.activeTotals.observe(this) { totals ->
@@ -759,15 +743,11 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     private fun updateTabTotal(pumpNumber: Int, totalTenth: Int) {
-        val tabView = tabViews[pumpNumber] ?: return
-        val tvTotal = tabView.findViewById<TextView>(R.id.tv_tab_total)
-        val tvName = tabView.findViewById<TextView>(R.id.tv_tab_name)
-
         val (shortText, fullText) = formatActiveTotalShort(totalTenth)
-        tvTotal.text = shortText
-
-        // Tooltip + accessibilité (sur la vue du tab)
-        applyTabAccessibility(tabView, tvName.text, fullText)
+        val pumpName = pumpNames[pumpNumber] ?: "Pompe $pumpNumber"
+        val tab = tabLayout.getTabAt(pumpNumber - 1) ?: return
+        tab.text = buildTabText(pumpName, shortText)
+        tab.contentDescription = buildTabContentDescription(pumpName, fullText)
     }
 
     // ✅ Gardé (si utilisé ailleurs), mais plus utilisé dans les tabs
@@ -793,45 +773,11 @@ class ScheduleActivity : AppCompatActivity() {
         return short to full
     }
 
-    private fun disableTabCustomViewInteraction(
-        tabView: View,
-        tvName: TextView,
-        tvTotal: TextView
-    ) {
-        tabView.isClickable = false
-        tabView.isFocusable = false
-        tabView.isFocusableInTouchMode = false
-        tabView.isLongClickable = false
-
-        tvName.isClickable = false
-        tvName.isFocusable = false
-        tvName.isFocusableInTouchMode = false
-        tvName.isLongClickable = false
-
-        tvTotal.isClickable = false
-        tvTotal.isFocusable = false
-        tvTotal.isFocusableInTouchMode = false
-        tvTotal.isLongClickable = false
-
-        tabView.setOnClickListener(null)
-        tvName.setOnClickListener(null)
-        tvTotal.setOnClickListener(null)
-
-        tabView.setOnTouchListener(null)
-        tvName.setOnTouchListener(null)
-        tvTotal.setOnTouchListener(null)
+    private fun buildTabText(pumpName: String, shortText: String): String {
+        return "$pumpName\n$shortText"
     }
 
-    private fun applyTabAccessibility(
-        tabView: View,
-        pumpName: CharSequence,
-        fullText: String
-    ) {
-        tabView.contentDescription = "$pumpName. $fullText"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ViewCompat.setTooltipText(tabView, fullText)
-        } else {
-            ViewCompat.setTooltipText(tabView, null)
-        }
+    private fun buildTabContentDescription(pumpName: CharSequence, fullText: String): String {
+        return "$pumpName. $fullText"
     }
 }
