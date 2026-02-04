@@ -11,7 +11,6 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 class PlanningView @JvmOverloads constructor(
     context: Context,
@@ -36,52 +35,28 @@ class PlanningView @JvmOverloads constructor(
     // ✅ Hauteur fixe des barres (tu voulais hauteur fixe)
     private val barHeight = 28f
 
-    // NOTES: paliers 0-250ms(minW..+6dp), 250-1000ms(+6..+14dp), 1-3s(+14..+22dp), 3-8s(+22..+34dp),
-    // 8-20s(+34..+46dp), 20-60s(+46..+60dp), >60s compression sqrt vers maxW; minW=6dp; maxW=min(hourWidth*0.25,120dp).
-    // boost volume max +4dp; hauteur fixe barHeight confirmée.
-    // Diagnostic: largeur calculée dans widthForDose(), utilisée dans rebuildBlocks() pour width des barres.
-    // Ancien min/max/boost trop élevés => durées courtes devenaient visuellement énormes.
-    private fun widthForDose(durationMs: Long, quantityMl: Float): Float {
+    // Diagnostic: largeur calculée ici (widthForDose), appelée dans rebuildBlocks() pour chaque barre.
+    // Ancienne logique basée sur la durée + min/max élevés (6dp..120dp) + boost => barres trop longues.
+    private fun widthForDose(quantityMl: Float): Float {
         val density = resources.displayMetrics.density
-        val minW = 6f * density
-        val maxW = minOf(hourWidth * 0.25f, 120f * density)
-
-        val t = durationMs.coerceAtLeast(0L).toFloat()
-        val t0 = 250f
-        val t1 = 1000f
-        val t2 = 3000f
-        val t3 = 8000f
-        val t4 = 20000f
-        val t5 = 60000f
-
-        val stepA = minW + 6f * density
-        val stepB = minW + 14f * density
-        val stepC = minW + 22f * density
-        val stepD = minW + 34f * density
-        val stepE = minW + 46f * density
-        val stepF = minW + 60f * density
-
-        val base = when {
-            t <= t0 -> lerp(minW, stepA, t / t0)
-            t <= t1 -> lerp(stepA, stepB, (t - t0) / (t1 - t0))
-            t <= t2 -> lerp(stepB, stepC, (t - t1) / (t2 - t1))
-            t <= t3 -> lerp(stepC, stepD, (t - t2) / (t3 - t2))
-            t <= t4 -> lerp(stepD, stepE, (t - t3) / (t4 - t3))
-            t <= t5 -> lerp(stepE, stepF, (t - t4) / (t5 - t4))
-            else -> {
-                val ratio = ((t - t5) / t5).coerceIn(0f, 4f)
-                val soft = sqrt(ratio / 4f)
-                stepF + (maxW - stepF) * soft
-            }
-        }
+        val minW = 3f * density
+        val maxW = 16f * density
 
         val q = quantityMl.coerceAtLeast(0f)
-        val volumeBoost = (sqrt(q / 50f) * (4f * density)).coerceAtMost(4f * density)
+        val widthDp = when {
+            q <= 0.5f -> 3f
+            q <= 1f -> 4f
+            q <= 3f -> 5f
+            q <= 5f -> 6f
+            q <= 10f -> 8f
+            q <= 20f -> 11f
+            q <= 30f -> 13f
+            q <= 40f -> 15f
+            else -> 16f
+        }
 
-        return (base + volumeBoost).coerceIn(minW, maxW)
+        return (widthDp * density).coerceIn(minW, maxW)
     }
-
-    private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t.coerceIn(0f, 1f)
 
     // ================= ZOOM (PINCH - CONTINU, RAPIDE) =================
 
@@ -416,7 +391,7 @@ class PlanningView @JvmOverloads constructor(
                     val startX =
                         leftMargin + (startMs.toFloat() / MILLIS_PER_HOUR) * hourWidth
 
-                    val width = widthForDose(event.durationMs, event.quantityMl)
+                    val width = widthForDose(event.quantityMl)
 
                     val maxRight = leftMargin + timelineWidthPx()
                     val rawRight = (startX + width).coerceAtMost(maxRight)
