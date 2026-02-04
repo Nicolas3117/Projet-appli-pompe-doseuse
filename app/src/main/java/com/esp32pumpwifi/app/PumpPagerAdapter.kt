@@ -8,7 +8,6 @@ import androidx.viewpager2.adapter.FragmentStateAdapter
 class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activity) {
 
     private val context = activity
-
     private val fragments = List(4) { index ->
         val pumpNumber = index + 1
         PumpScheduleFragment.newInstance(pumpNumber)
@@ -33,6 +32,12 @@ class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activ
     fun setReadOnly(readOnly: Boolean) {
         fragments.forEach { fragment ->
             fragment.setReadOnly(readOnly)
+        }
+    }
+
+    fun setOnActiveTotalChangedListener(listener: (Int, Int) -> Unit) {
+        fragments.forEach { fragment ->
+            fragment.setOnActiveTotalChangedListener(listener)
         }
     }
 

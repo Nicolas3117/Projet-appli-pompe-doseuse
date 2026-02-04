@@ -20,6 +20,7 @@ class PumpScheduleFragment : Fragment() {
     private val gson = Gson()
     private var isReadOnly: Boolean = false
     private var addButton: Button? = null
+    private var onActiveTotalChanged: ((Int, Int) -> Unit)? = null
 
     companion object {
         const val MAX_PUMP_DURATION_SEC = 600
@@ -53,6 +54,7 @@ class PumpScheduleFragment : Fragment() {
                 onScheduleChanged = {
                     saveSchedules()
                     syncToProgramStore()
+                    notifyActiveTotalChanged()
                 }
             )
 
@@ -70,6 +72,7 @@ class PumpScheduleFragment : Fragment() {
         if (loaded) {
             syncToProgramStore()
         }
+        notifyActiveTotalChanged()
 
         applyReadOnlyState()
         return view
@@ -203,6 +206,7 @@ class PumpScheduleFragment : Fragment() {
         }
         saveSchedules()
         syncToProgramStore()
+        notifyActiveTotalChanged()
     }
 
     // ---------------------------------------------------------------------
@@ -532,6 +536,17 @@ class PumpScheduleFragment : Fragment() {
 
         saveSchedules()
         syncToProgramStore()
+        notifyActiveTotalChanged()
+    }
+
+    fun setOnActiveTotalChangedListener(listener: (Int, Int) -> Unit) {
+        onActiveTotalChanged = listener
+        notifyActiveTotalChanged()
+    }
+
+    private fun notifyActiveTotalChanged() {
+        val totalTenth = schedules.filter { it.enabled }.sumOf { it.quantityTenth }
+        onActiveTotalChanged?.invoke(pumpNumber, totalTenth)
     }
 
     fun setReadOnly(readOnly: Boolean) {

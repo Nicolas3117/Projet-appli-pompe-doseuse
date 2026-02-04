@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -25,6 +26,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.coroutines.resume
 import kotlin.math.roundToInt
+import java.util.Locale
 
 class ScheduleActivity : AppCompatActivity() {
 
@@ -32,6 +34,7 @@ class ScheduleActivity : AppCompatActivity() {
     private lateinit var tabLayout: TabLayout
     private lateinit var adapter: PumpPagerAdapter
     private lateinit var toolbar: MaterialToolbar
+    private val tabViews = mutableMapOf<Int, View>()
 
     // ✅ Empreinte de la programmation envoyée / chargée (vérité)
     private var lastProgramHash: String? = null
@@ -66,21 +69,30 @@ class ScheduleActivity : AppCompatActivity() {
             finish()
             return
         }
-
         viewPager = findViewById(R.id.viewPager)
         tabLayout = findViewById(R.id.tabLayout)
 
         adapter = PumpPagerAdapter(this)
         viewPager.adapter = adapter
+        adapter.setOnActiveTotalChangedListener { pumpNumber, totalTenth ->
+            updateTabTotal(pumpNumber, totalTenth)
+        }
 
         val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
         val moduleId = activeModule.id
 
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
-            tab.text = prefs.getString(
-                "esp_${moduleId}_pump${position + 1}_name",
-                "Pompe ${position + 1}"
-            )
+            val pumpNumber = position + 1
+            val pumpName = prefs.getString(
+                "esp_${moduleId}_pump${pumpNumber}_name",
+                "Pompe $pumpNumber"
+            ) ?: "Pompe $pumpNumber"
+            val totalTenth = getActiveTotalTenthFromPrefs(moduleId, pumpNumber)
+            val tabView = layoutInflater.inflate(R.layout.tab_pump_schedule, tabLayout, false)
+            tabView.findViewById<TextView>(R.id.tv_tab_name).text = pumpName
+            tabView.findViewById<TextView>(R.id.tv_tab_total).text = formatActiveTotal(totalTenth)
+            tab.customView = tabView
+            tabViews[pumpNumber] = tabView
         }.attach()
 
         // ✅ IMPORTANT : ne pas initialiser lastProgramHash sur le brouillon (ProgramStore)
@@ -717,6 +729,34 @@ class ScheduleActivity : AppCompatActivity() {
         for (pump in 1..4) {
             val schedules = mergedByPump[pump].orEmpty()
             adapter.updateSchedules(pump, schedules)
+            updateTabTotal(pump, sumActiveTotalTenth(schedules))
         }
+    }
+
+    private fun getActiveTotalTenthFromPrefs(espId: Long, pumpNumber: Int): Int {
+        val json =
+            getSharedPreferences("schedules", Context.MODE_PRIVATE)
+                .getString("esp_${espId}_pump$pumpNumber", null)
+                ?: return 0
+        val schedules = PumpScheduleJson.fromJson(json)
+        return sumActiveTotalTenth(schedules)
+    }
+
+    private fun sumActiveTotalTenth(schedules: List<PumpSchedule>): Int {
+        return schedules.filter { it.enabled }.sumOf { it.quantityTenth }
+    }
+
+    private fun updateTabTotal(pumpNumber: Int, totalTenth: Int) {
+        val tabView = tabViews[pumpNumber] ?: return
+        tabView.findViewById<TextView>(R.id.tv_tab_total).text = formatActiveTotal(totalTenth)
+    }
+
+    private fun formatActiveTotal(totalTenth: Int): String {
+        val totalText = if (totalTenth % 10 == 0) {
+            "${totalTenth / 10}"
+        } else {
+            String.format(Locale.getDefault(), "%.1f", totalTenth / 10f)
+        }
+        return "Total actif : $totalText mL"
     }
 }
