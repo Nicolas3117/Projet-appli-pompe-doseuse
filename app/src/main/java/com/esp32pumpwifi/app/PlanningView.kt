@@ -36,34 +36,45 @@ class PlanningView @JvmOverloads constructor(
     // ✅ Hauteur fixe des barres (tu voulais hauteur fixe)
     private val barHeight = 28f
 
-    // ✅ Largeur basée sur le volume (paliers + clamp)
-    private fun volumeToVisualWidthPx(volumeMl: Float): Float {
-        val d = resources.displayMetrics.density
-        val minW = 10f * d        // visible même pour 0.5 mL
-        val maxW = 140f * d       // évite les barres "3 kilomètres"
+    // Diagnostic: ancien mapping volume-only (min 10dp, max 140dp + boost 12dp)
+    // rendait 3 mL et 60 mL visuellement trop longs malgré des durées réelles courtes.
+    private fun widthForDose(durationMs: Long, quantityMl: Float): Float {
+        val density = resources.displayMetrics.density
+        val minW = 6f * density
+        val maxW = minOf(hourWidth * 0.30f, 160f * density)
 
-        val v = volumeMl.coerceAtLeast(0f)
+        val t = durationMs.coerceAtLeast(0L).toFloat()
+        val t0 = 250f
+        val t1 = 2000f
+        val t2 = 8000f
+        val t3 = 20000f
+        val t4 = 60000f
 
-        // Paliers (usage majoritaire <= 50mL)
-        val factor = when {
-            v <= 0.5f  -> 0.10f
-            v <= 1f    -> 0.16f
-            v <= 2f    -> 0.22f
-            v <= 3f    -> 0.26f
-            v <= 5f    -> 0.32f
-            v <= 10f   -> 0.42f
-            v <= 20f   -> 0.58f
-            v <= 35f   -> 0.74f
-            v <= 50f   -> 0.86f
-            else       -> 1.00f
+        val stepA = minW + 6f * density
+        val stepB = minW + 20f * density
+        val stepC = minW + 40f * density
+        val stepD = minW + 65f * density
+        val stepE = minW + 85f * density
+
+        val base = when {
+            t <= t0 -> lerp(minW, stepA, t / t0)
+            t <= t1 -> lerp(stepA, stepB, (t - t0) / (t1 - t0))
+            t <= t2 -> lerp(stepB, stepC, (t - t1) / (t2 - t1))
+            t <= t3 -> lerp(stepC, stepD, (t - t2) / (t3 - t2))
+            t <= t4 -> lerp(stepD, stepE, (t - t3) / (t4 - t3))
+            else -> {
+                val extra = sqrt(((t - t4) / t4).coerceIn(0f, 4f))
+                (stepE + (maxW - stepE) * (extra / 2f))
+            }
         }
 
-        val w = minW + (maxW - minW) * factor
+        val q = quantityMl.coerceIn(0f, 80f)
+        val volumeBoost = (sqrt(q / 80f)) * (6f * density)
 
-        // Petit boost progressif (doux) pour différencier 5 vs 10 sans exploser
-        val boost = (sqrt(v.coerceAtMost(50f)) / sqrt(50f)) * (12f * d)
-        return (w + boost).coerceIn(minW, maxW)
+        return (base + volumeBoost).coerceIn(minW, maxW)
     }
+
+    private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t.coerceIn(0f, 1f)
 
     // ================= ZOOM (PINCH - CONTINU, RAPIDE) =================
 
@@ -398,8 +409,7 @@ class PlanningView @JvmOverloads constructor(
                     val startX =
                         leftMargin + (startMs.toFloat() / MILLIS_PER_HOUR) * hourWidth
 
-                    // ✅ largeur basée sur volume, pas durée
-                    val width = volumeToVisualWidthPx(event.quantityMl)
+                    val width = widthForDose(event.durationMs, event.quantityMl)
 
                     val maxRight = leftMargin + timelineWidthPx()
                     val rawRight = (startX + width).coerceAtMost(maxRight)
