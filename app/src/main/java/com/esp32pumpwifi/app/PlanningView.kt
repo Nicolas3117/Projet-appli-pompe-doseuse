@@ -17,32 +17,30 @@ class PlanningView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    // ================= CONFIG (GANTT HORIZONTAL) =================
+    // ================= CONFIG (PORTRAIT) =================
 
     private val totalHours = 24
     private val pumpCount = 4
 
-    private val hourWidth = 360f          // ✅ cases horaires plus larges (1h = 360px avant zoom)
-    private val laneHeight = 70f
-    private val moduleGap = 26f
+    private val hourHeight = 140f
+    private val columnWidth = 300f
 
-    private val leftMargin = 190f         // place pour noms modules/pompes
+    private val leftMargin = 120f         // place pour heures
     private val topMargin = 90f
     private val headerHeight = 60f
     private val bottomMargin = 40f
     private val rightMargin = 40f
 
-    // ✅ Hauteur fixe des barres
-    private val barHeight = 28f
+    private val blockPadding = 6f
 
-    // Largeur des barres = paliers compacts par volume (Version A : 3–16dp)
-    private fun widthForDose(quantityMl: Float): Float {
+    // Hauteur des barres = paliers compacts par volume (Version A : 3–16dp)
+    private fun heightForDose(quantityMl: Float): Float {
         val density = resources.displayMetrics.density
-        val minW = 3f * density
-        val maxW = 16f * density
+        val minH = 3f * density
+        val maxH = 16f * density
 
         val q = quantityMl.coerceAtLeast(0f)
-        val widthDp = when {
+        val heightDp = when {
             q <= 0.5f -> 3f
             q <= 1f -> 4f
             q <= 3f -> 5f
@@ -54,7 +52,7 @@ class PlanningView @JvmOverloads constructor(
             else -> 16f
         }
 
-        return (widthDp * density).coerceIn(minW, maxW)
+        return (heightDp * density).coerceIn(minH, maxH)
     }
 
     // ================= ZOOM (PINCH - CONTINU, RAPIDE) =================
@@ -135,19 +133,21 @@ class PlanningView @JvmOverloads constructor(
         color = textMuted
         textSize = 20f
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        textAlign = Paint.Align.RIGHT
     }
 
     private val espTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = textColor
         textSize = 24f
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
     }
 
     private val pumpHeaderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = textMuted
         textSize = 18f
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        textAlign = Paint.Align.RIGHT
+        textAlign = Paint.Align.CENTER
     }
 
     private val blockPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -206,10 +206,8 @@ class PlanningView @JvmOverloads constructor(
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val moduleCount = max(1, visibleEspIds.size)
 
-        val contentHeight =
-            topMargin + (moduleCount * (pumpCount * laneHeight + moduleGap)) - moduleGap + bottomMargin
-
-        val contentWidth = leftMargin + timelineWidthPx() + rightMargin
+        val contentHeight = topMargin + (totalHours * hourHeight) + bottomMargin
+        val contentWidth = leftMargin + (moduleCount * columnWidth) + rightMargin
 
         val desiredHeight = (contentHeight * scaleFactor).toInt()
         val desiredWidth = (contentWidth * scaleFactor).toInt()
@@ -233,11 +231,11 @@ class PlanningView @JvmOverloads constructor(
 
         canvas.drawRect(0f, 0f, viewW, viewH, backgroundPaint)
 
-        drawStripes(canvas, viewW)
+        drawStripes(canvas)
         drawGrid(canvas)
         drawHourLabels(canvas)
-        drawModuleSeparators(canvas, viewW)
-        drawLaneSeparators(canvas, viewW)
+        drawModuleSeparators(canvas)
+        drawPumpSeparators(canvas)
         drawHeaders(canvas)
 
         if (blocksDirty) {
@@ -259,12 +257,13 @@ class PlanningView @JvmOverloads constructor(
 
         visibleEspIds.forEachIndexed { espIndex, espId ->
             val esp = modules.firstOrNull { it.id == espId } ?: return@forEachIndexed
-            val moduleTop = moduleTop(espIndex)
+            val moduleLeft = moduleLeft(espIndex)
+            val moduleCenterX = moduleLeft + columnWidth / 2f
 
             canvas.drawText(
                 esp.displayName,
-                12f,
-                moduleTop + 26f,
+                moduleCenterX,
+                topMargin - headerHeight * 0.55f,
                 espTitlePaint
             )
 
@@ -273,10 +272,10 @@ class PlanningView @JvmOverloads constructor(
                     prefsMain.getString("esp_${espId}_pump${pump}_name", "P$pump") ?: "P$pump"
                 val shortName = shorten(pumpName, 10)
 
-                val laneTop = moduleTop + (pump - 1) * laneHeight
-                val textY = laneTop + (laneHeight * 0.68f)
+                val pumpLeft = moduleLeft + (pump - 1) * pumpWidth()
+                val pumpCenterX = pumpLeft + pumpWidth() / 2f
 
-                canvas.drawText(shortName, leftMargin - 12f, textY, pumpHeaderPaint)
+                canvas.drawText(shortName, pumpCenterX, topMargin - 10f, pumpHeaderPaint)
             }
         }
     }
@@ -289,58 +288,62 @@ class PlanningView @JvmOverloads constructor(
 
     // ================= GRILLE =================
 
-    private fun drawStripes(canvas: Canvas, viewW: Float) {
-        val moduleCount = max(1, visibleEspIds.size)
-        for (moduleIndex in 0 until moduleCount) {
-            val mt = moduleTop(moduleIndex)
-            for (laneIndex in 0 until pumpCount) {
-                val laneTop = mt + laneIndex * laneHeight
-                if ((moduleIndex * pumpCount + laneIndex) % 2 == 1) {
-                    canvas.drawRect(0f, laneTop, viewW, laneTop + laneHeight, stripePaint)
-                }
+    private fun drawStripes(canvas: Canvas) {
+        val bottom = contentBottom()
+        val right = contentRight()
+        for (hour in 0 until totalHours) {
+            if (hour % 2 == 1) {
+                val y = topMargin + hour * hourHeight
+                canvas.drawRect(leftMargin, y, right, (y + hourHeight).coerceAtMost(bottom), stripePaint)
             }
         }
     }
 
     private fun drawGrid(canvas: Canvas) {
         val bottom = contentBottom()
-        // vertical hour lines
+        val right = contentRight()
+
+        // horizontal hour lines
         for (h in 0..totalHours) {
-            val x = leftMargin + h * hourWidth
-            canvas.drawLine(x, topMargin, x, bottom, gridPaint)
+            val y = topMargin + h * hourHeight
+            canvas.drawLine(leftMargin, y, right, y, gridPaint)
         }
-        // top baseline
-        canvas.drawLine(0f, topMargin, leftMargin + timelineWidthPx(), topMargin, strongSepPaint)
+
+        // left baseline (colonne des heures)
+        canvas.drawLine(leftMargin, topMargin, leftMargin, bottom, strongSepPaint)
     }
 
     private fun drawHourLabels(canvas: Canvas) {
-        // ✅ toutes les heures
+        val fm = hourTextPaint.fontMetrics
         for (h in 0..totalHours) {
-            val x = leftMargin + h * hourWidth
+            val y = topMargin + h * hourHeight
+            val textY = y - (fm.ascent + fm.descent) / 2f
             canvas.drawText(
                 String.format("%02d:00", h),
-                x + 6f,
-                topMargin - (headerHeight / 2f),
+                leftMargin - 12f,
+                textY,
                 hourTextPaint
             )
         }
     }
 
-    private fun drawModuleSeparators(canvas: Canvas, viewW: Float) {
+    private fun drawModuleSeparators(canvas: Canvas) {
         val moduleCount = max(1, visibleEspIds.size)
+        val bottom = contentBottom()
         for (index in 0..moduleCount) {
-            val y = moduleTop(index) - if (index == 0) 0f else moduleGap
-            canvas.drawLine(0f, y, viewW, y, strongSepPaint)
+            val x = leftMargin + index * columnWidth
+            canvas.drawLine(x, topMargin, x, bottom, strongSepPaint)
         }
     }
 
-    private fun drawLaneSeparators(canvas: Canvas, viewW: Float) {
+    private fun drawPumpSeparators(canvas: Canvas) {
         val moduleCount = max(1, visibleEspIds.size)
+        val bottom = contentBottom()
         for (moduleIndex in 0 until moduleCount) {
-            val mt = moduleTop(moduleIndex)
+            val moduleLeft = moduleLeft(moduleIndex)
             for (lane in 1 until pumpCount) {
-                val y = mt + lane * laneHeight
-                canvas.drawLine(0f, y, viewW, y, softSepPaint)
+                val x = moduleLeft + lane * pumpWidth()
+                canvas.drawLine(x, topMargin, x, bottom, softSepPaint)
             }
         }
     }
@@ -359,9 +362,11 @@ class PlanningView @JvmOverloads constructor(
         val prefsMain = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
         val modules = Esp32Manager.getAll(context)
 
+        val bottom = contentBottom()
+
         visibleEspIds.forEachIndexed { espIndex, espId ->
             val esp = modules.firstOrNull { it.id == espId } ?: return@forEachIndexed
-            val moduleTop = moduleTop(espIndex)
+            val moduleLeft = moduleLeft(espIndex)
 
             for (pumpNum in 1..pumpCount) {
 
@@ -372,8 +377,8 @@ class PlanningView @JvmOverloads constructor(
                     prefsMain.getString("esp_${espId}_pump${pumpNum}_name", "P$pumpNum")
                         ?: "P$pumpNum"
 
-                val laneTop = moduleTop + (pumpNum - 1) * laneHeight
-                val laneCenterY = laneTop + laneHeight / 2f
+                val pumpLeft = moduleLeft + (pumpNum - 1) * pumpWidth()
+                val pumpRight = pumpLeft + pumpWidth()
 
                 val events = buildPumpEvents(
                     espId = espId,
@@ -387,19 +392,19 @@ class PlanningView @JvmOverloads constructor(
                     val endMs = event.endMsOfDay
                     if (startMs >= DAY_MS || endMs <= 0L) return@forEach
 
-                    val startX =
-                        leftMargin + (startMs.toFloat() / MILLIS_PER_HOUR) * hourWidth
+                    val startY =
+                        topMargin + (startMs.toFloat() / MILLIS_PER_HOUR) * hourHeight
 
-                    val width = widthForDose(event.quantityMl)
+                    val height = heightForDose(event.quantityMl)
 
-                    val maxRight = leftMargin + timelineWidthPx()
-                    val rawRight = (startX + width).coerceAtMost(maxRight)
+                    val left = pumpLeft + blockPadding
+                    val right = (pumpRight - blockPadding).coerceAtLeast(left + 1f)
 
-                    val left = (startX + 2f).coerceAtMost(rawRight - 1f)
-                    val right = max(rawRight - 2f, left + 1f)
+                    val top = startY
+                    val bot = (startY + height).coerceAtMost(bottom - 1f)
+                    if (bot <= top) return@forEach
 
-                    val top = laneCenterY - (barHeight / 2f)
-                    val rect = RectF(left, top, right, top + barHeight)
+                    val rect = RectF(left, top, right, bot)
 
                     blocks.add(
                         PlanningBlock(
@@ -514,22 +519,29 @@ class PlanningView @JvmOverloads constructor(
         }
     }
 
-    // ✅ texte volume (sans unité si pas la place, avec "mL" si y'a la place)
+    // ✅ texte volume (sans décimale si .0, sinon 1 décimale ; et on garde la vraie valeur)
     private fun drawBlockLabel(canvas: Canvas, block: PlanningBlock) {
         val w = block.rect.width()
 
         val density = resources.displayMetrics.density
         val maxTextWidth = (w - 2f * density).coerceAtLeast(0f)
 
-        val quantityMl = if (block.quantityMl.isFinite()) block.quantityMl else 0f
-        val baseValue = if (quantityMl < 10f) {
-            String.format(Locale.getDefault(), "%.1f", quantityMl)
+        val qRaw = if (block.quantityMl.isFinite()) block.quantityMl else 0f
+
+        // 1) On affiche la "vraie valeur" mais stabilisée à 0.1 mL pour éviter les artefacts float.
+        // 2) Pas de décimale si le .0 tombe pile.
+        val qRounded = (qRaw * 10f).roundToInt() / 10f
+        val isWhole = abs(qRounded - qRounded.toInt().toFloat()) < 1e-6f
+
+        val baseValue = if (isWhole) {
+            String.format(Locale.getDefault(), "%.0f", qRounded)
         } else {
-            String.format(Locale.getDefault(), "%.0f", quantityMl)
+            String.format(Locale.getDefault(), "%.1f", qRounded)
         }
 
         val labelLong = "$baseValue mL"
         val labelShort = baseValue
+
         val text = if (blockTextPaint.measureText(labelLong) <= maxTextWidth) {
             labelLong
         } else {
@@ -589,15 +601,15 @@ class PlanningView @JvmOverloads constructor(
 
     // ================= HELPERS LAYOUT =================
 
-    private fun moduleTop(index: Int): Float =
-        topMargin + index * (pumpCount * laneHeight + moduleGap)
+    private fun moduleLeft(index: Int): Float = leftMargin + index * columnWidth
+    private fun pumpWidth(): Float = columnWidth / pumpCount
 
-    private fun contentBottom(): Float {
+    private fun contentBottom(): Float = topMargin + totalHours * hourHeight + bottomMargin
+
+    private fun contentRight(): Float {
         val moduleCount = max(1, visibleEspIds.size)
-        return topMargin + moduleCount * (pumpCount * laneHeight + moduleGap) - moduleGap
+        return leftMargin + moduleCount * columnWidth + rightMargin
     }
-
-    private fun timelineWidthPx(): Float = totalHours * hourWidth
 
     // ================= COULEURS =================
 
@@ -606,7 +618,7 @@ class PlanningView @JvmOverloads constructor(
             1 -> Color.parseColor("#2E7D32") // vert
             2 -> Color.parseColor("#1565C0") // bleu
             3 -> Color.parseColor("#EF6C00") // orange
-            4 -> Color.parseColor("#6A1B9A") // ✅ violet (pas de liseré orange)
+            4 -> Color.parseColor("#6A1B9A") // violet
             else -> Color.DKGRAY
         }
 }
