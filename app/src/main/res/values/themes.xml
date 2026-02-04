@@ -2,7 +2,7 @@
 <resources>
 
     <!-- Thème clair, MaterialComponents, sans ActionBar -->
-    <style name="Theme.ESP32PumpControl" parent="Theme.MaterialComponents.Light.NoActionBar">
+    <style name="Theme.ESP32PumpControl" parent="Theme.Material3.Light.NoActionBar">
 
         <!-- Couleurs principales -->
         <item name="colorPrimary">@color/primary</item>
@@ -26,13 +26,13 @@
     </style>
 
     <!-- Style global des boutons (garde ton rendu actuel) -->
-    <style name="CustomButton" parent="Widget.MaterialComponents.Button">
+    <style name="CustomButton" parent="Widget.Material3.Button">
         <item name="android:textColor">@color/textPrimary</item> <!-- Noir -->
         <item name="backgroundTint">@color/primary</item> <!-- Gris -->
     </style>
 
     <!-- ✅ Style UNIQUEMENT pour les boutons "Modifier/Supprimer" dans les encarts programmation -->
-    <style name="Widget.App.ScheduleActionButton" parent="Widget.MaterialComponents.Button">
+    <style name="Widget.App.ScheduleActionButton" parent="Widget.Material3.Button">
         <item name="android:minHeight">36dp</item>
         <item name="android:paddingTop">6dp</item>
         <item name="android:paddingBottom">6dp</item>
