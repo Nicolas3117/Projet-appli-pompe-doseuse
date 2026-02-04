@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Thème clair, Material3, sans ActionBar -->
+
+    <!-- Thème clair, MaterialComponents, sans ActionBar -->
     <style name="Theme.ESP32PumpControl" parent="Theme.MaterialComponents.Light.NoActionBar">
 
         <!-- Couleurs principales -->
@@ -20,16 +21,17 @@
         <item name="android:statusBarColor">@color/primary</item>
         <item name="android:navigationBarColor">@color/background</item>
 
-        <!-- Forcer le texte noir dans les boutons -->
+        <!-- Forcer le texte noir dans les boutons (global) -->
         <item name="materialButtonStyle">@style/CustomButton</item>
     </style>
 
-    <!-- Style personnalisé pour les boutons -->
+    <!-- Style global des boutons (garde ton rendu actuel) -->
     <style name="CustomButton" parent="Widget.MaterialComponents.Button">
         <item name="android:textColor">@color/textPrimary</item> <!-- Noir -->
-        <item name="backgroundTint">@color/primary</item> <!-- Gris foncé -->
+        <item name="backgroundTint">@color/primary</item> <!-- Gris -->
     </style>
 
+    <!-- ✅ Style UNIQUEMENT pour les boutons "Modifier/Supprimer" dans les encarts programmation -->
     <style name="Widget.App.ScheduleActionButton" parent="Widget.MaterialComponents.Button">
         <item name="android:minHeight">36dp</item>
         <item name="android:paddingTop">6dp</item>
@@ -38,27 +40,34 @@
         <item name="android:paddingEnd">12dp</item>
         <item name="android:textSize">12sp</item>
         <item name="android:textColor">@color/textPrimary</item>
-        <item name="insetTop">0dp</item>
-        <item name="insetBottom">0dp</item>
+        <!-- ❌ PAS de insetTop/insetBottom : ça cassait le linking -->
     </style>
 
+    <!-- Petit style de texte existant -->
     <style name="TextStatusPrimary">
         <item name="android:textStyle">bold</item>
         <item name="android:textSize">12sp</item>
         <item name="android:textColor">#555555</item>
     </style>
 
+    <!-- ✅ Style commun TabLayout : fond rouge très pâle + indicateur + ripple, texte noir gras -->
     <style name="Widget.App.Tabs" parent="Widget.MaterialComponents.TabLayout">
         <item name="tabIndicatorColor">@color/tab_selected_red_pale</item>
         <item name="tabIndicatorHeight">2dp</item>
         <item name="tabRippleColor">@color/tab_selected_red_pale</item>
         <item name="tabBackground">@drawable/tab_selected_background</item>
+
+        <!-- Texte onglets : noir -->
         <item name="tabTextColor">@color/textPrimary</item>
         <item name="tabSelectedTextColor">@color/textPrimary</item>
+
+        <!-- Texte onglets : gras -->
         <item name="tabTextAppearance">@style/Widget.App.TabText</item>
     </style>
 
+    <!-- Apparence du texte d’onglet (gras) -->
     <style name="Widget.App.TabText" parent="TextAppearance.MaterialComponents.Body2">
         <item name="android:textStyle">bold</item>
     </style>
+
 </resources>
