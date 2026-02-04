@@ -1,19 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="8dp">
 
-    <!-- Ligne 1 : Pompe + Heure + Quantité + Switch -->
+    <!-- Ligne 1 : Pompe (caché) + Heure + Quantité + Switch -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
-        <!-- Nom pompe -->
+        <!-- Nom pompe (caché car déjà dans l’onglet) -->
         <TextView
             android:id="@+id/tv_pump"
             android:layout_width="wrap_content"
@@ -21,7 +22,8 @@
             android:text="Pompe 1"
             android:textSize="16sp"
             android:textColor="@color/textPrimary"
-            android:gravity="center_vertical"/>
+            android:gravity="center_vertical"
+            android:visibility="gone" />
 
         <!-- Heure -->
         <TextView
@@ -32,7 +34,7 @@
             android:textSize="16sp"
             android:textColor="@color/textPrimary"
             android:layout_marginStart="16dp"
-            android:gravity="center_vertical"/>
+            android:gravity="center_vertical" />
 
         <!-- Quantité -->
         <TextView
@@ -43,13 +45,13 @@
             android:textSize="16sp"
             android:textColor="@color/textPrimary"
             android:layout_marginStart="16dp"
-            android:gravity="center_vertical"/>
+            android:gravity="center_vertical" />
 
         <!-- Spacer flexible pour pousser le Switch à droite -->
         <View
             android:layout_width="0dp"
             android:layout_height="1dp"
-            android:layout_weight="1"/>
+            android:layout_weight="1" />
 
         <!-- Switch Activer -->
         <Switch
@@ -58,10 +60,10 @@
             android:layout_height="wrap_content"
             android:text="Activer"
             android:textColor="@color/textPrimary"
-            android:trackTint="@color/switch_track_colors"/>
+            android:trackTint="@color/switch_track_colors" />
     </LinearLayout>
 
-    <!-- Ligne 2 : Boutons Modifier / Supprimer de même taille -->
+    <!-- Ligne 2 : Boutons Modifier / Supprimer -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -70,26 +72,35 @@
         android:gravity="center">
 
         <!-- Bouton Modifier -->
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_edit"
-            style="@style/Widget.App.ScheduleActionButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            style="@style/Widget.App.ScheduleIconPillButton"
+            android:layout_width="72dp"
+            android:layout_height="40dp"
             android:layout_marginEnd="8dp"
             android:contentDescription="Modifier"
-            android:drawableTop="@drawable/ic_edit_24"
+            android:text=""
             android:gravity="center"
-            android:text=""/>
+            android:textAlignment="center"
+            android:padding="0dp"
+            app:icon="@drawable/ic_edit_24"
+            app:iconGravity="textTop"
+            app:iconPadding="0dp" />
 
         <!-- Bouton Supprimer -->
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_delete"
-            style="@style/Widget.App.ScheduleActionButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            style="@style/Widget.App.ScheduleIconPillButton"
+            android:layout_width="72dp"
+            android:layout_height="40dp"
             android:contentDescription="Supprimer"
-            android:drawableTop="@drawable/ic_delete_24"
+            android:text=""
             android:gravity="center"
-            android:text=""/>
+            android:textAlignment="center"
+            android:padding="0dp"
+            app:icon="@drawable/ic_delete_24"
+            app:iconGravity="textTop"
+            app:iconPadding="0dp" />
     </LinearLayout>
+
 </LinearLayout>

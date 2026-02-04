@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- Thème clair, MaterialComponents, sans ActionBar -->
+    <!-- Thème clair, Material3, sans ActionBar -->
     <style name="Theme.ESP32PumpControl" parent="Theme.Material3.Light.NoActionBar">
 
         <!-- Couleurs principales -->
@@ -21,26 +21,41 @@
         <item name="android:statusBarColor">@color/primary</item>
         <item name="android:navigationBarColor">@color/background</item>
 
-        <!-- Forcer le texte noir dans les boutons (global) -->
+        <!-- Style global des boutons (garde ton rendu actuel partout) -->
         <item name="materialButtonStyle">@style/CustomButton</item>
     </style>
 
-    <!-- Style global des boutons (garde ton rendu actuel) -->
+    <!-- Style global des boutons (forme ovale conservée) -->
     <style name="CustomButton" parent="Widget.Material3.Button">
-        <item name="android:textColor">@color/textPrimary</item> <!-- Noir -->
-        <item name="backgroundTint">@color/primary</item> <!-- Gris -->
-    </style>
-
-    <!-- ✅ Style UNIQUEMENT pour les boutons icônes "Modifier/Supprimer" dans les encarts programmation -->
-    <style name="Widget.App.ScheduleActionButton" parent="Widget.Material3.Button">
-        <item name="android:minWidth">40dp</item>
-        <item name="android:minHeight">40dp</item>
-        <item name="android:padding">6dp</item>
         <item name="android:textColor">@color/textPrimary</item>
-        <!-- ❌ PAS de insetTop/insetBottom : ça cassait le linking -->
+        <item name="backgroundTint">@color/primary</item>
     </style>
 
-    <!-- Petit style de texte existant -->
+    <!-- ✅ Style UNIQUEMENT pour les boutons icônes Modifier/Supprimer dans les encarts programmation -->
+    <style name="Widget.App.ScheduleIconPillButton" parent="Widget.Material3.Button">
+        <!-- Taille pilule -->
+        <item name="android:minWidth">72dp</item>
+        <item name="android:minHeight">40dp</item>
+
+        <!-- On supprime les insets framework (SAFE) pour éviter un centrage bancal -->
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+
+        <!-- Padding nul : icône centrée -->
+        <item name="android:padding">0dp</item>
+
+        <!-- Visuel -->
+        <item name="backgroundTint">@color/primaryContainer</item>
+        <item name="cornerRadius">20dp</item>
+
+        <!-- Icône noire -->
+        <item name="iconTint">@color/textPrimary</item>
+
+        <!-- ❌ PAS de insetTop/insetBottom (Material) : ça cassait le linking -->
+    </style>
+
     <style name="TextStatusPrimary">
         <item name="android:textStyle">bold</item>
         <item name="android:textSize">12sp</item>
@@ -54,15 +69,12 @@
         <item name="tabRippleColor">@color/tab_selected_red_pale</item>
         <item name="tabBackground">@drawable/tab_selected_background</item>
 
-        <!-- Texte onglets : noir -->
         <item name="tabTextColor">@color/textPrimary</item>
         <item name="tabSelectedTextColor">@color/textPrimary</item>
 
-        <!-- Texte onglets : gras -->
         <item name="tabTextAppearance">@style/Widget.App.TabText</item>
     </style>
 
-    <!-- Apparence du texte d’onglet (gras) -->
     <style name="Widget.App.TabText" parent="TextAppearance.Material3.BodyMedium">
         <item name="android:textStyle">bold</item>
     </style>
