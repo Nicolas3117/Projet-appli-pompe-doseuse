@@ -9,18 +9,19 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import com.google.gson.Gson
 import kotlin.math.roundToInt
 
 class PumpScheduleFragment : Fragment() {
 
+    private val tabsViewModel: ScheduleTabsViewModel by activityViewModels()
     private val schedules = mutableListOf<PumpSchedule>()
     private lateinit var adapter: PumpScheduleAdapter
     private var pumpNumber: Int = 1
     private val gson = Gson()
     private var isReadOnly: Boolean = false
     private var addButton: Button? = null
-    private var onActiveTotalChanged: ((Int, Int) -> Unit)? = null
 
     companion object {
         const val MAX_PUMP_DURATION_SEC = 600
@@ -47,16 +48,15 @@ class PumpScheduleFragment : Fragment() {
 
         val view = inflater.inflate(R.layout.fragment_pump_schedule, container, false)
 
-        adapter =
-            PumpScheduleAdapter(
-                context = requireContext(),
-                schedules = schedules,
-                onScheduleChanged = {
-                    saveSchedules()
-                    syncToProgramStore()
-                    notifyActiveTotalChanged()
-                }
-            )
+        adapter = PumpScheduleAdapter(
+            context = requireContext(),
+            schedules = schedules,
+            onScheduleChanged = {
+                saveSchedules()
+                syncToProgramStore()
+                notifyActiveTotalChanged()
+            }
+        )
 
         view.findViewById<ListView>(R.id.lv_schedules).adapter = adapter
 
@@ -72,6 +72,8 @@ class PumpScheduleFragment : Fragment() {
         if (loaded) {
             syncToProgramStore()
         }
+
+        // ✅ Publie toujours le total courant (0 si vide)
         notifyActiveTotalChanged()
 
         applyReadOnlyState()
@@ -97,9 +99,7 @@ class PumpScheduleFragment : Fragment() {
     // 🔤 NOM PERSONNALISÉ DE LA POMPE
     // ---------------------------------------------------------------------
     private fun getPumpName(pump: Int): String {
-
         val active = Esp32Manager.getActive(requireContext()) ?: return "Pompe $pump"
-
         val prefs = requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
         return prefs.getString(
@@ -128,7 +128,6 @@ class PumpScheduleFragment : Fragment() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_add_schedule, null)
 
         val etTime = dialogView.findViewById<EditText>(R.id.et_time)
-
         val etQuantity = dialogView.findViewById<EditText>(R.id.et_quantity)
         QuantityInputUtils.applyInputFilter(etQuantity)
 
@@ -150,11 +149,7 @@ class PumpScheduleFragment : Fragment() {
                 val qtyTenth = QuantityInputUtils.parseQuantityTenth(etQuantity.text.toString())
 
                 if (parseTimeOrNull(time) == null || qtyTenth == null) {
-                    Toast.makeText(
-                        requireContext(),
-                        "Format invalide",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(requireContext(), "Format invalide", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
 
@@ -164,11 +159,7 @@ class PumpScheduleFragment : Fragment() {
                     if (check.isPopup) {
                         showBlockingPopup(check.blockingMessage)
                     } else {
-                        Toast.makeText(
-                            requireContext(),
-                            check.blockingMessage,
-                            Toast.LENGTH_LONG
-                        ).show()
+                        Toast.makeText(requireContext(), check.blockingMessage, Toast.LENGTH_LONG).show()
                     }
                     return@setPositiveButton
                 }
@@ -218,31 +209,19 @@ class PumpScheduleFragment : Fragment() {
     ): ConflictResult {
 
         val active = Esp32Manager.getActive(requireContext()) ?: return ConflictResult()
-
         val prefs = requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
         val parsed = parseTimeOrNull(time)
         if (parsed == null) {
-            return ConflictResult(
-                blockingMessage = "Format invalide",
-                isPopup = false
-            )
+            return ConflictResult(blockingMessage = "Format invalide", isPopup = false)
         }
 
         val (h, m) = parsed
         val startMs = (h * 3600L + m * 60L) * 1000L
 
-        val flow =
-            prefs.getFloat(
-                "esp_${active.id}_pump${pumpNumber}_flow",
-                0f
-            )
-
+        val flow = prefs.getFloat("esp_${active.id}_pump${pumpNumber}_flow", 0f)
         if (flow <= 0f) {
-            return ConflictResult(
-                blockingMessage = "Pompe non calibrée",
-                isPopup = false
-            )
+            return ConflictResult(blockingMessage = "Pompe non calibrée", isPopup = false)
         }
 
         val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
@@ -251,23 +230,15 @@ class PumpScheduleFragment : Fragment() {
             val msg =
                 "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
                         "Débit actuel : ${"%.1f".format(flow)} mL/s"
-            return ConflictResult(
-                blockingMessage = msg,
-                isPopup = true
-            )
+            return ConflictResult(blockingMessage = msg, isPopup = true)
         }
 
-        val durationMs =
-            (quantityMl / flow * 1000f).roundToInt()
-
+        val durationMs = (quantityMl / flow * 1000f).roundToInt()
         if (durationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) {
             val msg =
                 "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
                         "Débit actuel : ${"%.1f".format(flow)} mL/s"
-            return ConflictResult(
-                blockingMessage = msg,
-                isPopup = true
-            )
+            return ConflictResult(blockingMessage = msg, isPopup = true)
         }
 
         val maxMs = ManualDoseActivity.MAX_PUMP_DURATION_MS
@@ -275,23 +246,15 @@ class PumpScheduleFragment : Fragment() {
             val msg =
                 "Durée trop longue : maximum ${MAX_PUMP_DURATION_SEC}s\n" +
                         "Réduis la quantité ou recalibre le débit."
-            return ConflictResult(
-                blockingMessage = msg,
-                isPopup = true
-            )
+            return ConflictResult(blockingMessage = msg, isPopup = true)
         }
 
         val endMs = startMs + durationMs.toLong()
-
         if (endMs >= 86_400_000L) {
-            return ConflictResult(
-                blockingMessage = "La distribution dépasse minuit",
-                isPopup = false
-            )
+            return ConflictResult(blockingMessage = "La distribution dépasse minuit", isPopup = false)
         }
 
         for (s in schedules) {
-
             if (!s.enabled) continue
 
             val sMinMl = minMl
@@ -299,12 +262,9 @@ class PumpScheduleFragment : Fragment() {
 
             val parsedExisting = parseTimeOrNull(s.time) ?: continue
             val (sh, sm) = parsedExisting
-
             val sStartMs = (sh * 3600L + sm * 60L) * 1000L
 
-            val sDurMs =
-                (s.quantityMl / flow * 1000f).roundToInt()
-
+            val sDurMs = (s.quantityMl / flow * 1000f).roundToInt()
             if (sDurMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) continue
             if (sDurMs > maxMs) continue
 
@@ -312,8 +272,7 @@ class PumpScheduleFragment : Fragment() {
 
             if (startMs < sEndMs && endMs > sStartMs) {
                 return ConflictResult(
-                    blockingMessage =
-                        "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}",
+                    blockingMessage = "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}",
                     isPopup = false
                 )
             }
@@ -322,43 +281,30 @@ class PumpScheduleFragment : Fragment() {
         val overlappingPumps = mutableSetOf<String>()
 
         for (p in 1..4) {
-
             if (p == pumpNumber) continue
 
             val json =
                 requireContext()
                     .getSharedPreferences("schedules", Context.MODE_PRIVATE)
-                    .getString(
-                        "esp_${active.id}_pump$p",
-                        null
-                    ) ?: continue
+                    .getString("esp_${active.id}_pump$p", null)
+                    ?: continue
 
-            val list: List<PumpSchedule> =
-                PumpScheduleJson.fromJson(json)
+            val list: List<PumpSchedule> = PumpScheduleJson.fromJson(json)
 
-            val pFlow =
-                prefs.getFloat(
-                    "esp_${active.id}_pump${p}_flow",
-                    0f
-                )
-
+            val pFlow = prefs.getFloat("esp_${active.id}_pump${p}_flow", 0f)
             if (pFlow <= 0f) continue
 
             val pMinMl = pFlow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
 
             for (s in list) {
-
                 if (!s.enabled) continue
                 if (s.quantityMl < pMinMl) continue
 
                 val parsedOther = parseTimeOrNull(s.time) ?: continue
                 val (sh, sm) = parsedOther
-
                 val sStartMs = (sh * 3600L + sm * 60L) * 1000L
 
-                val sDurMs =
-                    (s.quantityMl / pFlow * 1000f).roundToInt()
-
+                val sDurMs = (s.quantityMl / pFlow * 1000f).roundToInt()
                 if (sDurMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) continue
                 if (sDurMs > maxMs) continue
 
@@ -374,10 +320,7 @@ class PumpScheduleFragment : Fragment() {
             return ConflictResult(
                 warningMessage =
                     "La distribution chevauche les pompes suivantes :\n" +
-                            overlappingPumps.joinToString(
-                                separator = "\n• ",
-                                prefix = "• "
-                            ) +
+                            overlappingPumps.joinToString(separator = "\n• ", prefix = "• ") +
                             "\n\nVoulez-vous continuer ?"
             )
         }
@@ -395,7 +338,6 @@ class PumpScheduleFragment : Fragment() {
     // 💾 SAUVEGARDE / CHARGEMENT
     // ---------------------------------------------------------------------
     private fun saveSchedules() {
-
         val active = Esp32Manager.getActive(requireContext()) ?: return
 
         requireContext()
@@ -410,20 +352,15 @@ class PumpScheduleFragment : Fragment() {
 
     // ✅ Retourne true si on a réellement chargé des données depuis prefs
     private fun loadSchedules(): Boolean {
-
         val active = Esp32Manager.getActive(requireContext()) ?: return false
 
         val json =
             requireContext()
                 .getSharedPreferences("schedules", Context.MODE_PRIVATE)
-                .getString(
-                    "esp_${active.id}_pump$pumpNumber",
-                    null
-                )
+                .getString("esp_${active.id}_pump$pumpNumber", null)
                 ?: return false
 
-        val loaded: MutableList<PumpSchedule> =
-            PumpScheduleJson.fromJson(json)
+        val loaded: MutableList<PumpSchedule> = PumpScheduleJson.fromJson(json)
 
         schedules.clear()
         schedules.addAll(loaded)
@@ -439,29 +376,20 @@ class PumpScheduleFragment : Fragment() {
     // 🔁 SYNC → ProgramStore
     // ---------------------------------------------------------------------
     private fun syncToProgramStore() {
-
         val active = Esp32Manager.getActive(requireContext()) ?: return
-
         val prefs = requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
         while (ProgramStore.count(requireContext(), active.id, pumpNumber) > 0) {
             ProgramStore.removeLine(requireContext(), active.id, pumpNumber, 0)
         }
 
-        val flow =
-            prefs.getFloat(
-                "esp_${active.id}_pump${pumpNumber}_flow",
-                0f
-            )
-
+        val flow = prefs.getFloat("esp_${active.id}_pump${pumpNumber}_flow", 0f)
         if (flow <= 0f) return
 
         val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
-
         var ignoredCount = 0
 
         for (s in schedules) {
-
             if (!s.enabled) continue
             if (s.quantityMl < minMl) {
                 ignoredCount++
@@ -475,9 +403,7 @@ class PumpScheduleFragment : Fragment() {
             }
             val (hh, mm) = parsed
 
-            val durationMs =
-                (s.quantityMl / flow * 1000f).roundToInt()
-
+            val durationMs = (s.quantityMl / flow * 1000f).roundToInt()
             if (durationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) {
                 ignoredCount++
                 continue
@@ -493,21 +419,15 @@ class PumpScheduleFragment : Fragment() {
                         "volumeMl=${QuantityInputUtils.formatQuantityMl(s.quantityTenth)} flow=$flow durationMs=$durationMs"
             )
 
-            val line =
-                ProgramLine(
-                    enabled = true,
-                    pump = pumpNumber,
-                    hour = hh,
-                    minute = mm,
-                    qtyMs = durationMs
-                )
-
-            ProgramStore.addLine(
-                requireContext(),
-                active.id,
-                pumpNumber,
-                line
+            val line = ProgramLine(
+                enabled = true,
+                pump = pumpNumber,
+                hour = hh,
+                minute = mm,
+                qtyMs = durationMs
             )
+
+            ProgramStore.addLine(requireContext(), active.id, pumpNumber, line)
         }
 
         if (ignoredCount > 0) {
@@ -523,7 +443,7 @@ class PumpScheduleFragment : Fragment() {
 
     // ✅ IMPORTANT FIX :
     // Quand ScheduleActivity fait adapter.updateSchedules(...) (après /read_ms),
-    // on doit aussi persister + reconstruire ProgramStore pour éviter que le brouillon reste vide (souvent pump1).
+    // on doit aussi persister + reconstruire ProgramStore pour éviter que le brouillon reste vide.
     fun replaceSchedules(newSchedules: List<PumpSchedule>) {
         schedules.clear()
         schedules.addAll(newSchedules)
@@ -539,14 +459,9 @@ class PumpScheduleFragment : Fragment() {
         notifyActiveTotalChanged()
     }
 
-    fun setOnActiveTotalChangedListener(listener: (Int, Int) -> Unit) {
-        onActiveTotalChanged = listener
-        notifyActiveTotalChanged()
-    }
-
     private fun notifyActiveTotalChanged() {
         val totalTenth = schedules.filter { it.enabled }.sumOf { it.quantityTenth }
-        onActiveTotalChanged?.invoke(pumpNumber, totalTenth)
+        tabsViewModel.setActiveTotal(pumpNumber, totalTenth)
     }
 
     fun setReadOnly(readOnly: Boolean) {
