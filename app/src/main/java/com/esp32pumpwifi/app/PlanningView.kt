@@ -169,6 +169,12 @@ class PlanningView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
     }
 
+    private val overlapCornerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FF3B30")
+        style = Paint.Style.FILL
+        alpha = 220
+    }
+
     // ================= DONNÉES =================
 
     private var visibleEspIds: List<Long> = emptyList()
@@ -184,7 +190,8 @@ class PlanningView @JvmOverloads constructor(
         val startMsOfDay: Long,
         val endMsOfDay: Long,
         val durationMs: Long,
-        val quantityMl: Float
+        val quantityMl: Float,
+        var hasSamePumpOverlap: Boolean = false
     )
 
     // ================= API =================
@@ -419,7 +426,27 @@ class PlanningView @JvmOverloads constructor(
             }
         }
 
+        markSamePumpOverlaps()
         blocksDirty = false
+    }
+
+    private fun markSamePumpOverlaps() {
+        blocks.forEach { it.hasSamePumpOverlap = false }
+        blocks.groupBy { it.espId to it.pumpNum }.values.forEach { group ->
+            val sorted = group.sortedBy { it.startMsOfDay }
+            var currentEnd = Long.MIN_VALUE
+            var currentBlock: PlanningBlock? = null
+            for (block in sorted) {
+                if (block.startMsOfDay < currentEnd && currentBlock != null) {
+                    block.hasSamePumpOverlap = true
+                    currentBlock.hasSamePumpOverlap = true
+                }
+                if (block.endMsOfDay > currentEnd) {
+                    currentEnd = block.endMsOfDay
+                    currentBlock = block
+                }
+            }
+        }
     }
 
     private data class PumpEvent(
@@ -511,7 +538,27 @@ class PlanningView @JvmOverloads constructor(
             canvas.drawRoundRect(b.rect, 10f, 10f, blockStrokePaint)
 
             drawBlockLabel(canvas, b)
+            if (b.hasSamePumpOverlap) {
+                drawOverlapCorner(canvas, b.rect)
+            }
         }
+    }
+
+    private fun drawOverlapCorner(canvas: Canvas, rect: RectF) {
+        // Overlap same-pump uniquement
+        // Triangle rouge top-right
+        // Débordement autorisé sur petites barres
+        val density = resources.displayMetrics.density
+        val minSize = 4f * density
+        val maxSize = 7f * density
+        val triSize = (5f * density).coerceIn(minSize, maxSize)
+        val path = Path().apply {
+            moveTo(rect.right, rect.top)
+            lineTo(rect.right - triSize, rect.top)
+            lineTo(rect.right, rect.top + triSize)
+            close()
+        }
+        canvas.drawPath(path, overlapCornerPaint)
     }
 
     // ✅ texte volume (sans unité si pas la place, avec "mL" si y'a la place)
