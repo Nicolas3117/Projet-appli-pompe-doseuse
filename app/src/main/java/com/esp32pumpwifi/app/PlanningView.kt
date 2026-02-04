@@ -516,18 +516,15 @@ class PlanningView @JvmOverloads constructor(
 
     // ✅ texte volume (sans unité si pas la place, avec "mL" si y'a la place)
     private fun drawBlockLabel(canvas: Canvas, block: PlanningBlock) {
+        // Diagnostic: le texte "flotte" car l'alignement horizontal peut être contraint par
+        // des largeurs conditionnelles et la baseline est approximée via textSize/3, ce qui
+        // décale visuellement les petites doses.
+        // Diagnostic: pour la lisibilité des chevauchements, le texte doit être centré sur
+        // la géométrie du rectangle (centerX/centerY) même si le label déborde.
         val w = block.rect.width()
-        val h = block.rect.height()
 
-        // NOTE: les dimensions des barres sont déjà en px "bruts" (barHeight = 28f).
-        // L'ancien minH utilisait dp (12f * density), ce qui dépassait souvent 28px
-        // sur écrans denses (x3 => 36px) -> condition toujours vraie, texte jamais dessiné.
-        val minW = 14f
-        val minH = 12f
-        if (w < minW || h < minH) return
-
-        val padding = 6f
-        val maxTextWidth = (w - padding * 2f).coerceAtLeast(0f)
+        val density = resources.displayMetrics.density
+        val maxTextWidth = (w - 2f * density).coerceAtLeast(0f)
 
         val quantityMl = if (block.quantityMl.isFinite()) block.quantityMl else 0f
         val baseValue = if (quantityMl < 10f) {
@@ -536,30 +533,18 @@ class PlanningView @JvmOverloads constructor(
             String.format(Locale.getDefault(), "%.0f", quantityMl)
         }
 
-        var text = baseValue
-        val withUnit = "$baseValue mL"
-
-        val previousTextSize = blockTextPaint.textSize
-        val maxTextHeight = h * 0.7f
-        if (maxTextHeight < previousTextSize) {
-            blockTextPaint.textSize = maxTextHeight.coerceAtLeast(10f)
-        }
-
-        // si on a la place, on met l'unité
-        if (blockTextPaint.measureText(withUnit) <= maxTextWidth && w >= 55f) {
-            text = withUnit
+        val labelLong = "$baseValue mL"
+        val labelShort = baseValue
+        val text = if (blockTextPaint.measureText(labelLong) <= maxTextWidth) {
+            labelLong
         } else {
-            // sinon sans unité
-            text = baseValue
-            // si ça dépasse encore (très rare), on raccourcit
-            if (blockTextPaint.measureText(text) > maxTextWidth) {
-                text = String.format(Locale.getDefault(), "%.1f", quantityMl)
-            }
+            labelShort
         }
 
-        val textY = block.rect.centerY() + (blockTextPaint.textSize / 3f)
+        blockTextPaint.textAlign = Paint.Align.CENTER
+        val fm = blockTextPaint.fontMetrics
+        val textY = block.rect.centerY() - (fm.ascent + fm.descent) / 2f
         canvas.drawText(text, block.rect.centerX(), textY, blockTextPaint)
-        blockTextPaint.textSize = previousTextSize
     }
 
     // ================= TOUCH =================
