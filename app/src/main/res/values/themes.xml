@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Thème clair, Material3, sans ActionBar -->
-    <style name="Theme.ESP32PumpControl" parent="Theme.Material3.Light.NoActionBar">
+    <style name="Theme.ESP32PumpControl" parent="Theme.MaterialComponents.Light.NoActionBar">
 
         <!-- Couleurs principales -->
         <item name="colorPrimary">@color/primary</item>
@@ -25,12 +25,12 @@
     </style>
 
     <!-- Style personnalisé pour les boutons -->
-    <style name="CustomButton" parent="Widget.Material3.Button">
+    <style name="CustomButton" parent="Widget.MaterialComponents.Button">
         <item name="android:textColor">@color/textPrimary</item> <!-- Noir -->
         <item name="backgroundTint">@color/primary</item> <!-- Gris foncé -->
     </style>
 
-    <style name="Widget.App.ScheduleActionButton" parent="Widget.Material3.Button">
+    <style name="Widget.App.ScheduleActionButton" parent="Widget.MaterialComponents.Button">
         <item name="android:minHeight">36dp</item>
         <item name="android:paddingTop">6dp</item>
         <item name="android:paddingBottom">6dp</item>
