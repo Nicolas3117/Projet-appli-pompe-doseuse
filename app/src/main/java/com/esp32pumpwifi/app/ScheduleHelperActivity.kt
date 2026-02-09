@@ -135,6 +135,18 @@ class ScheduleHelperActivity : AppCompatActivity() {
             return
         }
 
+        if (validation.isShortRange) {
+            val warningText = getString(
+                R.string.schedule_helper_short_range_warning,
+                validation.doseCount
+            )
+            val warningItem = TextView(this).apply {
+                text = warningText
+                textSize = 14f
+            }
+            proposalsContainer.addView(warningItem)
+        }
+
         validation.formattedTimes.forEachIndexed { index, time ->
             val text = getString(
                 R.string.schedule_helper_proposal_item,
@@ -209,6 +221,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
         val proposedMinutes = buildScheduleMinutes(start, end, doseCount)
         val formattedTimes = proposedMinutes.map { formatMinutes(it) }
         val volumePerDose = volumeTotal / doseCount.toDouble()
+        val isShortRange = proposedMinutes.size < doseCount
 
         return ValidationResult(
             isValid = true,
@@ -218,7 +231,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
             doseCount = doseCount,
             volumePerDose = volumePerDose,
             proposedMinutes = proposedMinutes,
-            formattedTimes = formattedTimes
+            formattedTimes = formattedTimes,
+            isShortRange = isShortRange
         )
     }
 
@@ -228,9 +242,39 @@ class ScheduleHelperActivity : AppCompatActivity() {
         }
         val duration = end - start
         val step = duration.toDouble() / (doseCount - 1)
-        return (0 until doseCount).map { index ->
+        val baseMinutes = (0 until doseCount).map { index ->
             (start + index * step).roundToInt()
         }
+        val uniqueMinutes = baseMinutes.distinct().sorted().toMutableSet()
+
+        if (uniqueMinutes.size < doseCount) {
+            for (index in 0 until doseCount) {
+                if (uniqueMinutes.size >= doseCount) {
+                    break
+                }
+                val target = (start + index * step).roundToInt()
+                if (uniqueMinutes.add(target)) {
+                    continue
+                }
+                var offset = 1
+                var added = false
+                while (!added && (target - offset >= start || target + offset <= end)) {
+                    val candidatePlus = target + offset
+                    if (candidatePlus <= end && uniqueMinutes.add(candidatePlus)) {
+                        added = true
+                        break
+                    }
+                    val candidateMinus = target - offset
+                    if (candidateMinus >= start && uniqueMinutes.add(candidateMinus)) {
+                        added = true
+                        break
+                    }
+                    offset++
+                }
+            }
+        }
+
+        return uniqueMinutes.sorted()
     }
 
     private fun showTimePicker(initialMinutes: Int?, onSelected: (Int) -> Unit) {
@@ -263,7 +307,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
         val doseCount: Int,
         val volumePerDose: Double,
         val proposedMinutes: List<Int>,
-        val formattedTimes: List<String>
+        val formattedTimes: List<String>,
+        val isShortRange: Boolean
     ) {
         companion object {
             fun invalid(): ValidationResult {
@@ -275,7 +320,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
                     doseCount = 0,
                     volumePerDose = 0.0,
                     proposedMinutes = emptyList(),
-                    formattedTimes = emptyList()
+                    formattedTimes = emptyList(),
+                    isShortRange = false
                 )
             }
         }

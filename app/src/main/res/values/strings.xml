@@ -39,7 +39,8 @@
     <string name="schedule_helper_total_volume">Volume total (mL)</string>
     <string name="schedule_helper_anti_overlap">Anti chevauchement (min)</string>
     <string name="schedule_helper_proposals">Propositions</string>
-    <string name="schedule_helper_proposal_item">%1$s → %2$.2f mL</string>
+    <string name="schedule_helper_proposal_item">%1$s → %2$.1f mL</string>
+    <string name="schedule_helper_short_range_warning">Plage trop courte pour %1$d doses uniques</string>
     <string name="schedule_helper_cancel">Annuler</string>
     <string name="schedule_helper_add_doses">Ajouter les doses</string>
     <string name="schedule_helper_error_start_time">Choisissez une heure de début.</string>
