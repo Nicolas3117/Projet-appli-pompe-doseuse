@@ -282,6 +282,7 @@ class ScheduleActivity : AppCompatActivity() {
         val moduleId = data.getStringExtra(ScheduleHelperActivity.EXTRA_MODULE_ID)
         if (moduleId != null && moduleId != active.id.toString()) return
 
+        // ✅ Android 7→15 : LongArray extra
         val timeMsArray = data.getLongArrayExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS) ?: return
         if (timeMsArray.isEmpty()) return
         val timeMsList = timeMsArray.toList()
@@ -302,10 +303,11 @@ class ScheduleActivity : AppCompatActivity() {
         val addedCount = result.second
         val ignoredCount = result.third
 
-        val fragment = getPumpFragment(pumpNumber)
-        fragment?.replaceSchedules(updatedSchedules)
-        if (fragment == null) {
-            adapter.updateSchedules(pumpNumber, updatedSchedules)
+        // ✅ CENTRALISÉ : updateSchedules() appelle replaceSchedules() si fragment dispo
+        adapter.updateSchedules(pumpNumber, updatedSchedules)
+
+        // fallback : si fragment pas (encore) présent, update au moins le total onglet
+        if (adapter.getFragment(pumpNumber) == null) {
             tabsViewModel.setActiveTotal(pumpNumber, sumActiveTotalTenth(updatedSchedules))
         }
 
@@ -398,14 +400,6 @@ class ScheduleActivity : AppCompatActivity() {
         }
 
         return Triple(sorted, addedCount, ignoredCount)
-    }
-
-    // ✅ FIX IMPORTANT : récupération fiable du fragment ViewPager2 (FragmentStateAdapter)
-    private fun getPumpFragment(pumpNumber: Int): PumpScheduleFragment? {
-        val position = pumpNumber - 1
-        if (position !in 0..3) return null
-        val tag = "f${adapter.getItemId(position)}"
-        return supportFragmentManager.findFragmentByTag(tag) as? PumpScheduleFragment
     }
 
     private fun formatTimeMs(timeMs: Long): String {

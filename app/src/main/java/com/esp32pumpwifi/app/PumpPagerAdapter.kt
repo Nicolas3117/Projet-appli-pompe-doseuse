@@ -20,24 +20,41 @@ class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activ
     }
 
     /**
-     * Avec ViewPager2 + FragmentStateAdapter, le tag interne est "f" + itemId
-     * (c’est géré par FragmentStateAdapter lui-même).
+     * Avec ViewPager2 + FragmentStateAdapter, le tag interne est "f" + itemId.
+     * MAIS selon timing/lifecycle, findFragmentByTag peut être null alors que le fragment existe déjà.
+     * -> On fait donc :
+     *    1) lookup stable via tag "f" + getItemId(position)
+     *    2) fallback via scan fragmentManager.fragments (uniquement PumpScheduleFragment)
      */
-    private fun findFragment(position: Int): PumpScheduleFragment? {
+    fun getFragment(pumpNumber: Int): PumpScheduleFragment? {
+        val position = pumpNumber - 1
         if (position !in 0 until itemCount) return null
+
+        // 1) lookup officiel FragmentStateAdapter
         val tag = "f${getItemId(position)}"
-        return fragmentManager.findFragmentByTag(tag) as? PumpScheduleFragment
+        val byTag = fragmentManager.findFragmentByTag(tag) as? PumpScheduleFragment
+        if (byTag != null) return byTag
+
+        // 2) fallback : scan des fragments existants
+        return fragmentManager.fragments
+            .filterIsInstance<PumpScheduleFragment>()
+            .firstOrNull { it.arguments?.getInt("pumpNumber") == pumpNumber }
     }
 
+    /**
+     * Centralise la mise à jour UI.
+     * - Si fragment présent : replaceSchedules() -> refresh + save + sync ProgramStore + update totals.
+     * - Si fragment absent : ne crash pas, et on ne force rien (les prefs ont déjà été persistées).
+     */
     fun updateSchedules(pumpNumber: Int, schedules: List<PumpSchedule>) {
-        val position = pumpNumber - 1
-        findFragment(position)?.replaceSchedules(schedules)
+        val fragment = getFragment(pumpNumber)
+        fragment?.replaceSchedules(schedules)
     }
 
     fun setReadOnly(readOnly: Boolean) {
         this.readOnly = readOnly
-        for (position in 0 until itemCount) {
-            findFragment(position)?.setReadOnly(readOnly)
+        for (pumpNumber in 1..itemCount) {
+            getFragment(pumpNumber)?.setReadOnly(readOnly)
         }
     }
 }
