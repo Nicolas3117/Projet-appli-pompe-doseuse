@@ -111,7 +111,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
                 putExtra(EXTRA_ANTI_CHEV_MINUTES, validation.antiOverlapMinutes)
                 putExtra(EXTRA_VOLUME_PER_DOSE, validation.volumePerDose)
                 putStringArrayListExtra(EXTRA_SCHEDULE_TIMES, ArrayList(validation.formattedTimes))
-                putExtra(EXTRA_SCHEDULE_MS, ArrayList(validation.proposedTimesMs))
+                putExtra(EXTRA_SCHEDULE_MS, validation.proposedTimesMs.toLongArray())
             }
 
             setResult(Activity.RESULT_OK, resultIntent)

@@ -282,10 +282,10 @@ class ScheduleActivity : AppCompatActivity() {
         val moduleId = data.getStringExtra(ScheduleHelperActivity.EXTRA_MODULE_ID)
         if (moduleId != null && moduleId != active.id.toString()) return
 
-        val timeMsList =
-            data.getLongArrayListExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS)?.filterNotNull()
-                ?: return
-        if (timeMsList.isEmpty()) return
+        val timeMsArray =
+            data.getLongArrayExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS) ?: return
+        if (timeMsArray.isEmpty()) return
+        val timeMsList = timeMsArray.toList()
 
         val volumePerDose = data.getDoubleExtra(ScheduleHelperActivity.EXTRA_VOLUME_PER_DOSE, 0.0)
         if (volumePerDose <= 0.0) return
