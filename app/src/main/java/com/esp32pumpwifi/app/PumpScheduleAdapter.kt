@@ -1,7 +1,6 @@
 package com.esp32pumpwifi.app
 
 import android.content.Context
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -24,30 +23,31 @@ class PumpScheduleAdapter(
         const val MAX_PUMP_DURATION_SEC = 600
     }
 
+    /**
+     * Liste triée utilisée UNIQUEMENT pour l'affichage.
+     * Chaque item garde l'index réel (sourceIndex) dans schedules (non triée),
+     * pour que edit/delete modifient le bon élément.
+     */
     private var displaySchedules: List<IndexedValue<PumpSchedule>> = emptyList()
-    private var displayDirty = true
+    private var displayDirty: Boolean = true
 
     override fun getCount(): Int {
-        refreshDisplaySchedules("getCount")
-        Log.d(
-            "SCHED_TRACE",
-            "getCount size=${displaySchedules.size} rawSize=${schedules.size}"
-        )
+        refreshDisplaySchedules()
         return displaySchedules.size
     }
 
     override fun getItem(position: Int): Any {
-        refreshDisplaySchedules("getItem")
+        refreshDisplaySchedules()
         return displaySchedules[position].value
     }
 
     override fun getItemId(position: Int): Long {
-        refreshDisplaySchedules("getItemId")
+        refreshDisplaySchedules()
         return displaySchedules[position].index.toLong()
     }
 
     override fun notifyDataSetChanged() {
-        markDisplayDirty("notifyDataSetChanged")
+        markDisplayDirty()
         super.notifyDataSetChanged()
     }
 
@@ -55,19 +55,17 @@ class PumpScheduleAdapter(
         val view = convertView ?: LayoutInflater.from(context)
             .inflate(R.layout.item_schedule, parent, false)
 
-        refreshDisplaySchedules("getView")
+        refreshDisplaySchedules()
+
         if (position !in displaySchedules.indices) {
-            Log.w(
-                "SCHED_TRACE",
-                "getView outOfBounds position=$position size=${displaySchedules.size}"
-            )
+            // Sécurité: ne doit pas arriver si getCount() est cohérent
             return view
         }
 
         val indexedSchedule = displaySchedules[position]
         val schedule = indexedSchedule.value
 
-        // 🔹 index réel dans la liste source (non triée)
+        // index réel dans la liste source (non triée)
         val sourceIndex = indexedSchedule.index
 
         val tvPump = view.findViewById<TextView>(R.id.tv_pump)
@@ -93,6 +91,7 @@ class PumpScheduleAdapter(
             }
         }
 
+        // --- ReadOnly UI ---
         btnEdit.isEnabled = !readOnly
         btnDelete.isEnabled = !readOnly
         val actionAlpha = if (readOnly) 0.5f else 1f
@@ -139,7 +138,6 @@ class PumpScheduleAdapter(
                     )
 
                     if (conflict.blockingMessage != null) {
-                        // ✅ popup seulement pour "Quantité trop faible" ou "Durée trop longue"
                         if (
                             conflict.blockingMessage.startsWith("Quantité trop faible") ||
                             conflict.blockingMessage.startsWith("Durée trop longue")
@@ -163,7 +161,7 @@ class PumpScheduleAdapter(
                             .setPositiveButton("Oui") { _, _ ->
                                 schedule.time = newTime
                                 schedule.quantityTenth = newQtyTenth
-                                markDisplayDirty("editSchedule")
+                                markDisplayDirty()
                                 notifyDataSetChanged()
                                 onScheduleChanged()
                             }
@@ -174,7 +172,7 @@ class PumpScheduleAdapter(
 
                     schedule.time = newTime
                     schedule.quantityTenth = newQtyTenth
-                    markDisplayDirty("editSchedule")
+                    markDisplayDirty()
                     notifyDataSetChanged()
                     onScheduleChanged()
                 }
@@ -183,12 +181,12 @@ class PumpScheduleAdapter(
         }
 
         // -----------------------------------------------------------------
-        // 🗑 SUPPRIMER (CORRECT)
+        // 🗑 SUPPRIMER
         // -----------------------------------------------------------------
         btnDelete.setOnClickListener {
             if (readOnly) return@setOnClickListener
             schedules.removeAt(sourceIndex)
-            markDisplayDirty("deleteSchedule")
+            markDisplayDirty()
             notifyDataSetChanged()
             onScheduleChanged()
         }
@@ -209,7 +207,6 @@ class PumpScheduleAdapter(
         val active = Esp32Manager.getActive(context) ?: return ConflictResult()
         val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
-        // ✅ sécurité HH/MM (au cas où)
         val startMs = ScheduleOverlapUtils.timeToStartMs(newTime)
             ?: return ConflictResult(blockingMessage = "Format invalide")
 
@@ -217,7 +214,6 @@ class PumpScheduleAdapter(
         val flow = prefs.getFloat(flowKey, 0f)
         if (flow <= 0f) return ConflictResult(blockingMessage = "Pompe non calibrée")
 
-        // ✅ Durée centralisée (min/max) => même logique que Fragment/Helper
         val durationMs = ScheduleOverlapUtils.durationMsFromQuantity(newQtyTenth, flow)
         if (durationMs == null) {
             val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
@@ -243,8 +239,7 @@ class PumpScheduleAdapter(
 
         if (overlapResult.samePumpConflict) {
             return ConflictResult(
-                blockingMessage =
-                    "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}"
+                blockingMessage = "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}"
             )
         }
 
@@ -283,26 +278,21 @@ class PumpScheduleAdapter(
     }
 
     // ---------------------------------------------------------------------
-    // ✅ Tri affichage : fallback safe
+    // ✅ Tri affichage : safe
     // ---------------------------------------------------------------------
     private fun safeTimeToMinutes(time: String): Int {
         val parsed = ScheduleOverlapUtils.parseTimeOrNull(time) ?: return Int.MAX_VALUE
         return parsed.first * 60 + parsed.second
     }
 
-    private fun markDisplayDirty(reason: String) {
+    private fun markDisplayDirty() {
         displayDirty = true
-        Log.d("SCHED_TRACE", "displayDirty reason=$reason rawSize=${schedules.size}")
     }
 
-    private fun refreshDisplaySchedules(reason: String) {
+    private fun refreshDisplaySchedules() {
         if (!displayDirty) return
         displaySchedules = schedules.withIndex()
             .sortedBy { safeTimeToMinutes(it.value.time) }
         displayDirty = false
-        Log.d(
-            "SCHED_TRACE",
-            "displaySchedules refreshed reason=$reason size=${displaySchedules.size}"
-        )
     }
 }

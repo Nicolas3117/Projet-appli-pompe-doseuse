@@ -2,11 +2,13 @@ package com.esp32pumpwifi.app
 
 import android.content.Context
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.*
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ListView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
@@ -16,10 +18,13 @@ import kotlin.math.roundToInt
 class PumpScheduleFragment : Fragment() {
 
     private val tabsViewModel: ScheduleTabsViewModel by activityViewModels()
+
     private val schedules = mutableListOf<PumpSchedule>()
     private lateinit var adapter: PumpScheduleAdapter
+
     private var pumpNumber: Int = 1
     private val gson = Gson()
+
     private var isReadOnly: Boolean = false
     private var addButton: Button? = null
     private var listView: ListView? = null
@@ -46,7 +51,6 @@ class PumpScheduleFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-
         val view = inflater.inflate(R.layout.fragment_pump_schedule, container, false)
 
         adapter = PumpScheduleAdapter(
@@ -63,20 +67,17 @@ class PumpScheduleFragment : Fragment() {
             it.adapter = adapter
         }
 
-        addButton = view.findViewById<Button>(R.id.btn_add_schedule)
-        addButton?.setOnClickListener {
-            showAddScheduleDialog()
+        addButton = view.findViewById<Button>(R.id.btn_add_schedule).also {
+            it.setOnClickListener { showAddScheduleDialog() }
         }
 
-        // ✅ IMPORTANT FIX :
-        // Ne pas appeler syncToProgramStore() si on n'a rien chargé,
-        // sinon on peut "vider" le ProgramStore sur un téléphone neuf.
+        // Ne pas sync si on n'a rien chargé (évite de "vider" sur un téléphone neuf)
         val loaded = loadSchedules()
         if (loaded) {
             syncToProgramStore()
         }
 
-        // ✅ Publie toujours le total courant (0 si vide)
+        // Publie toujours le total courant (0 si vide)
         notifyActiveTotalChanged()
 
         applyReadOnlyState()
@@ -121,7 +122,6 @@ class PumpScheduleFragment : Fragment() {
         if (isReadOnly) return
 
         val dialogView = layoutInflater.inflate(R.layout.dialog_add_schedule, null)
-
         val etTime = dialogView.findViewById<EditText>(R.id.et_time)
         val etQuantity = dialogView.findViewById<EditText>(R.id.et_quantity)
         QuantityInputUtils.applyInputFilter(etQuantity)
@@ -151,12 +151,8 @@ class PumpScheduleFragment : Fragment() {
                 val check = detectConflicts(time, qtyTenth)
 
                 if (check.blockingMessage != null) {
-                    if (check.isPopup) {
-                        showBlockingPopup(check.blockingMessage)
-                    } else {
-                        Toast.makeText(requireContext(), check.blockingMessage, Toast.LENGTH_LONG)
-                            .show()
-                    }
+                    if (check.isPopup) showBlockingPopup(check.blockingMessage)
+                    else Toast.makeText(requireContext(), check.blockingMessage, Toast.LENGTH_LONG).show()
                     return@setPositiveButton
                 }
 
@@ -191,6 +187,7 @@ class PumpScheduleFragment : Fragment() {
         if (this::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
         }
+
         saveSchedules()
         syncToProgramStore()
         notifyActiveTotalChanged()
@@ -203,7 +200,6 @@ class PumpScheduleFragment : Fragment() {
         time: String,
         quantityTenth: Int
     ): ConflictResult {
-
         val active = Esp32Manager.getActive(requireContext()) ?: return ConflictResult()
         val prefs = requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
@@ -215,7 +211,7 @@ class PumpScheduleFragment : Fragment() {
             return ConflictResult(blockingMessage = "Pompe non calibrée", isPopup = false)
         }
 
-        // ✅ min/max durée centralisés (même logique que partout)
+        // min/max durée centralisés
         val durationMs = ScheduleOverlapUtils.durationMsFromQuantity(quantityTenth, flow)
         if (durationMs == null) {
             val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
@@ -284,23 +280,14 @@ class PumpScheduleFragment : Fragment() {
             .apply()
     }
 
-    // ✅ Retourne true si on a réellement chargé des données depuis prefs
+    // Retourne true si on a réellement chargé des données depuis prefs
     private fun loadSchedules(): Boolean {
         val active = Esp32Manager.getActive(requireContext()) ?: return false
 
         val key = "esp_${active.id}_pump$pumpNumber"
         val json = requireContext()
             .getSharedPreferences("schedules", Context.MODE_PRIVATE)
-            .getString(key, null)
-
-        Log.i(
-            "SCHED_TRACE",
-            "loadSchedules pump=$pumpNumber key=$key jsonNull=${json == null}"
-        )
-
-        if (json == null) {
-            return false
-        }
+            .getString(key, null) ?: return false
 
         val loaded: MutableList<PumpSchedule> = PumpScheduleJson.fromJson(json)
 
@@ -310,11 +297,6 @@ class PumpScheduleFragment : Fragment() {
         if (this::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
         }
-
-        Log.i(
-            "SCHED_TRACE",
-            "loadSchedules pump=$pumpNumber loadedSize=${loaded.size}"
-        )
 
         return true
     }
@@ -338,6 +320,7 @@ class PumpScheduleFragment : Fragment() {
 
         for (s in schedules) {
             if (!s.enabled) continue
+
             if (s.quantityMl < minMl) {
                 ignoredCount++
                 continue
@@ -360,7 +343,7 @@ class PumpScheduleFragment : Fragment() {
                 continue
             }
 
-            Log.d(
+            android.util.Log.d(
                 "PROGRAM_SAVE",
                 "Saving schedule line: pump=$pumpNumber time=$hh:$mm " +
                         "volumeMl=${QuantityInputUtils.formatQuantityMl(s.quantityTenth)} flow=$flow durationMs=$durationMs"
@@ -388,27 +371,17 @@ class PumpScheduleFragment : Fragment() {
 
     fun getSchedules(): List<PumpSchedule> = schedules
 
-    // ✅ IMPORTANT FIX :
-    // Quand ScheduleActivity fait adapter.updateSchedules(...) (après /read_ms),
-    // on doit aussi persister + reconstruire ProgramStore pour éviter que le brouillon reste vide.
+    /**
+     * Remplace la liste de programmations par une nouvelle liste (ex: retour /read_ms).
+     * On persiste + reconstruit ProgramStore + met à jour les totaux.
+     */
     fun replaceSchedules(newSchedules: List<PumpSchedule>) {
-        Log.i(
-            "SCHED_TRACE",
-            "replaceSchedules pump=$pumpNumber newSize=${newSchedules.size} " +
-                "adapterInit=${this::adapter.isInitialized} listAdapter=${listView?.adapter?.hashCode()} " +
-                "isAdded=$isAdded viewReady=${view != null}"
-        )
         schedules.clear()
         schedules.addAll(newSchedules)
 
         if (this::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
         }
-
-        Log.i(
-            "SCHED_TRACE",
-            "replaceSchedules pump=$pumpNumber schedulesSizeAfter=${schedules.size}"
-        )
 
         if (!isAdded) return
 
@@ -431,6 +404,7 @@ class PumpScheduleFragment : Fragment() {
         val enabled = !isReadOnly
         addButton?.isEnabled = enabled
         addButton?.alpha = if (enabled) 1f else 0.5f
+
         if (this::adapter.isInitialized) {
             adapter.setReadOnly(isReadOnly)
         }
