@@ -306,10 +306,10 @@ class ScheduleActivity : AppCompatActivity() {
         Log.i(
             "SCHED_TRACE",
             "handleScheduleHelperResult pump=$pumpNumber activeId=${active.id} " +
-                "moduleId=$moduleId viewPagerItem=${viewPager.currentItem} " +
-                "updatedSize=${updatedSchedules.size} " +
-                "first=${updatedSchedules.firstOrNull()?.time} " +
-                "last=${updatedSchedules.lastOrNull()?.time}"
+                    "moduleId=$moduleId viewPagerItem=${viewPager.currentItem} " +
+                    "updatedSize=${updatedSchedules.size} " +
+                    "first=${updatedSchedules.firstOrNull()?.time} " +
+                    "last=${updatedSchedules.lastOrNull()?.time}"
         )
 
         // ✅ CENTRALISÉ : updateSchedules() appelle replaceSchedules() si fragment dispo
@@ -504,8 +504,8 @@ class ScheduleActivity : AppCompatActivity() {
         Log.i(
             "SCHED_TRACE",
             "sendSchedulesToESP32 activeId=${active.id} " +
-                "explicitCounts=[$explicitCounts] implicitCounts=[$implicitCounts] " +
-                "messageLen=${message.length} preview=${message.take(48)}"
+                    "explicitCounts=[$explicitCounts] implicitCounts=[$implicitCounts] " +
+                    "messageLen=${message.length} preview=${message.take(48)}"
         )
         Log.i("SCHEDULE_SEND", "➡️ Envoi programmation via NetworkHelper")
 
@@ -765,6 +765,27 @@ class ScheduleActivity : AppCompatActivity() {
             }
     }
 
+    /**
+     * Détecte quelles pompes sont réellement présentes dans la réponse ESP (/read_ms).
+     *
+     * - Full sync : on voit au moins UNE ligne (non nulle) pour chacune des 4 pompes.
+     * - Partial   : certaines pompes n'apparaissent pas du tout => on ne doit PAS les vider côté UI/local.
+     */
+    private fun detectPresentPumpsInEspProgram(espProgram: String): Set<Int> {
+        val present = mutableSetOf<Int>()
+        if (espProgram.length < 48 * 12) return present
+
+        for (lineIndex in 0 until 48) {
+            val start = lineIndex * 12
+            val line = espProgram.substring(start, start + 12)
+            if (line.length != 12 || line == "000000000000") continue
+
+            val pump = line.substring(1, 2).toIntOrNull() ?: continue
+            if (pump in 1..4) present.add(pump)
+        }
+        return present
+    }
+
     private fun mergeSchedulesFromEsp(
         espProgram: String,
         espId: Long,
@@ -774,7 +795,18 @@ class ScheduleActivity : AppCompatActivity() {
         val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
         val mergedByPump = mutableMapOf<Int, List<PumpSchedule>>()
 
-        for (pump in 1..4) {
+        // ✅ fullSync ne doit PAS dépendre uniquement de activeFromEsp.keys
+        // (car une pompe peut être présente mais sans lignes actives => liste vide)
+        val presentPumps = detectPresentPumpsInEspProgram(espProgram)
+        val fullSync = presentPumps.containsAll(setOf(1, 2, 3, 4))
+        val pumpsToProcess: Iterable<Int> = if (fullSync) (1..4) else presentPumps.sorted()
+
+        Log.i(
+            "SCHED_TRACE",
+            "mergeSchedulesFromEsp fullSync=$fullSync presentPumps=${presentPumps.sorted()} activeKeys=${activeFromEsp.keys.sorted()}"
+        )
+
+        for (pump in pumpsToProcess) {
             val localJson = schedulesPrefs.getString("esp_${espId}_pump$pump", null)
             val localSchedules = localJson?.let { PumpScheduleJson.fromJson(it) } ?: emptyList()
             val suspendedLocal = localSchedules.filter { !it.enabled }
@@ -872,10 +904,34 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     private fun updateUiSchedules(mergedByPump: Map<Int, List<PumpSchedule>>) {
-        for (pump in 1..4) {
-            val schedules = mergedByPump[pump].orEmpty()
+        val keys = mergedByPump.keys
+        val fullSync = keys.containsAll(setOf(1, 2, 3, 4))
+
+        val sizes = (1..4).joinToString { p -> "${p}=${mergedByPump[p]?.size ?: -1}" }
+        Log.i("SCHED_TRACE", "updateUiSchedules fullSync=$fullSync keys=${keys.sorted()} sizes=[$sizes]")
+
+        if (fullSync) {
+            for (pump in 1..4) {
+                val schedules = mergedByPump[pump].orEmpty()
+                adapter.updateSchedules(pump, schedules)
+                tabsViewModel.setActiveTotal(pump, sumActiveTotalTenth(schedules))
+            }
+            return
+        }
+
+        for ((pump, schedules) in mergedByPump) {
+            if (pump !in 1..4) continue
             adapter.updateSchedules(pump, schedules)
             tabsViewModel.setActiveTotal(pump, sumActiveTotalTenth(schedules))
+        }
+
+        for (pump in 1..4) {
+            if (!keys.contains(pump)) {
+                Log.i(
+                    "SCHED_TRACE",
+                    "updateUiSchedules skip pump=$pump (absent in partial update) -> keep existing UI/local"
+                )
+            }
         }
     }
 
