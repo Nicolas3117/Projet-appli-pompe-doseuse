@@ -303,6 +303,15 @@ class ScheduleActivity : AppCompatActivity() {
         val addedCount = result.second
         val ignoredCount = result.third
 
+        Log.i(
+            "SCHED_TRACE",
+            "handleScheduleHelperResult pump=$pumpNumber activeId=${active.id} " +
+                "moduleId=$moduleId viewPagerItem=${viewPager.currentItem} " +
+                "updatedSize=${updatedSchedules.size} " +
+                "first=${updatedSchedules.firstOrNull()?.time} " +
+                "last=${updatedSchedules.lastOrNull()?.time}"
+        )
+
         // ✅ CENTRALISÉ : updateSchedules() appelle replaceSchedules() si fragment dispo
         adapter.updateSchedules(pumpNumber, updatedSchedules)
 
@@ -485,7 +494,19 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     private suspend fun sendSchedulesToESP32(active: EspModule, timeoutMs: Long = 4000L): Boolean {
-        val message = ProgramStore.buildMessageMs(this)
+        val explicitCounts = (1..4).joinToString { pump ->
+            "${pump}=${ProgramStore.count(this, active.id, pump)}"
+        }
+        val implicitCounts = (1..4).joinToString { pump ->
+            "${pump}=${ProgramStore.count(this, pump)}"
+        }
+        val message = ProgramStore.buildMessageMs(this, active.id)
+        Log.i(
+            "SCHED_TRACE",
+            "sendSchedulesToESP32 activeId=${active.id} " +
+                "explicitCounts=[$explicitCounts] implicitCounts=[$implicitCounts] " +
+                "messageLen=${message.length} preview=${message.take(48)}"
+        )
         Log.i("SCHEDULE_SEND", "➡️ Envoi programmation via NetworkHelper")
 
         return try {

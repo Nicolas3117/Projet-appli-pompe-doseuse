@@ -1,13 +1,53 @@
 package com.esp32pumpwifi.app
 
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import androidx.viewpager2.adapter.FragmentStateAdapter
 
 class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activity) {
 
     private val fragmentManager = activity.supportFragmentManager
     private var readOnly = false
+    private val fragmentRefs = mutableMapOf<Int, PumpScheduleFragment>()
+    private val pendingSchedules = mutableMapOf<Int, List<PumpSchedule>>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    init {
+        fragmentManager.registerFragmentLifecycleCallbacks(
+            object : FragmentManager.FragmentLifecycleCallbacks() {
+                override fun onFragmentViewCreated(
+                    fm: FragmentManager,
+                    f: Fragment,
+                    v: android.view.View,
+                    savedInstanceState: android.os.Bundle?
+                ) {
+                    if (f !is PumpScheduleFragment) return
+                    val pumpNumber = f.getPumpNumber()
+                    fragmentRefs[pumpNumber] = f
+                    f.setReadOnly(readOnly)
+                    val pending = pendingSchedules.remove(pumpNumber)
+                    if (pending != null) {
+                        Log.i(
+                            "SCHED_TRACE",
+                            "Pager callback apply pending schedules pump=$pumpNumber size=${pending.size}"
+                        )
+                        f.replaceSchedules(pending)
+                    }
+                }
+
+                override fun onFragmentDestroyed(fm: FragmentManager, f: Fragment) {
+                    if (f !is PumpScheduleFragment) return
+                    val pumpNumber = f.getPumpNumber()
+                    fragmentRefs.remove(pumpNumber)
+                }
+            },
+            true
+        )
+    }
 
     override fun getItemCount(): Int = 4
 
@@ -30,6 +70,8 @@ class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activ
         val position = pumpNumber - 1
         if (position !in 0 until itemCount) return null
 
+        fragmentRefs[pumpNumber]?.let { return it }
+
         // 1) lookup officiel FragmentStateAdapter
         val tag = "f${getItemId(position)}"
         val byTag = fragmentManager.findFragmentByTag(tag) as? PumpScheduleFragment
@@ -48,7 +90,35 @@ class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activ
      */
     fun updateSchedules(pumpNumber: Int, schedules: List<PumpSchedule>) {
         val fragment = getFragment(pumpNumber)
-        fragment?.replaceSchedules(schedules)
+        val fragmentFoundMethod = when {
+            fragmentRefs[pumpNumber] != null -> "registry"
+            fragmentManager.findFragmentByTag("f${getItemId(pumpNumber - 1)}") != null -> "tag"
+            else -> "scan"
+        }
+        if (fragment == null || !fragment.isAdded || fragment.view == null) {
+            pendingSchedules[pumpNumber] = schedules
+            Log.i(
+                "SCHED_TRACE",
+                "updateSchedules pump=$pumpNumber fragmentFound=$fragmentFoundMethod " +
+                    "fragment=${fragment?.hashCode()} isAdded=${fragment?.isAdded} " +
+                    "viewReady=${fragment?.view != null} -> pendingSchedules set"
+            )
+            return
+        }
+
+        val apply = Runnable {
+            Log.i(
+                "SCHED_TRACE",
+                "updateSchedules pump=$pumpNumber fragmentFound=$fragmentFoundMethod " +
+                    "fragment=${fragment.hashCode()} isAdded=${fragment.isAdded} viewReady=${fragment.view != null}"
+            )
+            fragment.replaceSchedules(schedules)
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            apply.run()
+        } else {
+            mainHandler.post(apply)
+        }
     }
 
     fun setReadOnly(readOnly: Boolean) {

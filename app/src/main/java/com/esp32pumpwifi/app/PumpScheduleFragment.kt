@@ -22,6 +22,7 @@ class PumpScheduleFragment : Fragment() {
     private val gson = Gson()
     private var isReadOnly: Boolean = false
     private var addButton: Button? = null
+    private var listView: ListView? = null
 
     companion object {
         const val MAX_PUMP_DURATION_SEC = 600
@@ -58,7 +59,9 @@ class PumpScheduleFragment : Fragment() {
             }
         )
 
-        view.findViewById<ListView>(R.id.lv_schedules).adapter = adapter
+        listView = view.findViewById<ListView>(R.id.lv_schedules).also {
+            it.adapter = adapter
+        }
 
         addButton = view.findViewById<Button>(R.id.btn_add_schedule)
         addButton?.setOnClickListener {
@@ -285,11 +288,19 @@ class PumpScheduleFragment : Fragment() {
     private fun loadSchedules(): Boolean {
         val active = Esp32Manager.getActive(requireContext()) ?: return false
 
-        val json =
-            requireContext()
-                .getSharedPreferences("schedules", Context.MODE_PRIVATE)
-                .getString("esp_${active.id}_pump$pumpNumber", null)
-                ?: return false
+        val key = "esp_${active.id}_pump$pumpNumber"
+        val json = requireContext()
+            .getSharedPreferences("schedules", Context.MODE_PRIVATE)
+            .getString(key, null)
+
+        Log.i(
+            "SCHED_TRACE",
+            "loadSchedules pump=$pumpNumber key=$key jsonNull=${json == null}"
+        )
+
+        if (json == null) {
+            return false
+        }
 
         val loaded: MutableList<PumpSchedule> = PumpScheduleJson.fromJson(json)
 
@@ -299,6 +310,11 @@ class PumpScheduleFragment : Fragment() {
         if (this::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
         }
+
+        Log.i(
+            "SCHED_TRACE",
+            "loadSchedules pump=$pumpNumber loadedSize=${loaded.size}"
+        )
 
         return true
     }
@@ -376,12 +392,23 @@ class PumpScheduleFragment : Fragment() {
     // Quand ScheduleActivity fait adapter.updateSchedules(...) (après /read_ms),
     // on doit aussi persister + reconstruire ProgramStore pour éviter que le brouillon reste vide.
     fun replaceSchedules(newSchedules: List<PumpSchedule>) {
+        Log.i(
+            "SCHED_TRACE",
+            "replaceSchedules pump=$pumpNumber newSize=${newSchedules.size} " +
+                "adapterInit=${this::adapter.isInitialized} listAdapter=${listView?.adapter?.hashCode()} " +
+                "isAdded=$isAdded viewReady=${view != null}"
+        )
         schedules.clear()
         schedules.addAll(newSchedules)
 
         if (this::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
         }
+
+        Log.i(
+            "SCHED_TRACE",
+            "replaceSchedules pump=$pumpNumber schedulesSizeAfter=${schedules.size}"
+        )
 
         if (!isAdded) return
 
@@ -408,4 +435,6 @@ class PumpScheduleFragment : Fragment() {
             adapter.setReadOnly(isReadOnly)
         }
     }
+
+    fun getPumpNumber(): Int = pumpNumber
 }

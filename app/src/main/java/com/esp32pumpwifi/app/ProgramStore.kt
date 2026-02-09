@@ -407,6 +407,11 @@ object ProgramStore {
     // ✅ ICI : TRI OFFICIEL + DERNIÈRE PROTECTION AVANT ENVOI
     // ---------------------------------------------------------------------
     fun buildMessageMs(context: Context): String {
+        val active = Esp32Manager.getActive(context)
+        if (active != null) {
+            return buildMessageMs(context, active.id)
+        }
+
         // 4 pompes * 12 lignes * 12 chars = 576 chars
         val totalLines = PUMP_COUNT * MAX_LINES_PER_PUMP
         val sb = StringBuilder(totalLines * PLACEHOLDER.length)
@@ -430,6 +435,57 @@ object ProgramStore {
             val lines = sortedLines.take(MAX_LINES_PER_PUMP)
 
             Log.e("PROGRAM_BUILD", "Pompe $pump : ${lines.size} ligne(s)")
+
+            for (line in lines) {
+                val sanitized = sanitizeEncodedLineForEsp32Strict(line)
+                sb.append(sanitized)
+                Log.e("PROGRAM_BUILD", "  ✔ $sanitized")
+            }
+
+            repeat(MAX_LINES_PER_PUMP - lines.size) {
+                sb.append(PLACEHOLDER)
+                Log.e("PROGRAM_BUILD", "  ⬜ $PLACEHOLDER")
+            }
+        }
+
+        val result = sb.toString()
+
+        Log.e("PROGRAM_BUILD", "------------------------------------------------")
+        Log.e("PROGRAM_BUILD", "LONGUEUR = ${result.length} (ATTENDU 576)")
+        Log.e("PROGRAM_BUILD", "MESSAGE = $result")
+        Log.e("PROGRAM_BUILD", "================================================")
+
+        return result
+    }
+
+    // ---------------------------------------------------------------------
+    // 🚀 CONSTRUCTION MESSAGE FINAL POUR /program_ms (espId explicite)
+    // ✅ Ne dépend PAS du module actif ni de la migration legacy.
+    // ---------------------------------------------------------------------
+    fun buildMessageMs(context: Context, espId: Long): String {
+        // 4 pompes * 12 lignes * 12 chars = 576 chars
+        val totalLines = PUMP_COUNT * MAX_LINES_PER_PUMP
+        val sb = StringBuilder(totalLines * PLACEHOLDER.length)
+
+        Log.e("PROGRAM_BUILD", "================ BUILD /program_ms (espId=$espId) ================")
+
+        for (pump in 1..PUMP_COUNT) {
+
+            // Charge les lignes stockées (ordre de saisie) pour espId
+            val rawLines = loadEncodedLines(context, espId, pump)
+
+            // ✅ Filtre ultime : HH/MM valides + ms 50..600000 (tolère PLACEHOLDER)
+            val filteredLines = rawLines.filter { line ->
+                isValidEncodedLineForSend(line) && line != PLACEHOLDER
+            }
+
+            // ✅ Tri officiel pour l’envoi (copie triée)
+            val sortedLines = sortLinesForSend(filteredLines)
+
+            // ✅ Puis on limite à 12
+            val lines = sortedLines.take(MAX_LINES_PER_PUMP)
+
+            Log.e("PROGRAM_BUILD", "Pompe $pump : ${lines.size} ligne(s) (espId=$espId)")
 
             for (line in lines) {
                 val sanitized = sanitizeEncodedLineForEsp32Strict(line)
