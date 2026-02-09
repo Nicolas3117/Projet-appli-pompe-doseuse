@@ -2,4 +2,5 @@
 <resources>
     <dimen name="telegram_panel_max_height">260dp</dimen>
     <dimen name="pump_control_bottom_extra">120dp</dimen>
+    <dimen name="schedule_helper_proposal_spacing">6dp</dimen>
 </resources>
