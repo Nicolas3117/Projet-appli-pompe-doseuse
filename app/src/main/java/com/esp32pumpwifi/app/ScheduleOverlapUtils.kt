@@ -5,12 +5,28 @@ import kotlin.math.roundToInt
 
 object ScheduleOverlapUtils {
 
+    private const val DAY_MS: Long = 24L * 60L * 60L * 1000L
+
     data class ScheduleWindow(val startMs: Long, val endMs: Long)
 
     data class OverlapResult(
         val samePumpConflict: Boolean,
         val overlappingPumpNames: Set<String>
     )
+
+    /**
+     * Étend une fenêtre de distribution avec une marge ±antiOverlapMinutes (en minutes),
+     * et borne le résultat dans [0..24h].
+     *
+     * IMPORTANT: cette fonction est nouvelle et n'impacte pas le comportement existant
+     * tant qu'elle n'est pas utilisée par les appelants.
+     */
+    fun expandWindow(window: ScheduleWindow, antiOverlapMinutes: Int): ScheduleWindow {
+        val marginMs = antiOverlapMinutes.coerceAtLeast(0) * 60_000L
+        val start = (window.startMs - marginMs).coerceAtLeast(0L)
+        val end = (window.endMs + marginMs).coerceAtMost(DAY_MS)
+        return ScheduleWindow(startMs = start, endMs = end)
+    }
 
     fun parseTimeOrNull(time: String): Pair<Int, Int>? {
         val t = time.trim()
@@ -88,6 +104,7 @@ object ScheduleOverlapUtils {
                 schedulesPrefs.getString("esp_${espId}_pump$pumpNumber", null) ?: return@run emptyList()
             PumpScheduleJson.fromJson(json)
         }
+
         checkSchedules(pumpNumber, samePumpList, true)
         if (samePumpConflict) {
             return OverlapResult(samePumpConflict = true, overlappingPumpNames = emptySet())
@@ -100,7 +117,10 @@ object ScheduleOverlapUtils {
             checkSchedules(pump, list, false)
         }
 
-        return OverlapResult(samePumpConflict = samePumpConflict, overlappingPumpNames = overlappingPumpNames)
+        return OverlapResult(
+            samePumpConflict = samePumpConflict,
+            overlappingPumpNames = overlappingPumpNames
+        )
     }
 
     private fun getPumpName(context: Context, espId: Long, pump: Int): String {
