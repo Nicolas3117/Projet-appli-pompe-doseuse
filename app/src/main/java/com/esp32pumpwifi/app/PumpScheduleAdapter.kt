@@ -56,53 +56,61 @@ class PumpScheduleAdapter(
             .inflate(R.layout.item_schedule, parent, false)
 
         refreshDisplaySchedules()
-
-        if (position !in displaySchedules.indices) {
-            // Sécurité: ne doit pas arriver si getCount() est cohérent
-            return view
-        }
+        if (position !in displaySchedules.indices) return view
 
         val indexedSchedule = displaySchedules[position]
         val schedule = indexedSchedule.value
-
-        // index réel dans la liste source (non triée)
         val sourceIndex = indexedSchedule.index
 
-        val tvPump = view.findViewById<TextView>(R.id.tv_pump)
-        val tvTime = view.findViewById<TextView>(R.id.tv_time)
-        val tvQty = view.findViewById<TextView>(R.id.tv_quantity)
-        val swEnabled = view.findViewById<Switch>(R.id.sw_enabled)
-        val btnEdit = view.findViewById<MaterialButton>(R.id.btn_edit)
-        val btnDelete = view.findViewById<MaterialButton>(R.id.btn_delete)
+        // ✅ Numéro du programme selon l'ordre affiché (trié)
+        val displayNumber = position + 1 // 1..12
 
-        // --- Affichage ---
-        tvPump.text = "Pompe ${schedule.pumpNumber}"
-        tvTime.text = schedule.time
-        tvQty.text = "${QuantityInputUtils.formatQuantityMl(schedule.quantityTenth)} mL"
+        // ✅ Views
+        val tvPump: TextView? = view.findViewById(R.id.tv_pump)
+        val tvIndex: TextView? = view.findViewById(R.id.tv_index)   // ✅ nouveau
+        val tvTime: TextView? = view.findViewById(R.id.tv_time)
+        val tvQty: TextView? = view.findViewById(R.id.tv_quantity)
+        val swEnabled: Switch? = view.findViewById(R.id.sw_enabled)
+        val btnEdit: MaterialButton? = view.findViewById(R.id.btn_edit)
+        val btnDelete: MaterialButton? = view.findViewById(R.id.btn_delete)
 
-        // --- Switch ON/OFF ---
-        swEnabled.setOnCheckedChangeListener(null)
-        swEnabled.isChecked = schedule.enabled
-        swEnabled.isEnabled = !readOnly
+        // -------------------------------------------------------------
+        // ✅ Affichage Solution A : numéro à gauche + heure normale
+        // -------------------------------------------------------------
+        tvIndex?.text = displayNumber.toString()   // "1" .. "12"
+        tvTime?.text = schedule.time               // "08:00"
+        tvQty?.text = "${QuantityInputUtils.formatQuantityMl(schedule.quantityTenth)} mL"
+
+        // Pompe déjà dans l’onglet => cachée / vide
+        tvPump?.text = ""
+
+        // -------------------------------------------------------------
+        // ✅ Switch ON/OFF
+        // -------------------------------------------------------------
+        swEnabled?.setOnCheckedChangeListener(null)
+        swEnabled?.isChecked = schedule.enabled
+        swEnabled?.isEnabled = !readOnly
         if (!readOnly) {
-            swEnabled.setOnCheckedChangeListener { _, checked ->
+            swEnabled?.setOnCheckedChangeListener { _, checked ->
                 schedule.enabled = checked
                 onScheduleChanged()
             }
         }
 
-        // --- ReadOnly UI ---
-        btnEdit.isEnabled = !readOnly
-        btnDelete.isEnabled = !readOnly
+        // -------------------------------------------------------------
+        // ✅ ReadOnly UI
+        // -------------------------------------------------------------
         val actionAlpha = if (readOnly) 0.5f else 1f
-        swEnabled.alpha = actionAlpha
-        btnEdit.alpha = actionAlpha
-        btnDelete.alpha = actionAlpha
+        swEnabled?.alpha = actionAlpha
+        btnEdit?.alpha = actionAlpha
+        btnDelete?.alpha = actionAlpha
+        btnEdit?.isEnabled = !readOnly
+        btnDelete?.isEnabled = !readOnly
 
         // -----------------------------------------------------------------
         // ✏ MODIFIER (AVEC CONTRÔLE CONFLITS)
         // -----------------------------------------------------------------
-        btnEdit.setOnClickListener {
+        btnEdit?.setOnClickListener {
             if (readOnly) return@setOnClickListener
 
             val dialogView = LayoutInflater.from(context)
@@ -121,10 +129,8 @@ class PumpScheduleAdapter(
                 .setPositiveButton("Enregistrer") { _, _ ->
 
                     val newTime = etTime.text.toString().trim()
-                    val newQtyTenth =
-                        QuantityInputUtils.parseQuantityTenth(etQty.text.toString())
+                    val newQtyTenth = QuantityInputUtils.parseQuantityTenth(etQty.text.toString())
 
-                    // ✅ format + bornes HH/MM
                     if (ScheduleOverlapUtils.parseTimeOrNull(newTime) == null || newQtyTenth == null) {
                         Toast.makeText(context, "Format invalide", Toast.LENGTH_SHORT).show()
                         return@setPositiveButton
@@ -140,7 +146,8 @@ class PumpScheduleAdapter(
                     if (conflict.blockingMessage != null) {
                         if (
                             conflict.blockingMessage.startsWith("Quantité trop faible") ||
-                            conflict.blockingMessage.startsWith("Durée trop longue")
+                            conflict.blockingMessage.startsWith("Durée trop longue") ||
+                            conflict.blockingMessage.startsWith("Quantité invalide")
                         ) {
                             AlertDialog.Builder(context)
                                 .setTitle("Impossible")
@@ -148,8 +155,7 @@ class PumpScheduleAdapter(
                                 .setPositiveButton("OK", null)
                                 .show()
                         } else {
-                            Toast.makeText(context, conflict.blockingMessage, Toast.LENGTH_LONG)
-                                .show()
+                            Toast.makeText(context, conflict.blockingMessage, Toast.LENGTH_LONG).show()
                         }
                         return@setPositiveButton
                     }
@@ -183,8 +189,9 @@ class PumpScheduleAdapter(
         // -----------------------------------------------------------------
         // 🗑 SUPPRIMER
         // -----------------------------------------------------------------
-        btnDelete.setOnClickListener {
+        btnDelete?.setOnClickListener {
             if (readOnly) return@setOnClickListener
+            if (sourceIndex !in schedules.indices) return@setOnClickListener
             schedules.removeAt(sourceIndex)
             markDisplayDirty()
             notifyDataSetChanged()
@@ -220,6 +227,7 @@ class PumpScheduleAdapter(
             return ConflictResult(
                 blockingMessage =
                     "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
+                            "Maximum = ${MAX_PUMP_DURATION_SEC}s\n" +
                             "Débit actuel : ${"%.1f".format(flow)} mL/s"
             )
         }
@@ -238,9 +246,7 @@ class PumpScheduleAdapter(
         )
 
         if (overlapResult.samePumpConflict) {
-            return ConflictResult(
-                blockingMessage = "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}"
-            )
+            return ConflictResult(blockingMessage = "Distribution simultanée détectée")
         }
 
         if (overlapResult.overlappingPumpNames.isNotEmpty()) {
@@ -256,15 +262,6 @@ class PumpScheduleAdapter(
         }
 
         return ConflictResult()
-    }
-
-    private fun getPumpName(pump: Int): String {
-        val active = Esp32Manager.getActive(context) ?: return "Pompe $pump"
-        val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
-        return prefs.getString(
-            "esp_${active.id}_pump${pump}_name",
-            "Pompe $pump"
-        ) ?: "Pompe $pump"
     }
 
     data class ConflictResult(

@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -57,9 +58,12 @@ class PumpScheduleFragment : Fragment() {
             context = requireContext(),
             schedules = schedules,
             onScheduleChanged = {
+                // ✅ important : l'ordre affiché doit rester cohérent
+                sortSchedulesByTime()
                 saveSchedules()
                 syncToProgramStore()
                 notifyActiveTotalChanged()
+                adapter.notifyDataSetChanged()
             }
         )
 
@@ -82,6 +86,16 @@ class PumpScheduleFragment : Fragment() {
 
         applyReadOnlyState()
         return view
+    }
+
+    // ---------------------------------------------------------------------
+    // ✅ Tri stable par heure (utile pour #1..#12)
+    // ---------------------------------------------------------------------
+    private fun sortSchedulesByTime() {
+        schedules.sortWith(compareBy<PumpSchedule> {
+            val p = parseTimeOrNull(it.time)
+            if (p == null) Int.MAX_VALUE else (p.first * 60 + p.second)
+        }.thenBy { it.time })
     }
 
     // ---------------------------------------------------------------------
@@ -191,6 +205,9 @@ class PumpScheduleFragment : Fragment() {
                 enabled = true
             )
         )
+
+        // ✅ tri avant affichage (numérotation stable)
+        sortSchedulesByTime()
 
         if (this::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
@@ -302,6 +319,9 @@ class PumpScheduleFragment : Fragment() {
         schedules.clear()
         schedules.addAll(loaded)
 
+        // ✅ tri avant affichage (numérotation stable)
+        sortSchedulesByTime()
+
         if (this::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
         }
@@ -386,6 +406,9 @@ class PumpScheduleFragment : Fragment() {
     fun replaceSchedules(newSchedules: List<PumpSchedule>) {
         schedules.clear()
         schedules.addAll(newSchedules)
+
+        // ✅ tri avant affichage (numérotation stable)
+        sortSchedulesByTime()
 
         if (this::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
