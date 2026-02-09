@@ -54,6 +54,7 @@ class ScheduleActivity : AppCompatActivity() {
     private var isReadOnly = false
     private var isUnsynced = false
     private var unsyncedDialogShowing = false
+    private val gson = Gson()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,9 +82,9 @@ class ScheduleActivity : AppCompatActivity() {
             val pumpNumber = viewPager.currentItem + 1
             val intent = Intent(this, ScheduleHelperActivity::class.java).apply {
                 putExtra(ScheduleHelperActivity.EXTRA_PUMP_NUMBER, pumpNumber)
-                putExtra(ScheduleHelperActivity.EXTRA_MODULE_ID, activeModule.id)
+                putExtra(ScheduleHelperActivity.EXTRA_MODULE_ID, activeModule.id.toString())
             }
-            startActivity(intent)
+            startActivityForResult(intent, REQUEST_SCHEDULE_HELPER)
         }
 
         adapter = PumpPagerAdapter(this)
@@ -207,6 +208,12 @@ class ScheduleActivity : AppCompatActivity() {
         didAutoCheckOnResume = false
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_SCHEDULE_HELPER || resultCode != RESULT_OK || data == null) return
+        handleScheduleHelperResult(data)
+    }
+
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.menu_schedule, menu)
         return true
@@ -273,6 +280,83 @@ class ScheduleActivity : AppCompatActivity() {
                 showUnsyncedDialog()
             }
         }
+    }
+
+    private fun handleScheduleHelperResult(data: Intent) {
+        val pumpNumber = data.getIntExtra(ScheduleHelperActivity.EXTRA_PUMP_NUMBER, -1)
+        if (pumpNumber !in 1..4) return
+
+        val active = Esp32Manager.getActive(this) ?: return
+        val moduleId = data.getStringExtra(ScheduleHelperActivity.EXTRA_MODULE_ID)
+        if (moduleId != null && moduleId != active.id.toString()) return
+
+        val timeMsList =
+            data.getLongArrayListExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS)?.filterNotNull()
+                ?: return
+        if (timeMsList.isEmpty()) return
+
+        val volumePerDose = data.getDoubleExtra(ScheduleHelperActivity.EXTRA_VOLUME_PER_DOSE, 0.0)
+        if (volumePerDose <= 0.0) return
+
+        val (updatedSchedules, addedCount) = addSchedulesFromHelper(
+            espId = active.id,
+            pumpNumber = pumpNumber,
+            timeMsList = timeMsList,
+            volumePerDose = volumePerDose
+        )
+
+        adapter.updateSchedules(pumpNumber, updatedSchedules)
+        tabsViewModel.setActiveTotal(pumpNumber, sumActiveTotalTenth(updatedSchedules))
+
+        Toast.makeText(
+            this,
+            "$addedCount doses ajoutées à Pompe $pumpNumber",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
+    private fun addSchedulesFromHelper(
+        espId: Long,
+        pumpNumber: Int,
+        timeMsList: List<Long>,
+        volumePerDose: Double
+    ): Pair<List<PumpSchedule>, Int> {
+        val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
+        val existingJson = schedulesPrefs.getString("esp_${espId}_pump$pumpNumber", null)
+        val existingSchedules: MutableList<PumpSchedule> =
+            existingJson?.let { PumpScheduleJson.fromJson(it) } ?: mutableListOf()
+        val existingTimes = existingSchedules.map { it.time }.toMutableSet()
+        val quantityTenth = (volumePerDose * 10.0).roundToInt()
+
+        var addedCount = 0
+        for (timeMs in timeMsList) {
+            val time = formatTimeMs(timeMs)
+            if (!existingTimes.add(time)) continue
+            existingSchedules.add(
+                PumpSchedule(
+                    pumpNumber = pumpNumber,
+                    time = time,
+                    quantityTenth = quantityTenth,
+                    enabled = true
+                )
+            )
+            addedCount++
+        }
+
+        val sorted = existingSchedules.sortedBy { it.time }
+        if (addedCount > 0) {
+            schedulesPrefs.edit()
+                .putString("esp_${espId}_pump$pumpNumber", PumpScheduleJson.toJson(sorted, gson))
+                .apply()
+        }
+
+        return sorted to addedCount
+    }
+
+    private fun formatTimeMs(timeMs: Long): String {
+        val hours = (timeMs / MS_PER_HOUR).toInt()
+        val minutes = ((timeMs % MS_PER_HOUR) / MS_PER_MINUTE).toInt()
+        return String.format(Locale.getDefault(), "%02d:%02d", hours, minutes)
     }
 
     // ------------------------------------------------------------
@@ -731,7 +815,6 @@ class ScheduleActivity : AppCompatActivity() {
     ) {
         val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
         val editor = schedulesPrefs.edit()
-        val gson = Gson()
         for ((pump, schedules) in mergedByPump) {
             editor.putString(
                 "esp_${espId}_pump$pump",
@@ -790,5 +873,11 @@ class ScheduleActivity : AppCompatActivity() {
 
     private fun buildTabContentDescription(pumpName: CharSequence, fullText: String): String {
         return "$pumpName. $fullText"
+    }
+
+    companion object {
+        private const val REQUEST_SCHEDULE_HELPER = 2001
+        private const val MS_PER_MINUTE = 60_000L
+        private const val MS_PER_HOUR = 3_600_000L
     }
 }
