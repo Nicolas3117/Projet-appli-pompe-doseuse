@@ -37,7 +37,10 @@
     <string name="schedule_helper_end_time">Heure de fin</string>
     <string name="schedule_helper_dose_count">Nombre de doses</string>
     <string name="schedule_helper_total_volume">Volume total (mL)</string>
+
+    <!-- ✅ Libellé court conservé -->
     <string name="schedule_helper_anti_overlap">Anti-interférence chimique (min)</string>
+
     <string name="schedule_helper_proposals">Propositions</string>
     <string name="schedule_helper_proposal_item">%1$s → %2$.1f mL</string>
     <string name="schedule_helper_short_range_warning">Plage trop courte pour %1$d doses uniques</string>
@@ -48,7 +51,10 @@
     <string name="schedule_helper_error_end_after_start">La fin doit être après le début.</string>
     <string name="schedule_helper_error_dose_count">Entrez un nombre de doses valide.</string>
     <string name="schedule_helper_error_volume_total">Entrez un volume total valide.</string>
-    <string name="schedule_helper_error_anti_overlap">Entrez une valeur ≥ 0.</string>
+
+    <!-- ✅ Erreur renommée pour cohérence "décalage" -->
+    <string name="schedule_helper_error_anti_overlap">Décalage invalide (minutes ≥ 0).</string>
+
     <string name="refill_tanks">Recharger les réservoirs</string>
     <string name="tanks_title">Réservoirs</string>
     <string name="btn_calibration">Calibration des pompes</string>
