@@ -115,6 +115,17 @@ class PumpScheduleFragment : Fragment() {
             .show()
     }
 
+    private fun showLimitReachedPopup() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Limite atteinte")
+            .setMessage(
+                "12 programmations maximum par pompe.\n" +
+                        "Supprimez-en pour continuer."
+            )
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
     // ---------------------------------------------------------------------
     // ➕ AJOUT PROGRAMMATION
     // ---------------------------------------------------------------------
@@ -131,12 +142,9 @@ class PumpScheduleFragment : Fragment() {
             .setView(dialogView)
             .setPositiveButton("Enregistrer") { _, _ ->
 
+                // ✅ Limite 12 TOTAL (actives + désactivées)
                 if (schedules.size >= MAX_SCHEDULES_PER_PUMP) {
-                    AlertDialog.Builder(requireContext())
-                        .setTitle("Limite atteinte")
-                        .setMessage("Attention : 12 programmations maximum par pompe.")
-                        .setPositiveButton("OK", null)
-                        .show()
+                    showLimitReachedPopup()
                     return@setPositiveButton
                 }
 

@@ -49,12 +49,22 @@ class ScheduleActivity : AppCompatActivity() {
     // ✅ Auto-check : 1 fois par ouverture d’activité
     private var didAutoCheckOnResume = false
 
+    // ✅ FIX: éviter que le retour du helper relance autoCheck et écrase les ajouts
+    private var skipAutoCheckOnce = false
+
     // ✅ Anti double-finish / double popup (back spam)
     private var exitInProgress = false
     private var isReadOnly = false
     private var isUnsynced = false
     private var unsyncedDialogShowing = false
     private val gson = Gson()
+
+    private data class HelperAddResult(
+        val schedules: List<PumpSchedule>,
+        val addedCount: Int,
+        val ignoredCount: Int,      // doublons + anti-chevauchement + invalid (incl. non calibré)
+        val ignoredByLimit: Int     // ignorées uniquement car limite 12 atteinte
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,6 +90,11 @@ class ScheduleActivity : AppCompatActivity() {
 
         findViewById<ImageButton>(R.id.btn_schedule_helper).setOnClickListener {
             val pumpNumber = viewPager.currentItem + 1
+
+            // ✅ IMPORTANT : au retour du helper, on ne doit PAS relancer autoCheck (/read_ms)
+            // sinon ça ré-écrase le local (prefs + ProgramStore) avec l'état ESP, et "ça s'ajoute puis ça s'efface".
+            skipAutoCheckOnce = true
+
             val intent = Intent(this, ScheduleHelperActivity::class.java).apply {
                 putExtra(ScheduleHelperActivity.EXTRA_PUMP_NUMBER, pumpNumber)
                 putExtra(ScheduleHelperActivity.EXTRA_MODULE_ID, activeModule.id.toString())
@@ -194,6 +209,14 @@ class ScheduleActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+
+        // ✅ FIX: retour du helper => ne pas relire /read_ms (sinon ça écrase les ajouts locaux)
+        if (skipAutoCheckOnce) {
+            skipAutoCheckOnce = false
+            didAutoCheckOnResume = true
+            return
+        }
+
         if (didAutoCheckOnResume) return
         didAutoCheckOnResume = true
         autoCheckProgramOnOpen()
@@ -282,7 +305,6 @@ class ScheduleActivity : AppCompatActivity() {
         val moduleId = data.getStringExtra(ScheduleHelperActivity.EXTRA_MODULE_ID)
         if (moduleId != null && moduleId != active.id.toString()) return
 
-        // ✅ Android 7→15 : LongArray extra
         val timeMsArray = data.getLongArrayExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS) ?: return
         if (timeMsArray.isEmpty()) return
         val timeMsList = timeMsArray.toList()
@@ -292,6 +314,20 @@ class ScheduleActivity : AppCompatActivity() {
 
         val antiOverlapMinutes = data.getIntExtra(ScheduleHelperActivity.EXTRA_ANTI_CHEV_MINUTES, 0)
 
+        val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        val flow = prefs.getFloat("esp_${active.id}_pump${pumpNumber}_flow", 0f)
+        if (flow <= 0f) {
+            AlertDialog.Builder(this)
+                .setTitle("Pompe non calibrée")
+                .setMessage(
+                    "Impossible d’ajouter des doses avec l’aide à la programmation car le débit de cette pompe n’est pas calibré.\n\n" +
+                            "➡️ Va d’abord dans l’étalonnage de la pompe $pumpNumber."
+                )
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
         val result = addSchedulesFromHelper(
             espId = active.id,
             pumpNumber = pumpNumber,
@@ -299,9 +335,15 @@ class ScheduleActivity : AppCompatActivity() {
             volumePerDose = volumePerDose,
             antiOverlapMinutes = antiOverlapMinutes
         )
-        val updatedSchedules = result.first
-        val addedCount = result.second
-        val ignoredCount = result.third
+
+        val updatedSchedules = result.schedules
+        val addedCount = result.addedCount
+        val ignoredCount = result.ignoredCount
+        val ignoredByLimit = result.ignoredByLimit
+
+        if (ignoredByLimit > 0) {
+            showLimitReachedPopup()
+        }
 
         Log.i(
             "SCHED_TRACE",
@@ -312,19 +354,19 @@ class ScheduleActivity : AppCompatActivity() {
                     "last=${updatedSchedules.lastOrNull()?.time}"
         )
 
-        // ✅ CENTRALISÉ : updateSchedules() appelle replaceSchedules() si fragment dispo
         adapter.updateSchedules(pumpNumber, updatedSchedules)
 
-        // fallback : si fragment pas (encore) présent, update au moins le total onglet
         if (adapter.getFragment(pumpNumber) == null) {
             tabsViewModel.setActiveTotal(pumpNumber, sumActiveTotalTenth(updatedSchedules))
         }
 
-        Toast.makeText(
-            this,
-            "$addedCount doses ajoutées, $ignoredCount ignorées (anti-chevauchement)",
-            Toast.LENGTH_LONG
-        ).show()
+        val parts = mutableListOf<String>()
+        parts.add("$addedCount dose(s) ajoutée(s)")
+        parts.add("$ignoredCount ignorée(s) (doublons/chevauchement)")
+        if (ignoredByLimit > 0) {
+            parts.add("$ignoredByLimit ignorée(s) (limite 12)")
+        }
+        Toast.makeText(this, parts.joinToString(", "), Toast.LENGTH_LONG).show()
     }
 
     private fun addSchedulesFromHelper(
@@ -333,14 +375,13 @@ class ScheduleActivity : AppCompatActivity() {
         timeMsList: List<Long>,
         volumePerDose: Double,
         antiOverlapMinutes: Int
-    ): Triple<List<PumpSchedule>, Int, Int> {
+    ): HelperAddResult {
 
         val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
         val existingJson = schedulesPrefs.getString("esp_${espId}_pump$pumpNumber", null)
         val existingSchedules: MutableList<PumpSchedule> =
             existingJson?.let { PumpScheduleJson.fromJson(it) } ?: mutableListOf()
 
-        // ⚠️ Dé-duplication au niveau "heure affichée" car le modèle stocke HH:mm
         val existingTimeStrings = existingSchedules.map { it.time }.toMutableSet()
 
         val quantityTenth = (volumePerDose * 10.0).roundToInt()
@@ -353,22 +394,34 @@ class ScheduleActivity : AppCompatActivity() {
 
         var addedCount = 0
         var ignoredCount = 0
+        var ignoredByLimit = 0
 
-        // Si pas de durée valide (débit non calibré / trop court / trop long), on ignore tout proprement
         if (durationMs == null) {
-            return Triple(existingSchedules.sortedBy { it.time }, 0, timeMsList.size)
+            return HelperAddResult(existingSchedules.sortedBy { it.time }, 0, timeMsList.size, 0)
         }
 
-        for (timeMs in timeMsList) {
+        if (existingSchedules.size >= MAX_SCHEDULES_PER_PUMP) {
+            ignoredByLimit = timeMsList.size
+            Log.i(
+                "SCHED_TRACE",
+                "helper cap12 pump=$pumpNumber addedUntilLimit=0 ignoredByLimit=$ignoredByLimit"
+            )
+            return HelperAddResult(existingSchedules.sortedBy { it.time }, 0, 0, ignoredByLimit)
+        }
+
+        for ((index, timeMs) in timeMsList.withIndex()) {
+            if (existingSchedules.size >= MAX_SCHEDULES_PER_PUMP) {
+                ignoredByLimit = timeMsList.size - index
+                break
+            }
+
             val timeStr = formatTimeMs(timeMs)
 
-            // doublon HH:mm existant => ignoré (et compté)
             if (existingTimeStrings.contains(timeStr)) {
                 ignoredCount++
                 continue
             }
 
-            // fenêtre candidate = [start..end] + marge ±anti
             val rawStart = timeMs
             val rawEnd = timeMs + durationMs.toLong()
 
@@ -388,7 +441,6 @@ class ScheduleActivity : AppCompatActivity() {
                 continue
             }
 
-            // ✅ Ajout accepté : on réserve maintenant l'heure (après validation)
             existingTimeStrings.add(timeStr)
             existingSchedules.add(
                 PumpSchedule(
@@ -402,13 +454,14 @@ class ScheduleActivity : AppCompatActivity() {
         }
 
         val sorted = existingSchedules.sortedBy { it.time }
+
         if (addedCount > 0) {
             schedulesPrefs.edit()
                 .putString("esp_${espId}_pump$pumpNumber", PumpScheduleJson.toJson(sorted, gson))
                 .apply()
         }
 
-        return Triple(sorted, addedCount, ignoredCount)
+        return HelperAddResult(sorted, addedCount, ignoredCount, ignoredByLimit)
     }
 
     private fun formatTimeMs(timeMs: Long): String {
@@ -417,9 +470,17 @@ class ScheduleActivity : AppCompatActivity() {
         return String.format(Locale.getDefault(), "%02d:%02d", hours, minutes)
     }
 
-    // ------------------------------------------------------------
-    // ✅ À l’ouverture : /read_ms + compare
-    // ------------------------------------------------------------
+    private fun showLimitReachedPopup() {
+        AlertDialog.Builder(this)
+            .setTitle("Limite atteinte")
+            .setMessage(
+                "12 programmations maximum par pompe.\n" +
+                        "Supprimez-en pour continuer."
+            )
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
     private fun autoCheckProgramOnOpen() {
         val active = Esp32Manager.getActive(this) ?: return
 
@@ -451,9 +512,6 @@ class ScheduleActivity : AppCompatActivity() {
         }
     }
 
-    // ------------------------------------------------------------
-    // ✅ À la fermeture : /read_ms + compare
-    // ------------------------------------------------------------
     private fun finalCheckOnExitThenFinish() {
         if (exitInProgress) return
         exitInProgress = true
@@ -473,7 +531,10 @@ class ScheduleActivity : AppCompatActivity() {
             if (espProgram == null) {
                 AlertDialog.Builder(this@ScheduleActivity)
                     .setTitle("Pompe déconnectée")
-                    .setMessage("⚠️ Pompe déconnectée.\nLa programmation n'est peut-être pas enregistrée sur la pompe.")
+                    .setMessage(
+                        "⚠️ Pompe déconnectée.\n" +
+                                "La programmation n'est peut-être pas enregistrée sur la pompe."
+                    )
                     .setPositiveButton("OK") { _, _ -> finish() }
                     .setOnDismissListener { finish() }
                     .create()
@@ -493,41 +554,25 @@ class ScheduleActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun sendSchedulesToESP32(active: EspModule, timeoutMs: Long = 4000L): Boolean {
-        val explicitCounts = (1..4).joinToString { pump ->
-            "${pump}=${ProgramStore.count(this, active.id, pump)}"
-        }
-        val implicitCounts = (1..4).joinToString { pump ->
-            "${pump}=${ProgramStore.count(this, pump)}"
-        }
+    private suspend fun sendSchedulesToESP32(
+        active: EspModule,
+        timeoutMs: Long = 4000L
+    ): Boolean {
         val message = ProgramStore.buildMessageMs(this, active.id)
+
         Log.i(
             "SCHED_TRACE",
             "sendSchedulesToESP32 activeId=${active.id} " +
-                    "explicitCounts=[$explicitCounts] implicitCounts=[$implicitCounts] " +
                     "messageLen=${message.length} preview=${message.take(48)}"
         )
-        Log.i("SCHEDULE_SEND", "➡️ Envoi programmation via NetworkHelper")
 
         return try {
             withTimeout(timeoutMs) {
                 suspendCancellableCoroutine { continuation ->
                     NetworkHelper.sendProgramMs(this@ScheduleActivity, active.ip, message) {
-                        val now = System.currentTimeMillis()
-                        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
-
-                        for (pumpNum in 1..4) {
-                            prefs.edit()
-                                .putLong("esp_${active.id}_pump${pumpNum}_last_processed_time", now)
-                                .apply()
-                        }
-
                         syncProgramStoreFromEsp(message)
                         lastProgramHash = message
-
-                        if (continuation.isActive) {
-                            continuation.resume(true)
-                        }
+                        if (continuation.isActive) continuation.resume(true)
                     }
                 }
             }
@@ -538,54 +583,33 @@ class ScheduleActivity : AppCompatActivity() {
 
     private suspend fun verifyEsp32Connection(module: EspModule): Boolean =
         withContext(Dispatchers.IO) {
-            var conn: HttpURLConnection? = null
             try {
                 val url = URL("http://${module.ip}/id")
-                conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 2000
                     readTimeout = 2000
-                    useCaches = false
-                    setRequestProperty("Connection", "close")
                 }
-
                 val response = conn.inputStream.bufferedReader().use { it.readText() }
-
-                response.startsWith("POMPE_NAME=") &&
-                        response.removePrefix("POMPE_NAME=").trim() ==
-                        module.internalName
-
+                conn.disconnect()
+                response.startsWith("POMPE_NAME=")
             } catch (_: Exception) {
                 false
-            } finally {
-                try {
-                    conn?.disconnect()
-                } catch (_: Exception) {
-                }
             }
         }
 
     private suspend fun fetchProgramFromEsp(ip: String): String? =
         withContext(Dispatchers.IO) {
-            var conn: HttpURLConnection? = null
             try {
                 val url = URL("http://$ip/read_ms")
-                conn = (url.openConnection() as HttpURLConnection).apply {
+                val conn = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 2000
                     readTimeout = 2000
-                    useCaches = false
-                    setRequestProperty("Connection", "close")
                 }
-
                 val raw = conn.inputStream.bufferedReader().use { it.readText() }
+                conn.disconnect()
                 normalizeProgram576FromRead(raw)
-
             } catch (_: Exception) {
                 null
-            } finally {
-                try {
-                    conn?.disconnect()
-                } catch (_: Exception) {
-                }
             }
         }
 
@@ -628,7 +652,7 @@ class ScheduleActivity : AppCompatActivity() {
     private fun estimateVolumeMl(pump: Int, durationMs: Int): Int? {
         val active = Esp32Manager.getActive(this) ?: return null
         val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
-        val flow = prefs.getFloat("esp_${active.id}_pump${pump}_flow", 0f) // mL/s
+        val flow = prefs.getFloat("esp_${active.id}_pump${pump}_flow", 0f)
         if (flow <= 0f) return null
         return (flow * (durationMs / 1000f)).toInt()
     }
@@ -715,30 +739,6 @@ class ScheduleActivity : AppCompatActivity() {
         }
     }
 
-    private fun setConnectionState(connected: Boolean) {
-        toolbar.subtitle = if (connected) null else "Non connecté"
-        setReadOnlyMode(!connected, toolbar.subtitle?.toString())
-    }
-
-    private fun setUnsyncedState(on: Boolean, subtitle: String? = null) {
-        isUnsynced = on
-        setReadOnlyMode(isReadOnly, subtitle)
-        invalidateOptionsMenu()
-    }
-
-    private fun setReadOnlyMode(readOnly: Boolean, subtitle: String?) {
-        val subtitleChanged = toolbar.subtitle?.toString() != subtitle
-        if (isReadOnly == readOnly && !subtitleChanged) return
-        isReadOnly = readOnly
-        toolbar.subtitle = subtitle
-        adapter.setReadOnly(readOnly || isUnsynced)
-        invalidateOptionsMenu()
-    }
-
-    private fun setReadOnlyState(message: String) {
-        setReadOnlyMode(true, message)
-    }
-
     private fun showUnsyncedDialog() {
         if (unsyncedDialogShowing) return
         unsyncedDialogShowing = true
@@ -765,12 +765,6 @@ class ScheduleActivity : AppCompatActivity() {
             }
     }
 
-    /**
-     * Détecte quelles pompes sont réellement présentes dans la réponse ESP (/read_ms).
-     *
-     * - Full sync : on voit au moins UNE ligne (non nulle) pour chacune des 4 pompes.
-     * - Partial   : certaines pompes n'apparaissent pas du tout => on ne doit PAS les vider côté UI/local.
-     */
     private fun detectPresentPumpsInEspProgram(espProgram: String): Set<Int> {
         val present = mutableSetOf<Int>()
         if (espProgram.length < 48 * 12) return present
@@ -795,8 +789,6 @@ class ScheduleActivity : AppCompatActivity() {
         val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
         val mergedByPump = mutableMapOf<Int, List<PumpSchedule>>()
 
-        // ✅ fullSync ne doit PAS dépendre uniquement de activeFromEsp.keys
-        // (car une pompe peut être présente mais sans lignes actives => liste vide)
         val presentPumps = detectPresentPumpsInEspProgram(espProgram)
         val fullSync = presentPumps.containsAll(setOf(1, 2, 3, 4))
         val pumpsToProcess: Iterable<Int> = if (fullSync) (1..4) else presentPumps.sorted()
@@ -820,9 +812,12 @@ class ScheduleActivity : AppCompatActivity() {
                 it.time to it.quantityTenth !in activeKeys
             }
 
-            val merged = (filteredSuspendedLocal + activeSchedules)
-                .sortedBy { it.time }
+            val activeCount = activeSchedules.size
+            val remainingSlots = (MAX_SCHEDULES_PER_PUMP - activeCount).coerceAtLeast(0)
+            val suspendedSorted = filteredSuspendedLocal.sortedBy { it.time }
+            val keptSuspended = suspendedSorted.take(remainingSlots)
 
+            val merged = (activeSchedules + keptSuspended).sortedBy { it.time }
             mergedByPump[pump] = merged
         }
 
@@ -870,7 +865,6 @@ class ScheduleActivity : AppCompatActivity() {
             }
 
             val qtyTenth = (flow * (durationMs / 1000f) * 10f).roundToInt()
-
             val time = "%02d:%02d".format(hour, minute)
             val key = time to qtyTenth
             if (seen[pump]?.add(key) != true) continue
@@ -924,20 +918,34 @@ class ScheduleActivity : AppCompatActivity() {
             adapter.updateSchedules(pump, schedules)
             tabsViewModel.setActiveTotal(pump, sumActiveTotalTenth(schedules))
         }
-
-        for (pump in 1..4) {
-            if (!keys.contains(pump)) {
-                Log.i(
-                    "SCHED_TRACE",
-                    "updateUiSchedules skip pump=$pump (absent in partial update) -> keep existing UI/local"
-                )
-            }
-        }
     }
 
-    private fun sumActiveTotalTenth(schedules: List<PumpSchedule>): Int {
-        return schedules.filter { it.enabled }.sumOf { it.quantityTenth }
+    private fun setConnectionState(connected: Boolean) {
+        toolbar.subtitle = if (connected) null else "Non connecté"
+        setReadOnlyMode(!connected, toolbar.subtitle?.toString())
     }
+
+    private fun setUnsyncedState(on: Boolean, subtitle: String? = null) {
+        isUnsynced = on
+        setReadOnlyMode(isReadOnly, subtitle)
+        invalidateOptionsMenu()
+    }
+
+    private fun setReadOnlyMode(readOnly: Boolean, subtitle: String?) {
+        val subtitleChanged = toolbar.subtitle?.toString() != subtitle
+        if (isReadOnly == readOnly && !subtitleChanged) return
+        isReadOnly = readOnly
+        toolbar.subtitle = subtitle
+        adapter.setReadOnly(readOnly || isUnsynced)
+        invalidateOptionsMenu()
+    }
+
+    private fun setReadOnlyState(message: String) {
+        setReadOnlyMode(true, message)
+    }
+
+    private fun sumActiveTotalTenth(schedules: List<PumpSchedule>): Int =
+        schedules.filter { it.enabled }.sumOf { it.quantityTenth }
 
     private fun updateTabTotal(pumpNumber: Int, totalTenth: Int) {
         val (shortText, fullText) = formatActiveTotalShort(totalTenth)
@@ -947,37 +955,23 @@ class ScheduleActivity : AppCompatActivity() {
         tab.contentDescription = buildTabContentDescription(pumpName, fullText)
     }
 
-    private fun formatActiveTotal(totalTenth: Int): String {
-        val totalText = if (totalTenth % 10 == 0) {
-            "${totalTenth / 10}"
-        } else {
-            String.format(Locale.getDefault(), "%.1f", totalTenth / 10f)
-        }
-        return "Total actif : $totalText mL"
-    }
-
     private fun formatActiveTotalShort(totalTenth: Int): Pair<String, String> {
-        val valueText = if (totalTenth % 10 == 0) {
-            "${totalTenth / 10}"
-        } else {
-            String.format(Locale.getDefault(), "%.1f", totalTenth / 10f)
-        }
+        val valueText =
+            if (totalTenth % 10 == 0) "${totalTenth / 10}"
+            else String.format(Locale.getDefault(), "%.1f", totalTenth / 10f)
 
-        val full = "Total actif : $valueText mL"
-        val short = "$valueText mL"
-        return short to full
+        return "$valueText mL" to "Total actif : $valueText mL"
     }
 
-    private fun buildTabText(pumpName: String, shortText: String): String {
-        return "$pumpName\n$shortText"
-    }
+    private fun buildTabText(pumpName: String, shortText: String): String =
+        "$pumpName\n$shortText"
 
-    private fun buildTabContentDescription(pumpName: CharSequence, fullText: String): String {
-        return "$pumpName. $fullText"
-    }
+    private fun buildTabContentDescription(pumpName: CharSequence, fullText: String): String =
+        "$pumpName. $fullText"
 
     companion object {
         private const val REQUEST_SCHEDULE_HELPER = 2001
+        private const val MAX_SCHEDULES_PER_PUMP = 12
         private const val MS_PER_MINUTE = 60_000L
         private const val MS_PER_HOUR = 3_600_000L
         private const val DAY_MS: Long = 24L * 60L * 60L * 1000L

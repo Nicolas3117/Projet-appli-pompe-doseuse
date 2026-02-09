@@ -2,17 +2,21 @@ package com.esp32pumpwifi.app
 
 import android.app.Activity
 import android.app.TimePickerDialog
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.addTextChangedListener
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.roundToInt
 
 class ScheduleHelperActivity : AppCompatActivity() {
 
@@ -37,6 +41,9 @@ class ScheduleHelperActivity : AppCompatActivity() {
     private var pumpNumber: Int = 1
     private var moduleId: String? = null
 
+    // ✅ places restantes avant d’atteindre 12 (en tenant compte des prefs existantes)
+    private var remainingSlots: Int = MAX_SCHEDULES_PER_PUMP
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_schedule_helper)
@@ -50,6 +57,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tv_schedule_helper_pump).text = pumpLabel
 
         bindViews()
+        computeRemainingSlots()
         setupListeners()
         updateUi()
     }
@@ -69,6 +77,31 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         proposalsContainer = findViewById(R.id.layout_proposals)
         addButton = findViewById(R.id.button_add_doses)
+    }
+
+    private fun computeRemainingSlots() {
+        val active = Esp32Manager.getActive(this) ?: run {
+            remainingSlots = MAX_SCHEDULES_PER_PUMP
+            return
+        }
+
+        val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
+        val json = schedulesPrefs.getString("esp_${active.id}_pump$pumpNumber", null)
+
+        val existingCount = json?.let {
+            try {
+                PumpScheduleJson.fromJson(it).size
+            } catch (_: Exception) {
+                0
+            }
+        } ?: 0
+
+        remainingSlots = (MAX_SCHEDULES_PER_PUMP - existingCount).coerceAtLeast(0)
+
+        // ✅ si déjà plein : on bloque proprement
+        if (remainingSlots == 0) {
+            doseLayout.error = "Aucune place disponible (max 12)."
+        }
     }
 
     private fun setupListeners() {
@@ -92,12 +125,10 @@ class ScheduleHelperActivity : AppCompatActivity() {
         volumeInput.addTextChangedListener { updateUi() }
         antiOverlapInput.addTextChangedListener { updateUi() }
 
-        findViewById<Button>(R.id.button_cancel).setOnClickListener {
-            finish()
-        }
+        findViewById<Button>(R.id.button_cancel).setOnClickListener { finish() }
 
         addButton.setOnClickListener {
-            val validation = validateInputs()
+            val validation = validateInputs(applyAutoClamp = true)
             if (!validation.isValid) {
                 updateUi()
                 return@setOnClickListener
@@ -120,16 +151,14 @@ class ScheduleHelperActivity : AppCompatActivity() {
     }
 
     private fun updateUi() {
-        val validation = validateInputs()
+        val validation = validateInputs(applyAutoClamp = false)
         addButton.isEnabled = validation.isValid
         updateProposals(validation)
     }
 
     private fun updateProposals(validation: ValidationResult) {
         proposalsContainer.removeAllViews()
-        if (!validation.isValid) {
-            return
-        }
+        if (!validation.isValid) return
 
         validation.formattedTimes.forEachIndexed { index, time ->
             val text = getString(
@@ -153,7 +182,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
         }
     }
 
-    private fun validateInputs(): ValidationResult {
+    private fun validateInputs(applyAutoClamp: Boolean): ValidationResult {
         startLayout.error = null
         endLayout.error = null
         doseLayout.error = null
@@ -162,7 +191,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         val start = startMs
         val end = endMs
-
         var isValid = true
 
         if (start == null) {
@@ -180,10 +208,20 @@ class ScheduleHelperActivity : AppCompatActivity() {
             isValid = false
         }
 
-        val doseCount = doseInput.text?.toString()?.trim()?.toIntOrNull()
-        if (doseCount == null || doseCount < 1) {
+        val doseCountRaw = doseInput.text?.toString()?.trim()?.toIntOrNull()
+        if (doseCountRaw == null || doseCountRaw < 1) {
             doseLayout.error = getString(R.string.schedule_helper_error_dose_count)
             isValid = false
+        }
+
+        // ✅ limiter la saisie max à 12
+        if (doseCountRaw != null && doseCountRaw > MAX_SCHEDULES_PER_PUMP) {
+            if (applyAutoClamp) {
+                doseInput.setText(MAX_SCHEDULES_PER_PUMP.toString())
+            } else {
+                doseLayout.error = "Maximum $MAX_SCHEDULES_PER_PUMP distributions."
+                isValid = false
+            }
         }
 
         val volumeTotal = volumeInput.text?.toString()?.trim()?.replace(',', '.')?.toDoubleOrNull()
@@ -192,19 +230,68 @@ class ScheduleHelperActivity : AppCompatActivity() {
             isValid = false
         }
 
-        val antiOverlap = antiOverlapInput.text?.toString()?.trim()?.toIntOrNull()
+        // ✅ Anti-chevauchement : vide => 0 (non bloquant)
+        val antiText = antiOverlapInput.text?.toString()?.trim().orEmpty()
+        val antiOverlap = if (antiText.isEmpty()) 0 else antiText.toIntOrNull()
         if (antiOverlap == null || antiOverlap < 0) {
             antiOverlapLayout.error = getString(R.string.schedule_helper_error_anti_overlap)
             isValid = false
         }
 
-        if (!isValid || start == null || end == null || doseCount == null || volumeTotal == null || antiOverlap == null) {
+        if (!isValid || start == null || end == null || doseCountRaw == null || volumeTotal == null || antiOverlap == null) {
             return ValidationResult.invalid()
+        }
+
+        // ✅ Limite 12 en tenant compte de l’existant
+        if (remainingSlots <= 0) {
+            doseLayout.error = "Aucune place disponible (max 12)."
+            return ValidationResult.invalid()
+        }
+
+        var doseCount = doseCountRaw.coerceAtMost(MAX_SCHEDULES_PER_PUMP)
+
+        // ✅ clamp vs remainingSlots : en live => erreur rouge, au clic => clamp + toast
+        if (doseCount > remainingSlots) {
+            if (applyAutoClamp) {
+                Toast.makeText(
+                    this,
+                    "Il ne reste que $remainingSlots place(s) disponible(s) (max 12).",
+                    Toast.LENGTH_LONG
+                ).show()
+                doseCount = remainingSlots
+                doseInput.setText(doseCount.toString())
+            } else {
+                doseLayout.error = "Il ne reste que $remainingSlots place(s) disponible(s) (max 12)."
+                return ValidationResult.invalid()
+            }
         }
 
         val proposedTimesMs = buildScheduleTimesMs(start, end, doseCount)
         val formattedTimes = proposedTimesMs.map { formatTimeMs(it) }
         val volumePerDose = volumeTotal / doseCount.toDouble()
+
+        // ✅ BONUS : bloquer si une dose > 600 secondes (si flow dispo)
+        val active = Esp32Manager.getActive(this)
+        if (active != null) {
+            val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
+            val flow = prefs.getFloat("esp_${active.id}_pump${pumpNumber}_flow", 0f) // mL/s
+            if (flow > 0f) {
+                val durationSec = (volumePerDose / flow.toDouble())
+                if (durationSec > MAX_DOSE_DURATION_SEC) {
+                    val maxVolume = flow.toDouble() * MAX_DOSE_DURATION_SEC.toDouble()
+                    AlertDialog.Builder(this)
+                        .setTitle("Durée trop longue")
+                        .setMessage(
+                            "Une distribution ne peut pas dépasser 600 secondes.\n" +
+                                    "Avec le débit actuel (${String.format(Locale.getDefault(), "%.1f", flow)} mL/s), " +
+                                    "la dose maximale est ${String.format(Locale.getDefault(), "%.1f", maxVolume)} mL."
+                        )
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return ValidationResult.invalid()
+                }
+            }
+        }
 
         return ValidationResult(
             isValid = true,
@@ -219,9 +306,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
     }
 
     private fun buildScheduleTimesMs(startMs: Long, endMs: Long, doseCount: Int): List<Long> {
-        if (doseCount == 1) {
-            return listOf(startMs)
-        }
+        if (doseCount == 1) return listOf(startMs)
         val durationMs = endMs - startMs
         val stepMs = durationMs / (doseCount - 1).toLong()
         return (0 until doseCount).map { index ->
@@ -286,8 +371,13 @@ class ScheduleHelperActivity : AppCompatActivity() {
         const val EXTRA_VOLUME_PER_DOSE = "volumePerDose"
         const val EXTRA_SCHEDULE_TIMES = "scheduleTimes"
         const val EXTRA_SCHEDULE_MS = "scheduleMs"
+
+        private const val MAX_SCHEDULES_PER_PUMP = 12
+        private const val MAX_DOSE_DURATION_SEC = 600
+
         private const val MS_PER_MINUTE = 60_000L
         private const val MS_PER_HOUR = 3_600_000L
+
         private fun toMs(hour: Int, minute: Int): Long {
             return (hour * 60L + minute) * MS_PER_MINUTE
         }
