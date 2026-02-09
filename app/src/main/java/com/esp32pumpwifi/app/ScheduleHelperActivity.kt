@@ -13,12 +13,11 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import java.util.Calendar
 import java.util.Locale
-import kotlin.math.roundToInt
 
 class ScheduleHelperActivity : AppCompatActivity() {
 
-    private var startMinutes: Int? = null
-    private var endMinutes: Int? = null
+    private var startMs: Long? = null
+    private var endMs: Long? = null
 
     private lateinit var startLayout: TextInputLayout
     private lateinit var endLayout: TextInputLayout
@@ -74,17 +73,17 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
     private fun setupListeners() {
         startInput.setOnClickListener {
-            showTimePicker(startMinutes) { minutes ->
-                startMinutes = minutes
-                startInput.setText(formatMinutes(minutes))
+            showTimePicker(startMs) { selectedMs ->
+                startMs = selectedMs
+                startInput.setText(formatTimeMs(selectedMs))
                 updateUi()
             }
         }
 
         endInput.setOnClickListener {
-            showTimePicker(endMinutes) { minutes ->
-                endMinutes = minutes
-                endInput.setText(formatMinutes(minutes))
+            showTimePicker(endMs) { selectedMs ->
+                endMs = selectedMs
+                endInput.setText(formatTimeMs(selectedMs))
                 updateUi()
             }
         }
@@ -107,15 +106,12 @@ class ScheduleHelperActivity : AppCompatActivity() {
             val resultIntent = Intent().apply {
                 putExtra(EXTRA_PUMP_NUMBER, pumpNumber)
                 putExtra(EXTRA_MODULE_ID, moduleId)
-                putExtra(EXTRA_START_MINUTES, validation.startMinutes)
-                putExtra(EXTRA_END_MINUTES, validation.endMinutes)
+                putExtra(EXTRA_START_MS, validation.startMs)
+                putExtra(EXTRA_END_MS, validation.endMs)
                 putExtra(EXTRA_ANTI_CHEV_MINUTES, validation.antiOverlapMinutes)
                 putExtra(EXTRA_VOLUME_PER_DOSE, validation.volumePerDose)
                 putStringArrayListExtra(EXTRA_SCHEDULE_TIMES, ArrayList(validation.formattedTimes))
-                putIntegerArrayListExtra(
-                    EXTRA_SCHEDULE_MINUTES,
-                    ArrayList(validation.proposedMinutes)
-                )
+                putExtra(EXTRA_SCHEDULE_MS, ArrayList(validation.proposedTimesMs))
             }
 
             setResult(Activity.RESULT_OK, resultIntent)
@@ -133,18 +129,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
         proposalsContainer.removeAllViews()
         if (!validation.isValid) {
             return
-        }
-
-        if (validation.isShortRange) {
-            val warningText = getString(
-                R.string.schedule_helper_short_range_warning,
-                validation.doseCount
-            )
-            val warningItem = TextView(this).apply {
-                text = warningText
-                textSize = 14f
-            }
-            proposalsContainer.addView(warningItem)
         }
 
         validation.formattedTimes.forEachIndexed { index, time ->
@@ -176,8 +160,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
         volumeLayout.error = null
         antiOverlapLayout.error = null
 
-        val start = startMinutes
-        val end = endMinutes
+        val start = startMs
+        val end = endMs
 
         var isValid = true
 
@@ -218,74 +202,42 @@ class ScheduleHelperActivity : AppCompatActivity() {
             return ValidationResult.invalid()
         }
 
-        val proposedMinutes = buildScheduleMinutes(start, end, doseCount)
-        val formattedTimes = proposedMinutes.map { formatMinutes(it) }
+        val proposedTimesMs = buildScheduleTimesMs(start, end, doseCount)
+        val formattedTimes = proposedTimesMs.map { formatTimeMs(it) }
         val volumePerDose = volumeTotal / doseCount.toDouble()
-        val isShortRange = proposedMinutes.size < doseCount
 
         return ValidationResult(
             isValid = true,
-            startMinutes = start,
-            endMinutes = end,
+            startMs = start,
+            endMs = end,
             antiOverlapMinutes = antiOverlap,
             doseCount = doseCount,
             volumePerDose = volumePerDose,
-            proposedMinutes = proposedMinutes,
-            formattedTimes = formattedTimes,
-            isShortRange = isShortRange
+            proposedTimesMs = proposedTimesMs,
+            formattedTimes = formattedTimes
         )
     }
 
-    private fun buildScheduleMinutes(start: Int, end: Int, doseCount: Int): List<Int> {
-        if (doseCount <= 1) {
-            return listOf(start)
+    private fun buildScheduleTimesMs(startMs: Long, endMs: Long, doseCount: Int): List<Long> {
+        if (doseCount == 1) {
+            return listOf(startMs)
         }
-        val duration = end - start
-        val step = duration.toDouble() / (doseCount - 1)
-        val baseMinutes = (0 until doseCount).map { index ->
-            (start + index * step).roundToInt()
+        val durationMs = endMs - startMs
+        val stepMs = durationMs / (doseCount - 1).toLong()
+        return (0 until doseCount).map { index ->
+            startMs + index * stepMs
         }
-        val uniqueMinutes = baseMinutes.distinct().sorted().toMutableSet()
-
-        if (uniqueMinutes.size < doseCount) {
-            for (index in 0 until doseCount) {
-                if (uniqueMinutes.size >= doseCount) {
-                    break
-                }
-                val target = (start + index * step).roundToInt()
-                if (uniqueMinutes.add(target)) {
-                    continue
-                }
-                var offset = 1
-                var added = false
-                while (!added && (target - offset >= start || target + offset <= end)) {
-                    val candidatePlus = target + offset
-                    if (candidatePlus <= end && uniqueMinutes.add(candidatePlus)) {
-                        added = true
-                        break
-                    }
-                    val candidateMinus = target - offset
-                    if (candidateMinus >= start && uniqueMinutes.add(candidateMinus)) {
-                        added = true
-                        break
-                    }
-                    offset++
-                }
-            }
-        }
-
-        return uniqueMinutes.sorted()
     }
 
-    private fun showTimePicker(initialMinutes: Int?, onSelected: (Int) -> Unit) {
+    private fun showTimePicker(initialMs: Long?, onSelected: (Long) -> Unit) {
         val calendar = Calendar.getInstance()
-        val initialHour = initialMinutes?.div(60) ?: calendar.get(Calendar.HOUR_OF_DAY)
-        val initialMinute = initialMinutes?.rem(60) ?: calendar.get(Calendar.MINUTE)
+        val initialHour = initialMs?.let { (it / MS_PER_HOUR).toInt() } ?: calendar.get(Calendar.HOUR_OF_DAY)
+        val initialMinute = initialMs?.let { ((it % MS_PER_HOUR) / MS_PER_MINUTE).toInt() } ?: calendar.get(Calendar.MINUTE)
 
         TimePickerDialog(
             this,
             { _, hourOfDay, minute ->
-                onSelected(hourOfDay * 60 + minute)
+                onSelected(toMs(hourOfDay, minute))
             },
             initialHour,
             initialMinute,
@@ -293,35 +245,33 @@ class ScheduleHelperActivity : AppCompatActivity() {
         ).show()
     }
 
-    private fun formatMinutes(minutes: Int): String {
-        val hours = minutes / 60
-        val remaining = minutes % 60
-        return String.format(Locale.getDefault(), "%02d:%02d", hours, remaining)
+    private fun formatTimeMs(timeMs: Long): String {
+        val hours = (timeMs / MS_PER_HOUR).toInt()
+        val minutes = ((timeMs % MS_PER_HOUR) / MS_PER_MINUTE).toInt()
+        return String.format(Locale.getDefault(), "%02d:%02d", hours, minutes)
     }
 
     private data class ValidationResult(
         val isValid: Boolean,
-        val startMinutes: Int,
-        val endMinutes: Int,
+        val startMs: Long,
+        val endMs: Long,
         val antiOverlapMinutes: Int,
         val doseCount: Int,
         val volumePerDose: Double,
-        val proposedMinutes: List<Int>,
-        val formattedTimes: List<String>,
-        val isShortRange: Boolean
+        val proposedTimesMs: List<Long>,
+        val formattedTimes: List<String>
     ) {
         companion object {
             fun invalid(): ValidationResult {
                 return ValidationResult(
                     isValid = false,
-                    startMinutes = 0,
-                    endMinutes = 0,
+                    startMs = 0L,
+                    endMs = 0L,
                     antiOverlapMinutes = 0,
                     doseCount = 0,
                     volumePerDose = 0.0,
-                    proposedMinutes = emptyList(),
-                    formattedTimes = emptyList(),
-                    isShortRange = false
+                    proposedTimesMs = emptyList(),
+                    formattedTimes = emptyList()
                 )
             }
         }
@@ -330,11 +280,16 @@ class ScheduleHelperActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_PUMP_NUMBER = "pumpNumber"
         const val EXTRA_MODULE_ID = "moduleId"
-        const val EXTRA_START_MINUTES = "startMinutes"
-        const val EXTRA_END_MINUTES = "endMinutes"
+        const val EXTRA_START_MS = "startMs"
+        const val EXTRA_END_MS = "endMs"
         const val EXTRA_ANTI_CHEV_MINUTES = "antiChevMinutes"
         const val EXTRA_VOLUME_PER_DOSE = "volumePerDose"
         const val EXTRA_SCHEDULE_TIMES = "scheduleTimes"
-        const val EXTRA_SCHEDULE_MINUTES = "scheduleMinutes"
+        const val EXTRA_SCHEDULE_MS = "scheduleMs"
+        private const val MS_PER_MINUTE = 60_000L
+        private const val MS_PER_HOUR = 3_600_000L
+        private fun toMs(hour: Int, minute: Int): Long {
+            return (hour * 60L + minute) * MS_PER_MINUTE
+        }
     }
 }
