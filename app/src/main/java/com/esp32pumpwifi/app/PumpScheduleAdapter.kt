@@ -6,7 +6,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
-import kotlin.math.roundToInt
 
 class PumpScheduleAdapter(
     private val context: Context,
@@ -19,7 +18,6 @@ class PumpScheduleAdapter(
         const val MAX_PUMP_DURATION_SEC = 600
     }
 
-
     override fun getCount(): Int = schedules.size
     override fun getItem(position: Int): Any = schedules[position]
     override fun getItemId(position: Int): Long = position.toLong()
@@ -31,7 +29,7 @@ class PumpScheduleAdapter(
 
         // 🔹 LISTE TRIÉE POUR L’AFFICHAGE UNIQUEMENT
         val displaySchedules = schedules.withIndex()
-            .sortedBy { timeToMinutes(it.value.time) }
+            .sortedBy { safeTimeToMinutes(it.value.time) }
 
         if (position !in displaySchedules.indices) return view
 
@@ -63,19 +61,13 @@ class PumpScheduleAdapter(
                 onScheduleChanged()
             }
         }
+
         btnEdit.isEnabled = !readOnly
         btnDelete.isEnabled = !readOnly
         val actionAlpha = if (readOnly) 0.5f else 1f
         swEnabled.alpha = actionAlpha
         btnEdit.alpha = actionAlpha
         btnDelete.alpha = actionAlpha
-
-        // -----------------------------------------------------------------
-        // ✅ Parse + validation HH:MM (00-23 / 00-59)
-        // -----------------------------------------------------------------
-        fun parseTimeOrNull(time: String): Pair<Int, Int>? {
-            return ScheduleOverlapUtils.parseTimeOrNull(time)
-        }
 
         // -----------------------------------------------------------------
         // ✏ MODIFIER (AVEC CONTRÔLE CONFLITS)
@@ -103,7 +95,7 @@ class PumpScheduleAdapter(
                         QuantityInputUtils.parseQuantityTenth(etQty.text.toString())
 
                     // ✅ format + bornes HH/MM
-                    if (parseTimeOrNull(newTime) == null || newQtyTenth == null) {
+                    if (ScheduleOverlapUtils.parseTimeOrNull(newTime) == null || newQtyTenth == null) {
                         Toast.makeText(context, "Format invalide", Toast.LENGTH_SHORT).show()
                         return@setPositiveButton
                     }
@@ -190,10 +182,10 @@ class PumpScheduleAdapter(
         val flow = prefs.getFloat(flowKey, 0f)
         if (flow <= 0f) return ConflictResult(blockingMessage = "Pompe non calibrée")
 
-        // ✅ Minimum réel : 50 ms (comme le manuel et l’ESP32)
-        val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
-        val newQtyMl = QuantityInputUtils.quantityMl(newQtyTenth)
-        if (newQtyMl < minMl) {
+        // ✅ Durée centralisée (min/max) => même logique que Fragment/Helper
+        val durationMs = ScheduleOverlapUtils.durationMsFromQuantity(newQtyTenth, flow)
+        if (durationMs == null) {
+            val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
             return ConflictResult(
                 blockingMessage =
                     "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
@@ -201,25 +193,7 @@ class PumpScheduleAdapter(
             )
         }
 
-        val durationMs = (newQtyMl / flow * 1000f).roundToInt()
-        if (durationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) {
-            return ConflictResult(
-                blockingMessage =
-                    "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
-                            "Débit actuel : ${"%.1f".format(flow)} mL/s"
-            )
-        }
-
-        // ✅ limite firmware 600s en édition aussi (sinon surprise ESP32)
-        if (durationMs > ManualDoseActivity.MAX_PUMP_DURATION_MS) {
-            return ConflictResult(
-                blockingMessage =
-                    "Durée trop longue : maximum ${MAX_PUMP_DURATION_SEC}s\n" +
-                            "Réduis la quantité ou recalibre le débit."
-            )
-        }
-
-        val endMs = startMs + durationMs
+        val endMs: Long = startMs + durationMs.toLong()
 
         if (endMs >= 86_400_000L) {
             return ConflictResult(blockingMessage = "La distribution dépasse minuit (00:00)")
@@ -272,5 +246,15 @@ class PumpScheduleAdapter(
     fun setReadOnly(readOnly: Boolean) {
         this.readOnly = readOnly
         notifyDataSetChanged()
+    }
+
+    // ---------------------------------------------------------------------
+    // ✅ Tri affichage : fallback safe (ne casse pas si timeToMinutes n’existe pas)
+    // ---------------------------------------------------------------------
+    private fun safeTimeToMinutes(time: String): Int {
+        // Si ton projet a déjà une fonction timeToMinutes(time), remplace ce call
+        // par ton implémentation existante, ou supprime cette fonction.
+        val parsed = ScheduleOverlapUtils.parseTimeOrNull(time) ?: return Int.MAX_VALUE
+        return parsed.first * 60 + parsed.second
     }
 }

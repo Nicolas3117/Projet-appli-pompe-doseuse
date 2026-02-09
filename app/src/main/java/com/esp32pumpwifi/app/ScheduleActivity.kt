@@ -113,10 +113,8 @@ class ScheduleActivity : AppCompatActivity() {
         }
 
         // ✅ IMPORTANT : ne pas initialiser lastProgramHash sur le brouillon (ProgramStore)
-        // La vérité arrive via /read_ms (à l’ouverture) ou /program_ms OK (après envoi).
         lastProgramHash = null
 
-        // ✅ Sortie : toujours check final
         onBackPressedDispatcher.addCallback(
             this,
             object : OnBackPressedCallback(true) {
@@ -183,9 +181,7 @@ class ScheduleActivity : AppCompatActivity() {
                                 }
                             }
                         }
-                        .setNegativeButton("Rester") { dialog, _ ->
-                            dialog.dismiss()
-                        }
+                        .setNegativeButton("Rester") { dialog, _ -> dialog.dismiss() }
                         .create()
                         .also { dlg ->
                             if (isFinishing || isDestroyed) return
@@ -268,11 +264,7 @@ class ScheduleActivity : AppCompatActivity() {
                 return@launch
             }
 
-            Toast.makeText(
-                this@ScheduleActivity,
-                "Envoi…",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(this@ScheduleActivity, "Envoi…", Toast.LENGTH_SHORT).show()
 
             val sent = sendSchedulesToESP32(active)
             if (!sent) {
@@ -326,28 +318,48 @@ class ScheduleActivity : AppCompatActivity() {
         volumePerDose: Double,
         antiOverlapMinutes: Int
     ): Triple<List<PumpSchedule>, Int, Int> {
+
         val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
         val existingJson = schedulesPrefs.getString("esp_${espId}_pump$pumpNumber", null)
         val existingSchedules: MutableList<PumpSchedule> =
             existingJson?.let { PumpScheduleJson.fromJson(it) } ?: mutableListOf()
-        val existingTimes = existingSchedules.map { it.time }.toMutableSet()
+
+        // ⚠️ Dé-duplication au niveau "heure affichée" car le modèle stocke HH:mm
+        val existingTimeStrings = existingSchedules.map { it.time }.toMutableSet()
+
         val quantityTenth = (volumePerDose * 10.0).roundToInt()
+
         val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
         val flow = prefs.getFloat("esp_${espId}_pump${pumpNumber}_flow", 0f)
+
         val durationMs = ScheduleOverlapUtils.durationMsFromQuantity(quantityTenth, flow)
-        val antiOverlapMs = antiOverlapMinutes * MS_PER_MINUTE
+
+        val antiMs = antiOverlapMinutes.coerceAtLeast(0) * MS_PER_MINUTE
 
         var addedCount = 0
         var ignoredCount = 0
+
+        // Si pas de durée valide (débit non calibré / trop court / trop long), on ignore tout proprement
+        if (durationMs == null) {
+            return Triple(existingSchedules.sortedBy { it.time }, 0, timeMsList.size)
+        }
+
         for (timeMs in timeMsList) {
-            val time = formatTimeMs(timeMs)
-            if (!existingTimes.add(time)) continue
-            if (durationMs == null) {
+            val timeStr = formatTimeMs(timeMs)
+
+            // doublon HH:mm existant => ignoré (et compté)
+            if (existingTimeStrings.contains(timeStr)) {
                 ignoredCount++
                 continue
             }
-            val startMs = timeMs - antiOverlapMs
-            val endMs = timeMs + durationMs.toLong() + antiOverlapMs
+
+            // fenêtre candidate = [start..end] + marge ±anti
+            val rawStart = timeMs
+            val rawEnd = timeMs + durationMs.toLong()
+
+            val startMs = (rawStart - antiMs).coerceAtLeast(0L)
+            val endMs = (rawEnd + antiMs).coerceAtMost(DAY_MS)
+
             val overlapResult = ScheduleOverlapUtils.findOverlaps(
                 context = this,
                 espId = espId,
@@ -355,14 +367,18 @@ class ScheduleActivity : AppCompatActivity() {
                 candidateWindow = ScheduleOverlapUtils.ScheduleWindow(startMs, endMs),
                 samePumpSchedules = existingSchedules
             )
+
             if (overlapResult.samePumpConflict || overlapResult.overlappingPumpNames.isNotEmpty()) {
                 ignoredCount++
                 continue
             }
+
+            // ✅ Ajout accepté : on réserve maintenant l'heure (après validation)
+            existingTimeStrings.add(timeStr)
             existingSchedules.add(
                 PumpSchedule(
                     pumpNumber = pumpNumber,
-                    time = time,
+                    time = timeStr,
                     quantityTenth = quantityTenth,
                     enabled = true
                 )
@@ -410,14 +426,12 @@ class ScheduleActivity : AppCompatActivity() {
                 setConnectionState(true)
             }
 
-            // ✅ FIX MINIMAL :
             syncProgramStoreFromEsp(espProgram)
 
             val mergedByPump = mergeSchedulesFromEsp(espProgram, active.id, activeSchedulesResult)
             persistMergedSchedules(active.id, mergedByPump)
             updateUiSchedules(mergedByPump)
 
-            // ✅ Vérité de référence = programme ESP lu
             lastProgramHash = espProgram
         }
     }
@@ -464,9 +478,6 @@ class ScheduleActivity : AppCompatActivity() {
         }
     }
 
-    // ------------------------------------------------------------
-    // 2️⃣ ENVOI PROGRAMMATION (timeout applicatif)
-    // ------------------------------------------------------------
     private suspend fun sendSchedulesToESP32(active: EspModule, timeoutMs: Long = 4000L): Boolean {
         val message = ProgramStore.buildMessageMs(this)
         Log.i("SCHEDULE_SEND", "➡️ Envoi programmation via NetworkHelper")
@@ -484,10 +495,7 @@ class ScheduleActivity : AppCompatActivity() {
                                 .apply()
                         }
 
-                        // ✅ Vérité ESP32 : après /program_ms OK, on fige EXACTEMENT le message envoyé
                         syncProgramStoreFromEsp(message)
-
-                        // ✅ Référence de vérité = message réellement envoyé
                         lastProgramHash = message
 
                         if (continuation.isActive) {
@@ -501,9 +509,6 @@ class ScheduleActivity : AppCompatActivity() {
         }
     }
 
-    // ------------------------------------------------------------
-    // 🔍 Vérification ESP32 (/id)
-    // ------------------------------------------------------------
     private suspend fun verifyEsp32Connection(module: EspModule): Boolean =
         withContext(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
@@ -532,9 +537,6 @@ class ScheduleActivity : AppCompatActivity() {
             }
         }
 
-    // ------------------------------------------------------------
-    // 📥 Lecture programme sur ESP32 : GET /read_ms
-    // ------------------------------------------------------------
     private suspend fun fetchProgramFromEsp(ip: String): String? =
         withContext(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
@@ -678,17 +680,11 @@ class ScheduleActivity : AppCompatActivity() {
             }
     }
 
-    // ------------------------------------------------------------
-    // 🔄 Synchronisation /read_ms OU /program_ms OK → ProgramStoreSynced
-    // ------------------------------------------------------------
     private fun syncProgramStoreFromEsp(espProgram: String) {
         val active = Esp32Manager.getActive(this) ?: return
         val ok = ProgramStoreSynced.setFromMessage576(this, active.id, espProgram)
         if (!ok) {
-            Log.w(
-                "SCHEDULE_SYNC",
-                "ProgramStoreSynced.setFromMessage576 failed (len=${espProgram.length})"
-            )
+            Log.w("SCHEDULE_SYNC", "ProgramStoreSynced.setFromMessage576 failed (len=${espProgram.length})")
         }
     }
 
@@ -742,9 +738,6 @@ class ScheduleActivity : AppCompatActivity() {
             }
     }
 
-    // ------------------------------------------------------------
-    // ✅ Le reste de tes fonctions merge/persist/buildActive...
-    // ------------------------------------------------------------
     private fun mergeSchedulesFromEsp(
         espProgram: String,
         espId: Long,
@@ -871,7 +864,6 @@ class ScheduleActivity : AppCompatActivity() {
         tab.contentDescription = buildTabContentDescription(pumpName, fullText)
     }
 
-    // ✅ Gardé (si utilisé ailleurs), mais plus utilisé dans les tabs
     private fun formatActiveTotal(totalTenth: Int): String {
         val totalText = if (totalTenth % 10 == 0) {
             "${totalTenth / 10}"
@@ -881,7 +873,6 @@ class ScheduleActivity : AppCompatActivity() {
         return "Total actif : $totalText mL"
     }
 
-    // ✅ Format compact pour tabs + texte complet pour tooltip
     private fun formatActiveTotalShort(totalTenth: Int): Pair<String, String> {
         val valueText = if (totalTenth % 10 == 0) {
             "${totalTenth / 10}"
@@ -906,5 +897,6 @@ class ScheduleActivity : AppCompatActivity() {
         private const val REQUEST_SCHEDULE_HELPER = 2001
         private const val MS_PER_MINUTE = 60_000L
         private const val MS_PER_HOUR = 3_600_000L
+        private const val DAY_MS: Long = 24L * 60L * 60L * 1000L
     }
 }

@@ -151,7 +151,8 @@ class PumpScheduleFragment : Fragment() {
                     if (check.isPopup) {
                         showBlockingPopup(check.blockingMessage)
                     } else {
-                        Toast.makeText(requireContext(), check.blockingMessage, Toast.LENGTH_LONG).show()
+                        Toast.makeText(requireContext(), check.blockingMessage, Toast.LENGTH_LONG)
+                            .show()
                     }
                     return@setPositiveButton
                 }
@@ -193,7 +194,7 @@ class PumpScheduleFragment : Fragment() {
     }
 
     // ---------------------------------------------------------------------
-    // 🔍 DÉTECTION DES CONFLITS (✅ CORRIGÉ : tout en millisecondes)
+    // 🔍 DÉTECTION DES CONFLITS (réutilise ScheduleOverlapUtils)
     // ---------------------------------------------------------------------
     private fun detectConflicts(
         time: String,
@@ -203,41 +204,23 @@ class PumpScheduleFragment : Fragment() {
         val active = Esp32Manager.getActive(requireContext()) ?: return ConflictResult()
         val prefs = requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
-        val parsed = parseTimeOrNull(time)
-        if (parsed == null) {
-            return ConflictResult(blockingMessage = "Format invalide", isPopup = false)
-        }
-
-        val (h, m) = parsed
-        val startMs = (h * 3600L + m * 60L) * 1000L
+        val startMs = ScheduleOverlapUtils.timeToStartMs(time)
+            ?: return ConflictResult(blockingMessage = "Format invalide", isPopup = false)
 
         val flow = prefs.getFloat("esp_${active.id}_pump${pumpNumber}_flow", 0f)
         if (flow <= 0f) {
             return ConflictResult(blockingMessage = "Pompe non calibrée", isPopup = false)
         }
 
-        val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
-        val quantityMl = QuantityInputUtils.quantityMl(quantityTenth)
-        if (quantityMl < minMl) {
+        // ✅ min/max durée centralisés (même logique que partout)
+        val durationMs = ScheduleOverlapUtils.durationMsFromQuantity(quantityTenth, flow)
+        if (durationMs == null) {
+            val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
             val msg =
-                "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
+                "Quantité invalide.\n" +
+                        "Minimum ≈ ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
+                        "Maximum = ${MAX_PUMP_DURATION_SEC}s\n" +
                         "Débit actuel : ${"%.1f".format(flow)} mL/s"
-            return ConflictResult(blockingMessage = msg, isPopup = true)
-        }
-
-        val durationMs = (quantityMl / flow * 1000f).roundToInt()
-        if (durationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) {
-            val msg =
-                "Quantité trop faible : minimum ${"%.2f".format(minMl)} mL (${ManualDoseActivity.MIN_PUMP_DURATION_MS} ms)\n" +
-                        "Débit actuel : ${"%.1f".format(flow)} mL/s"
-            return ConflictResult(blockingMessage = msg, isPopup = true)
-        }
-
-        val maxMs = ManualDoseActivity.MAX_PUMP_DURATION_MS
-        if (durationMs > maxMs) {
-            val msg =
-                "Durée trop longue : maximum ${MAX_PUMP_DURATION_SEC}s\n" +
-                        "Réduis la quantité ou recalibre le débit."
             return ConflictResult(blockingMessage = msg, isPopup = true)
         }
 
