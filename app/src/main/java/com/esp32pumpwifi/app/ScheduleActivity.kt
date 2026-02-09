@@ -62,8 +62,9 @@ class ScheduleActivity : AppCompatActivity() {
     private data class HelperAddResult(
         val schedules: List<PumpSchedule>,
         val addedCount: Int,
-        val ignoredCount: Int,      // doublons + anti-chevauchement + invalid (incl. non calibré)
-        val ignoredByLimit: Int     // ignorées uniquement car limite 12 atteinte
+        val ignoredCount: Int,                // doublons + chevauchement (même pompe) + invalid (incl. non calibré)
+        val ignoredByLimit: Int,              // ignorées uniquement car limite 12 atteinte
+        val ignoredByAntiInterference: Int    // ignorées car impossible à placer (décalage anti-interférence)
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -340,6 +341,7 @@ class ScheduleActivity : AppCompatActivity() {
         val addedCount = result.addedCount
         val ignoredCount = result.ignoredCount
         val ignoredByLimit = result.ignoredByLimit
+        val ignoredByAntiInterference = result.ignoredByAntiInterference
 
         if (ignoredByLimit > 0) {
             showLimitReachedPopup()
@@ -360,15 +362,26 @@ class ScheduleActivity : AppCompatActivity() {
             tabsViewModel.setActiveTotal(pumpNumber, sumActiveTotalTenth(updatedSchedules))
         }
 
+        // ✅ Toast final: ajoute une info spécifique "anti-interférence" sans casser l'existant
         val parts = mutableListOf<String>()
         parts.add("$addedCount dose(s) ajoutée(s)")
         parts.add("$ignoredCount ignorée(s) (doublons/chevauchement)")
+        if (ignoredByAntiInterference > 0) {
+            parts.add("$ignoredByAntiInterference ignorée(s) (anti-interférence)")
+        }
         if (ignoredByLimit > 0) {
             parts.add("$ignoredByLimit ignorée(s) (limite 12)")
         }
         Toast.makeText(this, parts.joinToString(", "), Toast.LENGTH_LONG).show()
     }
 
+    /**
+     * AIDE À LA PROGRAMMATION UNIQUEMENT:
+     * - Même pompe: conflit bloquant => ignorée (comportement inchangé)
+     * - Autres pompes (enabled=true uniquement): si interférence => DÉCALAGE automatique vers l'avant
+     * - Si impossible à placer (sort de la journée / garde-fou): ignoréeByAntiInterference++
+     * - Limite 12: inchangée (ignoredByLimit + popup)
+     */
     private fun addSchedulesFromHelper(
         espId: Long,
         pumpNumber: Int,
@@ -390,14 +403,15 @@ class ScheduleActivity : AppCompatActivity() {
         val flow = prefs.getFloat("esp_${espId}_pump${pumpNumber}_flow", 0f)
 
         val durationMs = ScheduleOverlapUtils.durationMsFromQuantity(quantityTenth, flow)
-        val antiMs = antiOverlapMinutes.coerceAtLeast(0) * MS_PER_MINUTE
 
         var addedCount = 0
         var ignoredCount = 0
         var ignoredByLimit = 0
+        var ignoredByAntiInterference = 0
 
         if (durationMs == null) {
-            return HelperAddResult(existingSchedules.sortedBy { it.time }, 0, timeMsList.size, 0)
+            // non calibré / duration invalid => tout ignoré (comportement cohérent)
+            return HelperAddResult(existingSchedules.sortedBy { it.time }, 0, timeMsList.size, 0, 0)
         }
 
         if (existingSchedules.size >= MAX_SCHEDULES_PER_PUMP) {
@@ -406,37 +420,104 @@ class ScheduleActivity : AppCompatActivity() {
                 "SCHED_TRACE",
                 "helper cap12 pump=$pumpNumber addedUntilLimit=0 ignoredByLimit=$ignoredByLimit"
             )
-            return HelperAddResult(existingSchedules.sortedBy { it.time }, 0, 0, ignoredByLimit)
+            return HelperAddResult(existingSchedules.sortedBy { it.time }, 0, 0, ignoredByLimit, 0)
         }
 
-        for ((index, timeMs) in timeMsList.withIndex()) {
+        // ✅ Pré-chargement des schedules (pour interférence inter-pompes)
+        // Map pump -> list (la pompe candidate est présente aussi, mais elle sera exclue dans l'utils)
+        val allSchedulesByPump: MutableMap<Int, List<PumpSchedule>> = mutableMapOf()
+        for (p in 1..4) {
+            if (p == pumpNumber) {
+                // liste vivante (sera modifiée pendant la boucle)
+                allSchedulesByPump[p] = existingSchedules
+                continue
+            }
+            val json = schedulesPrefs.getString("esp_${espId}_pump$p", null)
+            allSchedulesByPump[p] = json?.let { PumpScheduleJson.fromJson(it) } ?: emptyList()
+        }
+
+        // ✅ helper local: conflit même pompe (enabled=true), basé sur la vraie durée
+        fun samePumpConflict(candidateStart: Long, candidateEnd: Long): Boolean {
+            for (s in existingSchedules) {
+                if (!s.enabled) continue
+                val w = ScheduleOverlapUtils.scheduleWindow(s.time, s.quantityTenth, flow) ?: continue
+                if (candidateStart < w.endMs && candidateEnd > w.startMs) return true
+            }
+            return false
+        }
+
+        val offsetMs = antiOverlapMinutes.coerceAtLeast(0).toLong() * MS_PER_MINUTE
+
+        for ((index, initialTimeMs) in timeMsList.withIndex()) {
             if (existingSchedules.size >= MAX_SCHEDULES_PER_PUMP) {
                 ignoredByLimit = timeMsList.size - index
                 break
             }
 
-            val timeStr = formatTimeMs(timeMs)
+            var startMs = initialTimeMs
+            var endMs = startMs + durationMs.toLong()
 
-            if (existingTimeStrings.contains(timeStr)) {
+            // Si la fenêtre brute dépasse la journée, impossible
+            if (endMs >= DAY_MS) {
+                ignoredByAntiInterference++
+                continue
+            }
+
+            // 1) Même pompe = bloquant (inchangé)
+            if (samePumpConflict(startMs, endMs)) {
                 ignoredCount++
                 continue
             }
 
-            val rawStart = timeMs
-            val rawEnd = timeMs + durationMs.toLong()
+            // 2) Inter-pompes (enabled=true uniquement) => décalage auto (helper uniquement)
+            if (offsetMs > 0L) {
+                var steps = 0
+                while (steps++ < SHIFT_GUARD_MAX_STEPS) {
+                    val hit = ScheduleOverlapUtils.findFirstActiveCrossPumpHit(
+                        context = this,
+                        espId = espId,
+                        candidatePumpNumber = pumpNumber,
+                        candidateWindow = ScheduleOverlapUtils.ScheduleWindow(startMs, endMs),
+                        offsetMs = offsetMs,
+                        allSchedulesByPump = allSchedulesByPump
+                    )
 
-            val startMs = (rawStart - antiMs).coerceAtLeast(0L)
-            val endMs = (rawEnd + antiMs).coerceAtMost(DAY_MS)
+                    if (hit == null) break
 
-            val overlapResult = ScheduleOverlapUtils.findOverlaps(
-                context = this,
-                espId = espId,
-                pumpNumber = pumpNumber,
-                candidateWindow = ScheduleOverlapUtils.ScheduleWindow(startMs, endMs),
-                samePumpSchedules = existingSchedules
-            )
+                    // Décale juste après la fenêtre interdite
+                    startMs = maxOf(startMs + SHIFT_STEP_MS_MIN, hit.endMs + SHIFT_STEP_MS_MIN)
+                    endMs = startMs + durationMs.toLong()
 
-            if (overlapResult.samePumpConflict || overlapResult.overlappingPumpNames.isNotEmpty()) {
+                    if (startMs >= DAY_MS || endMs >= DAY_MS) {
+                        ignoredByAntiInterference++
+                        // sortie directe de la boucle d'ajout (dose impossible)
+                        startMs = -1L
+                        break
+                    }
+
+                    // Re-vérifie la même pompe (car le décalage peut créer un overlap intra-pompe)
+                    if (samePumpConflict(startMs, endMs)) {
+                        ignoredCount++
+                        startMs = -1L
+                        break
+                    }
+                }
+
+                if (startMs < 0L) {
+                    // déjà compté (ignoredByAntiInterference ou ignoredCount)
+                    continue
+                }
+
+                if (steps >= SHIFT_GUARD_MAX_STEPS) {
+                    ignoredByAntiInterference++
+                    continue
+                }
+            }
+
+            val timeStr = formatTimeMs(startMs)
+
+            // doublons (après décalage)
+            if (existingTimeStrings.contains(timeStr)) {
                 ignoredCount++
                 continue
             }
@@ -461,7 +542,7 @@ class ScheduleActivity : AppCompatActivity() {
                 .apply()
         }
 
-        return HelperAddResult(sorted, addedCount, ignoredCount, ignoredByLimit)
+        return HelperAddResult(sorted, addedCount, ignoredCount, ignoredByLimit, ignoredByAntiInterference)
     }
 
     private fun formatTimeMs(timeMs: Long): String {
@@ -529,21 +610,22 @@ class ScheduleActivity : AppCompatActivity() {
             val localProgram = ProgramStore.buildMessageMs(this@ScheduleActivity)
 
             if (espProgram == null) {
-                AlertDialog.Builder(this@ScheduleActivity)
-                    .setTitle("Pompe déconnectée")
-                    .setMessage(
-                        "⚠️ Pompe déconnectée.\n" +
-                                "La programmation n'est peut-être pas enregistrée sur la pompe."
-                    )
-                    .setPositiveButton("OK") { _, _ -> finish() }
-                    .setOnDismissListener { finish() }
-                    .create()
-                    .also { dlg ->
-                        if (isFinishing || isDestroyed) return@launch
-                        dlg.show()
-                    }
+                if (!isFinishing && !isDestroyed) {
+                    AlertDialog.Builder(this@ScheduleActivity)
+                        .setTitle("Pompe déconnectée")
+                        .setMessage(
+                            "⚠️ Pompe déconnectée.\n" +
+                                    "La programmation n'est peut-être pas enregistrée sur la pompe."
+                        )
+                        .setPositiveButton("OK") { _, _ -> finish() }
+                        .setOnDismissListener { finish() }
+                        .show()
+                } else {
+                    finish()
+                }
                 return@launch
             }
+
 
             if (espProgram != localProgram) {
                 val diffs = computeAllDiffs(localProgram, espProgram)
@@ -975,5 +1057,9 @@ class ScheduleActivity : AppCompatActivity() {
         private const val MS_PER_MINUTE = 60_000L
         private const val MS_PER_HOUR = 3_600_000L
         private const val DAY_MS: Long = 24L * 60L * 60L * 1000L
+
+        // ✅ garde-fous décalage anti-interférence (helper uniquement)
+        private const val SHIFT_GUARD_MAX_STEPS = 2000
+        private const val SHIFT_STEP_MS_MIN = 1L
     }
 }

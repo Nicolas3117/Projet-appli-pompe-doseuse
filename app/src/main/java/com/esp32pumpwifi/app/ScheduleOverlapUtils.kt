@@ -15,6 +15,16 @@ object ScheduleOverlapUtils {
     )
 
     /**
+     * Hit inter-pompes (uniquement schedules enabled=true) permettant de décaler une dose candidate.
+     * startMs/endMs sont déjà élargis avec l'offset anti-interférence.
+     */
+    data class InterferenceHit(
+        val pumpNumber: Int,
+        val startMs: Long,
+        val endMs: Long
+    )
+
+    /**
      * Étend une fenêtre de distribution avec une marge ±antiOverlapMinutes (en minutes),
      * et borne le résultat dans [0..24h].
      *
@@ -59,6 +69,79 @@ object ScheduleOverlapUtils {
         val startMs = timeToStartMs(time) ?: return null
         val durationMs = durationMsFromQuantity(quantityTenth, flow) ?: return null
         return ScheduleWindow(startMs, startMs + durationMs.toLong())
+    }
+
+    /**
+     * NOUVEAU (utilisé uniquement pour l'aide à la programmation):
+     *
+     * Retourne la première collision inter-pompes avec des schedules actifs (enabled=true),
+     * en élargissant les fenêtres des AUTRES pompes avec offsetMs (anti-interférence chimique).
+     *
+     * - Exclut la pompe candidate.
+     * - Exclut les schedules désactivés.
+     * - Ne modifie rien au comportement manuel (popup warning) car cette fonction n'est appelée
+     *   que dans le flux helper.
+     *
+     * Stratégie: on renvoie le hit dont endMs est le plus petit (collision "la plus proche"),
+     * ce qui permet un décalage efficace: candidateStart = hit.endMs + 1.
+     */
+    fun findFirstActiveCrossPumpHit(
+        context: Context,
+        espId: Long,
+        candidatePumpNumber: Int,
+        candidateWindow: ScheduleWindow,
+        offsetMs: Long,
+        // Permet d'injecter une map déjà en mémoire (ex: pendant addSchedulesFromHelper),
+        // sinon on retombe sur SharedPreferences comme findOverlaps().
+        allSchedulesByPump: Map<Int, List<PumpSchedule>>? = null
+    ): InterferenceHit? {
+        if (offsetMs <= 0L) return null
+
+        val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        val schedulesPrefs = context.getSharedPreferences("schedules", Context.MODE_PRIVATE)
+
+        fun loadPumpList(pump: Int): List<PumpSchedule> {
+            // Si une map est fournie, on l'utilise (important pour inclure les ajouts en cours côté helper)
+            allSchedulesByPump?.get(pump)?.let { return it }
+            val json = schedulesPrefs.getString("esp_${espId}_pump$pump", null) ?: return emptyList()
+            return PumpScheduleJson.fromJson(json)
+        }
+
+        var bestHit: InterferenceHit? = null
+
+        for (pump in 1..4) {
+            if (pump == candidatePumpNumber) continue
+
+            val flow = prefs.getFloat("esp_${espId}_pump${pump}_flow", 0f)
+            if (flow <= 0f) continue
+
+            val list = loadPumpList(pump)
+            for (schedule in list) {
+                if (!schedule.enabled) continue
+
+                val w = scheduleWindow(schedule.time, schedule.quantityTenth, flow) ?: continue
+
+                val otherStart = (w.startMs - offsetMs).coerceAtLeast(0L)
+                val otherEnd = (w.endMs + offsetMs).coerceAtMost(DAY_MS)
+
+                val overlaps =
+                    candidateWindow.startMs < otherEnd && candidateWindow.endMs > otherStart
+                if (!overlaps) continue
+
+                val hit = InterferenceHit(
+                    pumpNumber = pump,
+                    startMs = otherStart,
+                    endMs = otherEnd
+                )
+
+                bestHit = when (bestHit) {
+                    null -> hit
+                    else -> if (hit.endMs < bestHit!!.endMs) hit else bestHit
+                }
+            }
+        }
+
+        return bestHit
     }
 
     fun findOverlaps(
