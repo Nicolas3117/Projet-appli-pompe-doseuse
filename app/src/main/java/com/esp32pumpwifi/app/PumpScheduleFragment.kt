@@ -84,15 +84,7 @@ class PumpScheduleFragment : Fragment() {
     // ✅ Parse + validation HH:MM (00-23 / 00-59)
     // ---------------------------------------------------------------------
     private fun parseTimeOrNull(time: String): Pair<Int, Int>? {
-        val t = time.trim()
-        if (!t.matches(Regex("""\d{2}:\d{2}"""))) return null
-        val parts = t.split(":")
-        if (parts.size != 2) return null
-        val hh = parts[0].toIntOrNull() ?: return null
-        val mm = parts[1].toIntOrNull() ?: return null
-        if (hh !in 0..23) return null
-        if (mm !in 0..59) return null
-        return hh to mm
+        return ScheduleOverlapUtils.parseTimeOrNull(time)
     }
 
     // ---------------------------------------------------------------------
@@ -254,73 +246,29 @@ class PumpScheduleFragment : Fragment() {
             return ConflictResult(blockingMessage = "La distribution dépasse minuit", isPopup = false)
         }
 
-        for (s in schedules) {
-            if (!s.enabled) continue
+        val overlapResult = ScheduleOverlapUtils.findOverlaps(
+            context = requireContext(),
+            espId = active.id,
+            pumpNumber = pumpNumber,
+            candidateWindow = ScheduleOverlapUtils.ScheduleWindow(startMs, endMs),
+            samePumpSchedules = schedules
+        )
 
-            val sMinMl = minMl
-            if (s.quantityMl < sMinMl) continue
-
-            val parsedExisting = parseTimeOrNull(s.time) ?: continue
-            val (sh, sm) = parsedExisting
-            val sStartMs = (sh * 3600L + sm * 60L) * 1000L
-
-            val sDurMs = (s.quantityMl / flow * 1000f).roundToInt()
-            if (sDurMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) continue
-            if (sDurMs > maxMs) continue
-
-            val sEndMs = sStartMs + sDurMs.toLong()
-
-            if (startMs < sEndMs && endMs > sStartMs) {
-                return ConflictResult(
-                    blockingMessage = "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}",
-                    isPopup = false
-                )
-            }
+        if (overlapResult.samePumpConflict) {
+            return ConflictResult(
+                blockingMessage = "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}",
+                isPopup = false
+            )
         }
 
-        val overlappingPumps = mutableSetOf<String>()
-
-        for (p in 1..4) {
-            if (p == pumpNumber) continue
-
-            val json =
-                requireContext()
-                    .getSharedPreferences("schedules", Context.MODE_PRIVATE)
-                    .getString("esp_${active.id}_pump$p", null)
-                    ?: continue
-
-            val list: List<PumpSchedule> = PumpScheduleJson.fromJson(json)
-
-            val pFlow = prefs.getFloat("esp_${active.id}_pump${p}_flow", 0f)
-            if (pFlow <= 0f) continue
-
-            val pMinMl = pFlow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
-
-            for (s in list) {
-                if (!s.enabled) continue
-                if (s.quantityMl < pMinMl) continue
-
-                val parsedOther = parseTimeOrNull(s.time) ?: continue
-                val (sh, sm) = parsedOther
-                val sStartMs = (sh * 3600L + sm * 60L) * 1000L
-
-                val sDurMs = (s.quantityMl / pFlow * 1000f).roundToInt()
-                if (sDurMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) continue
-                if (sDurMs > maxMs) continue
-
-                val sEndMs = sStartMs + sDurMs.toLong()
-
-                if (startMs < sEndMs && endMs > sStartMs) {
-                    overlappingPumps.add(getPumpName(p))
-                }
-            }
-        }
-
-        if (overlappingPumps.isNotEmpty()) {
+        if (overlapResult.overlappingPumpNames.isNotEmpty()) {
             return ConflictResult(
                 warningMessage =
                     "La distribution chevauche les pompes suivantes :\n" +
-                            overlappingPumps.joinToString(separator = "\n• ", prefix = "• ") +
+                            overlapResult.overlappingPumpNames.joinToString(
+                                separator = "\n• ",
+                                prefix = "• "
+                            ) +
                             "\n\nVoulez-vous continuer ?"
             )
         }

@@ -74,15 +74,7 @@ class PumpScheduleAdapter(
         // ✅ Parse + validation HH:MM (00-23 / 00-59)
         // -----------------------------------------------------------------
         fun parseTimeOrNull(time: String): Pair<Int, Int>? {
-            val t = time.trim()
-            if (!t.matches(Regex("""\d{2}:\d{2}"""))) return null
-            val parts = t.split(":")
-            if (parts.size != 2) return null
-            val hh = parts[0].toIntOrNull() ?: return null
-            val mm = parts[1].toIntOrNull() ?: return null
-            if (hh !in 0..23) return null
-            if (mm !in 0..59) return null
-            return hh to mm
+            return ScheduleOverlapUtils.parseTimeOrNull(time)
         }
 
         // -----------------------------------------------------------------
@@ -191,19 +183,8 @@ class PumpScheduleAdapter(
         val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
         // ✅ sécurité HH/MM (au cas où)
-        val t = newTime.trim()
-        if (!t.matches(Regex("""\d{2}:\d{2}"""))) {
-            return ConflictResult(blockingMessage = "Format invalide")
-        }
-        val parts = t.split(":")
-        if (parts.size != 2) return ConflictResult(blockingMessage = "Format invalide")
-        val h = parts[0].toIntOrNull() ?: return ConflictResult(blockingMessage = "Format invalide")
-        val m = parts[1].toIntOrNull() ?: return ConflictResult(blockingMessage = "Format invalide")
-        if (h !in 0..23 || m !in 0..59) {
-            return ConflictResult(blockingMessage = "Format invalide")
-        }
-
-        val startMs = (h * 3600L + m * 60L) * 1000L
+        val startMs = ScheduleOverlapUtils.timeToStartMs(newTime)
+            ?: return ConflictResult(blockingMessage = "Format invalide")
 
         val flowKey = "esp_${active.id}_pump${pumpNumber}_flow"
         val flow = prefs.getFloat(flowKey, 0f)
@@ -244,64 +225,26 @@ class PumpScheduleAdapter(
             return ConflictResult(blockingMessage = "La distribution dépasse minuit (00:00)")
         }
 
-        val overlappingPumps = mutableSetOf<String>()
+        val overlapResult = ScheduleOverlapUtils.findOverlaps(
+            context = context,
+            espId = active.id,
+            pumpNumber = pumpNumber,
+            candidateWindow = ScheduleOverlapUtils.ScheduleWindow(startMs, endMs),
+            ignoreSamePumpPredicate = { index, _ -> index == editedIndex }
+        )
 
-        for (p in 1..4) {
-
-            val json = context
-                .getSharedPreferences("schedules", Context.MODE_PRIVATE)
-                .getString("esp_${active.id}_pump$p", null)
-                ?: continue
-
-            val list: MutableList<PumpSchedule> = PumpScheduleJson.fromJson(json)
-
-            for ((index, s) in list.withIndex()) {
-
-                if (p == pumpNumber && index == editedIndex) continue
-                if (!s.enabled) continue
-
-                // ✅ ignore si heure invalide (legacy/corruption)
-                val st = s.time.trim()
-                if (!st.matches(Regex("""\d{2}:\d{2}"""))) continue
-                val sp = st.split(":")
-                if (sp.size != 2) continue
-                val hh = sp[0].toIntOrNull() ?: continue
-                val mm = sp[1].toIntOrNull() ?: continue
-                if (hh !in 0..23 || mm !in 0..59) continue
-
-                val sStartMs = (hh * 3600L + mm * 60L) * 1000L
-
-                val flowOther =
-                    prefs.getFloat("esp_${active.id}_pump${p}_flow", flow)
-
-                val minOtherMl =
-                    flowOther * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
-                if (s.quantityMl < minOtherMl) continue
-
-                val sDurationMs = (s.quantityMl / flowOther * 1000f).roundToInt()
-                if (sDurationMs < ManualDoseActivity.MIN_PUMP_DURATION_MS) continue
-                if (sDurationMs > ManualDoseActivity.MAX_PUMP_DURATION_MS) continue
-
-                val sEndMs = sStartMs + sDurationMs
-
-                if (startMs < sEndMs && endMs > sStartMs) {
-                    // ✅ même pompe = bloquant (message cohérent)
-                    if (p == pumpNumber) {
-                        return ConflictResult(
-                            blockingMessage =
-                                "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}"
-                        )
-                    }
-                    overlappingPumps.add(getPumpName(p))
-                }
-            }
+        if (overlapResult.samePumpConflict) {
+            return ConflictResult(
+                blockingMessage =
+                    "Distribution simultanée détectée sur ${getPumpName(pumpNumber)}"
+            )
         }
 
-        if (overlappingPumps.isNotEmpty()) {
+        if (overlapResult.overlappingPumpNames.isNotEmpty()) {
             return ConflictResult(
                 warningMessage =
                     "La distribution chevauche les pompes suivantes :\n" +
-                            overlappingPumps.joinToString(
+                            overlapResult.overlappingPumpNames.joinToString(
                                 separator = "\n• ",
                                 prefix = "• "
                             ) +

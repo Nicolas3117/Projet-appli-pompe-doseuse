@@ -298,11 +298,15 @@ class ScheduleActivity : AppCompatActivity() {
         val volumePerDose = data.getDoubleExtra(ScheduleHelperActivity.EXTRA_VOLUME_PER_DOSE, 0.0)
         if (volumePerDose <= 0.0) return
 
-        val (updatedSchedules, addedCount) = addSchedulesFromHelper(
+        val antiOverlapMinutes =
+            data.getIntExtra(ScheduleHelperActivity.EXTRA_ANTI_CHEV_MINUTES, 0)
+
+        val (updatedSchedules, addedCount, ignoredCount) = addSchedulesFromHelper(
             espId = active.id,
             pumpNumber = pumpNumber,
             timeMsList = timeMsList,
-            volumePerDose = volumePerDose
+            volumePerDose = volumePerDose,
+            antiOverlapMinutes = antiOverlapMinutes
         )
 
         adapter.updateSchedules(pumpNumber, updatedSchedules)
@@ -310,7 +314,7 @@ class ScheduleActivity : AppCompatActivity() {
 
         Toast.makeText(
             this,
-            "$addedCount doses ajoutées à Pompe $pumpNumber",
+            "$addedCount doses ajoutées, $ignoredCount ignorées (anti-chevauchement)",
             Toast.LENGTH_LONG
         ).show()
     }
@@ -319,19 +323,42 @@ class ScheduleActivity : AppCompatActivity() {
         espId: Long,
         pumpNumber: Int,
         timeMsList: List<Long>,
-        volumePerDose: Double
-    ): Pair<List<PumpSchedule>, Int> {
+        volumePerDose: Double,
+        antiOverlapMinutes: Int
+    ): Triple<List<PumpSchedule>, Int, Int> {
         val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
         val existingJson = schedulesPrefs.getString("esp_${espId}_pump$pumpNumber", null)
         val existingSchedules: MutableList<PumpSchedule> =
             existingJson?.let { PumpScheduleJson.fromJson(it) } ?: mutableListOf()
         val existingTimes = existingSchedules.map { it.time }.toMutableSet()
         val quantityTenth = (volumePerDose * 10.0).roundToInt()
+        val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        val flow = prefs.getFloat("esp_${espId}_pump${pumpNumber}_flow", 0f)
+        val durationMs = ScheduleOverlapUtils.durationMsFromQuantity(quantityTenth, flow)
+        val antiOverlapMs = antiOverlapMinutes * MS_PER_MINUTE
 
         var addedCount = 0
+        var ignoredCount = 0
         for (timeMs in timeMsList) {
             val time = formatTimeMs(timeMs)
             if (!existingTimes.add(time)) continue
+            if (durationMs == null) {
+                ignoredCount++
+                continue
+            }
+            val startMs = timeMs - antiOverlapMs
+            val endMs = timeMs + durationMs.toLong() + antiOverlapMs
+            val overlapResult = ScheduleOverlapUtils.findOverlaps(
+                context = this,
+                espId = espId,
+                pumpNumber = pumpNumber,
+                candidateWindow = ScheduleOverlapUtils.ScheduleWindow(startMs, endMs),
+                samePumpSchedules = existingSchedules
+            )
+            if (overlapResult.samePumpConflict || overlapResult.overlappingPumpNames.isNotEmpty()) {
+                ignoredCount++
+                continue
+            }
             existingSchedules.add(
                 PumpSchedule(
                     pumpNumber = pumpNumber,
@@ -350,7 +377,7 @@ class ScheduleActivity : AppCompatActivity() {
                 .apply()
         }
 
-        return sorted to addedCount
+        return Triple(sorted, addedCount, ignoredCount)
     }
 
     private fun formatTimeMs(timeMs: Long): String {
