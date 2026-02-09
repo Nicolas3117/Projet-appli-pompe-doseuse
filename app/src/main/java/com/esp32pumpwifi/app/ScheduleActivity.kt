@@ -282,27 +282,32 @@ class ScheduleActivity : AppCompatActivity() {
         val moduleId = data.getStringExtra(ScheduleHelperActivity.EXTRA_MODULE_ID)
         if (moduleId != null && moduleId != active.id.toString()) return
 
-        val timeMsArray =
-            data.getLongArrayExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS) ?: return
+        val timeMsArray = data.getLongArrayExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS) ?: return
         if (timeMsArray.isEmpty()) return
         val timeMsList = timeMsArray.toList()
 
         val volumePerDose = data.getDoubleExtra(ScheduleHelperActivity.EXTRA_VOLUME_PER_DOSE, 0.0)
         if (volumePerDose <= 0.0) return
 
-        val antiOverlapMinutes =
-            data.getIntExtra(ScheduleHelperActivity.EXTRA_ANTI_CHEV_MINUTES, 0)
+        val antiOverlapMinutes = data.getIntExtra(ScheduleHelperActivity.EXTRA_ANTI_CHEV_MINUTES, 0)
 
-        val (updatedSchedules, addedCount, ignoredCount) = addSchedulesFromHelper(
+        val result = addSchedulesFromHelper(
             espId = active.id,
             pumpNumber = pumpNumber,
             timeMsList = timeMsList,
             volumePerDose = volumePerDose,
             antiOverlapMinutes = antiOverlapMinutes
         )
+        val updatedSchedules = result.first
+        val addedCount = result.second
+        val ignoredCount = result.third
 
-        adapter.updateSchedules(pumpNumber, updatedSchedules)
-        tabsViewModel.setActiveTotal(pumpNumber, sumActiveTotalTenth(updatedSchedules))
+        val fragment = getPumpFragment(pumpNumber)
+        fragment?.replaceSchedules(updatedSchedules)
+        if (fragment == null) {
+            adapter.updateSchedules(pumpNumber, updatedSchedules)
+            tabsViewModel.setActiveTotal(pumpNumber, sumActiveTotalTenth(updatedSchedules))
+        }
 
         Toast.makeText(
             this,
@@ -333,7 +338,6 @@ class ScheduleActivity : AppCompatActivity() {
         val flow = prefs.getFloat("esp_${espId}_pump${pumpNumber}_flow", 0f)
 
         val durationMs = ScheduleOverlapUtils.durationMsFromQuantity(quantityTenth, flow)
-
         val antiMs = antiOverlapMinutes.coerceAtLeast(0) * MS_PER_MINUTE
 
         var addedCount = 0
@@ -394,6 +398,14 @@ class ScheduleActivity : AppCompatActivity() {
         }
 
         return Triple(sorted, addedCount, ignoredCount)
+    }
+
+    // ✅ FIX IMPORTANT : récupération fiable du fragment ViewPager2 (FragmentStateAdapter)
+    private fun getPumpFragment(pumpNumber: Int): PumpScheduleFragment? {
+        val position = pumpNumber - 1
+        if (position !in 0..3) return null
+        val tag = "f${adapter.getItemId(position)}"
+        return supportFragmentManager.findFragmentByTag(tag) as? PumpScheduleFragment
     }
 
     private fun formatTimeMs(timeMs: Long): String {
