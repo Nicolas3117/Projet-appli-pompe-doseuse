@@ -32,16 +32,29 @@
 
         <TextView
             android:id="@+id/tv_header_back"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_gravity="start"
             android:layout_marginStart="0dp"
+            android:layout_weight="1"
             android:clickable="true"
             android:focusable="true"
             android:text="Retour"
             android:textAlignment="viewStart"
             android:textColor="@android:color/white"
             android:textSize="17sp" />
+
+        <ImageButton
+            android:id="@+id/btn_schedule_helper"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/schedule_helper_title"
+            android:minWidth="48dp"
+            android:minHeight="48dp"
+            android:padding="12dp"
+            android:src="@drawable/ic_calculator_24"
+            android:tint="@android:color/white" />
     </LinearLayout>
 
     <!-- ✅ Onglets des pompes -->

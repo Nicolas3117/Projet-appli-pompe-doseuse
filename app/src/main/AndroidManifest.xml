@@ -60,6 +60,11 @@
             android:windowSoftInputMode="stateHidden|adjustResize" />
 
         <activity
+            android:name=".ScheduleHelperActivity"
+            android:exported="false"
+            android:windowSoftInputMode="stateHidden|adjustResize" />
+
+        <activity
             android:name=".ManualDoseActivity"
             android:exported="false"
             android:windowSoftInputMode="stateHidden|adjustResize" />

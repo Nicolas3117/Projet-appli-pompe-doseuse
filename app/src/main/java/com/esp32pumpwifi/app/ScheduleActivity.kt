@@ -1,10 +1,12 @@
 package com.esp32pumpwifi.app
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
+import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -74,6 +76,15 @@ class ScheduleActivity : AppCompatActivity() {
 
         viewPager = findViewById(R.id.viewPager)
         tabLayout = findViewById(R.id.tabLayout)
+
+        findViewById<ImageButton>(R.id.btn_schedule_helper).setOnClickListener {
+            val pumpNumber = viewPager.currentItem + 1
+            val intent = Intent(this, ScheduleHelperActivity::class.java).apply {
+                putExtra(ScheduleHelperActivity.EXTRA_PUMP_NUMBER, pumpNumber)
+                putExtra(ScheduleHelperActivity.EXTRA_MODULE_ID, activeModule.id)
+            }
+            startActivity(intent)
+        }
 
         adapter = PumpPagerAdapter(this)
         viewPager.adapter = adapter

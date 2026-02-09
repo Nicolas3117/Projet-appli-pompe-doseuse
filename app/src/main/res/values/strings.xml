@@ -32,6 +32,7 @@
     <string name="title_control_pumps">Contrôle des pompes</string>
     <string name="btn_change_esp">Changer d’ESP32</string>
     <string name="btn_schedule_pumps">Programmation des pompes</string>
+    <string name="schedule_helper_title">Aide à la programmation</string>
     <string name="refill_tanks">Recharger les réservoirs</string>
     <string name="tanks_title">Réservoirs</string>
     <string name="btn_calibration">Calibration des pompes</string>
