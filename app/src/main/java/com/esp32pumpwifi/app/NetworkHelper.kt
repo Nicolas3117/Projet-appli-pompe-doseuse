@@ -247,7 +247,7 @@ object NetworkHelper {
                     val r = responseText.trim()
                     if (r.equals("OK", ignoreCase = true) || r.isEmpty()) {
                         withContext(Dispatchers.Main) {
-                            showSuccessToast(context, "Programmation envoyée à l’ESP32")
+                            showSuccessToast(context, "Programmation envoyée")
                             onSuccess()
                         }
                         return@launch

@@ -198,7 +198,7 @@ class PumpScheduleFragment : Fragment() {
         etAntiInterference.isEnabled = false
         etAntiInterference.isFocusable = false
         etAntiInterference.isFocusableInTouchMode = false
-        antiInterferenceLayout.helperText = "Anti-interférence par défaut (Calibration) : $antiPrefDefault min"
+        antiInterferenceLayout.helperText = "Valeur définie dans la calibration de la pompe"
 
         var addBtn: android.widget.Button? = null
 

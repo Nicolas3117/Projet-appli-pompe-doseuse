@@ -115,10 +115,12 @@ class ScheduleHelperActivity : AppCompatActivity() {
             .getInt("esp_${expectedEspId}_pump${pumpNumber}_anti_overlap_minutes", 0)
             .coerceAtLeast(0)
         antiOverlapInput.setText(calibrationAntiMin.toString())
-        antiOverlapLayout.helperText = "Valeur Calibration par défaut : $calibrationAntiMin min"
+        antiOverlapInput.isEnabled = false
+        antiOverlapLayout.isEnabled = false
+        antiOverlapLayout.helperText = "Valeur définie dans la calibration de la pompe"
         Log.i(
             TAG_ANTI_INTERFERENCE,
-            "helper_anti_default moduleId=$expectedEspId pump=$pumpNumber antiMin=$calibrationAntiMin source=calibration"
+            "ANTI_INTERFERENCE source=calibration value=$calibrationAntiMin pump=$pumpNumber moduleId=$expectedEspId"
         )
     }
 
@@ -161,8 +163,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         doseInput.addTextChangedListener { updateUi() }
         volumeInput.addTextChangedListener { updateUi() }
-        antiOverlapInput.addTextChangedListener { updateUi() }
-
         findViewById<Button>(R.id.button_cancel).setOnClickListener { finish() }
 
         addButton.setOnClickListener {
@@ -278,22 +278,15 @@ class ScheduleHelperActivity : AppCompatActivity() {
             isValid = false
         }
 
-        val antiText = antiOverlapInput.text?.toString()?.trim().orEmpty()
-        val userAntiOverlap = antiText.toIntOrNull()
-        if (antiText.isNotEmpty() && (userAntiOverlap == null || userAntiOverlap < 0)) {
-            antiOverlapLayout.error = getString(R.string.schedule_helper_error_anti_overlap)
-            isValid = false
-        }
-        val antiOverlap = if (antiText.isEmpty()) calibrationAntiMin else userAntiOverlap
-        val antiMinSource = if (antiText.isEmpty()) "calibration" else "user_override"
+        val antiOverlap = calibrationAntiMin
 
-        if (!isValid || start == null || end == null || doseCountRaw == null || volumeTotal == null || antiOverlap == null) {
+        if (!isValid || start == null || end == null || doseCountRaw == null || volumeTotal == null) {
             return ValidationResult.invalid()
         }
 
         Log.i(
             TAG_ANTI_INTERFERENCE,
-            "helper_anti_selected moduleId=$expectedEspId pump=$pumpNumber antiMin=$antiOverlap antiMinSource=$antiMinSource raw=\"$antiText\""
+            "helper_anti_selected moduleId=$expectedEspId pump=$pumpNumber antiMin=$antiOverlap antiMinSource=calibration"
         )
 
         // ✅ Limite 12 en tenant compte de l’existant
