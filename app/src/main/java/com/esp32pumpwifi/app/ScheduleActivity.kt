@@ -362,7 +362,16 @@ class ScheduleActivity : AppCompatActivity() {
     // -------------------------------------------------------
 
     private suspend fun sendIfPossible(): Boolean {
-        val active = lockedModule ?: return false
+        val active = lockedModule ?: run {
+            setUnsyncedState(true, "Synchronisation impossible")
+            Toast.makeText(
+                this@ScheduleActivity,
+                "Envoi impossible : passage en mode lecture seule.",
+                Toast.LENGTH_LONG
+            ).show()
+            showUnsyncedDialog()
+            return false
+        }
         return sendSchedulesToESP32(active)
     }
 
