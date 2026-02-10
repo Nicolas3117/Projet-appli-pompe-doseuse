@@ -42,6 +42,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
     private var pumpNumber: Int = 1
     private var moduleId: String? = null
     private var expectedEspId: Long = -1L
+    private var currentPumpName: String = ""
 
     // ✅ places restantes avant d’atteindre 12 (en tenant compte des prefs existantes)
     private var remainingSlots: Int = MAX_SCHEDULES_PER_PUMP
@@ -81,8 +82,9 @@ class ScheduleHelperActivity : AppCompatActivity() {
             return
         }
 
-        val pumpLabel = getString(R.string.pump_label, pumpNumber)
-        findViewById<TextView>(R.id.tv_schedule_helper_pump).text = pumpLabel
+        currentPumpName = getPumpDisplayName(pumpNumber)
+        findViewById<TextView>(R.id.tv_schedule_helper_pump).text = currentPumpName
+        supportActionBar?.subtitle = currentPumpName
 
         bindViews()
         computeRemainingSlots()
@@ -384,12 +386,11 @@ class ScheduleHelperActivity : AppCompatActivity() {
             if (!result.isValid) {
                 val conflictStart = result.conflictStartMs?.let { formatTimeMs(it) }
                 val conflictEnd = result.conflictEndMs?.let { formatTimeMs(it.coerceAtMost(86_399_999L)) }
-                val nextAllowed = result.nextAllowedStartMs?.let { formatTimeMs((it % 86_400_000L + 86_400_000L) % 86_400_000L) }
                 globalErrorMessage = when (result.reason) {
                     DoseValidationReason.OVERLAP_SAME_PUMP ->
-                        "Une distribution est déjà en cours à ce moment (P${result.conflictPump} de $conflictStart à $conflictEnd)."
+                        "Une distribution est déjà en cours à ce moment (${result.conflictPumpNum?.let { getPumpDisplayName(it) } ?: "une autre pompe"} de $conflictStart à $conflictEnd)."
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
-                        val blockedPumpName = result.conflictPumpNum?.let { getPumpName(it) } ?: "une autre pompe"
+                        val blockedPumpName = result.conflictPumpNum?.let { getPumpDisplayName(it) } ?: "une autre pompe"
                         antiInterferenceGapErrorMessage(antiOverlap, blockedPumpName, result.nextAllowedStartMs)
                     }
                     DoseValidationReason.OVERFLOW_MIDNIGHT -> {
@@ -450,12 +451,12 @@ class ScheduleHelperActivity : AppCompatActivity() {
         )
     }
 
-    private fun getPumpName(pump: Int): String {
+    private fun getPumpDisplayName(pump: Int): String {
         val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
-        return prefs.getString(
-            "esp_${expectedEspId}_pump${pump}_name",
-            "Pompe $pump"
-        ) ?: "Pompe $pump"
+        val savedName = prefs.getString("esp_${expectedEspId}_pump${pump}_name", null)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+        return savedName ?: getString(R.string.pump_label, pump)
     }
 
     private fun loadSchedulesByPump(): Map<Int, List<PumpSchedule>> {
