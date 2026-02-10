@@ -104,12 +104,25 @@ class CalibrationPumpFragment : Fragment() {
 
         fun isCurrentPumpScheduleNonEmpty(): Boolean {
             val json = schedulesPrefs.getString(scheduleKey, null)
-            val schedules = if (json.isNullOrBlank()) {
+            val hasJson = !json.isNullOrBlank()
+            val schedules = if (!hasJson) {
                 emptyList()
             } else {
-                runCatching { PumpScheduleJson.fromJson(json).toList() }.getOrDefault(emptyList())
+                runCatching { PumpScheduleJson.fromJson(json!!).toList() }
+                    .onFailure {
+                        Log.w(
+                            "CALIB_ANTI",
+                            "parse_failed moduleId=$moduleId pump=$pumpNum scheduleKey=$scheduleKey error=${it.message}"
+                        )
+                    }
+                    .getOrDefault(emptyList())
             }
-            return schedules.any { it.enabled }
+            val enabledCount = schedules.count { it.enabled }
+            Log.i(
+                "CALIB_ANTI",
+                "schedule_check moduleId=$moduleId pump=$pumpNum scheduleKey=$scheduleKey jsonPresent=$hasJson parsedCount=${schedules.size} enabledCount=$enabledCount"
+            )
+            return enabledCount > 0
         }
 
         fun attemptSaveAntiInterference() {
@@ -120,6 +133,11 @@ class CalibrationPumpFragment : Fragment() {
                 "CALIB_ANTI",
                 "attempt_change moduleId=$moduleId pump=$pumpNum old=$oldValue new=$newValue"
             )
+
+            if (newValue == oldValue) {
+                Log.i("CALIB_ANTI", "skip_unchanged moduleId=$moduleId pump=$pumpNum value=$newValue")
+                return
+            }
 
             if (isCurrentPumpScheduleNonEmpty()) {
                 Log.i(
@@ -141,12 +159,7 @@ class CalibrationPumpFragment : Fragment() {
                 "CALIB_ANTI",
                 "saved_ok moduleId=$moduleId pump=$pumpNum old=$oldValue new=$newValue"
             )
-        }
-
-        editAntiInterference.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) {
-                attemptSaveAntiInterference()
-            }
+            Toast.makeText(requireContext(), "Anti-interférence sauvegardée", Toast.LENGTH_SHORT).show()
         }
 
         btnSaveAntiInterference.setOnClickListener {

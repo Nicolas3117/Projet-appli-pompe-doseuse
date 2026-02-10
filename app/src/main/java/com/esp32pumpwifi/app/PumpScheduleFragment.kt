@@ -191,10 +191,14 @@ class PumpScheduleFragment : Fragment() {
         val espId = resolveEspIdOrNull()
         val antiPrefDefault = if (espId != null) {
             requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
-                .getInt("esp_${espId}_anti_overlap_minutes", 0)
+                .getInt("esp_${espId}_pump${pumpNumber}_anti_overlap_minutes", 0)
                 .coerceAtLeast(0)
         } else 0
         etAntiInterference.setText(antiPrefDefault.toString())
+        etAntiInterference.isEnabled = false
+        etAntiInterference.isFocusable = false
+        etAntiInterference.isFocusableInTouchMode = false
+        antiInterferenceLayout.helperText = "Anti-interférence par défaut (Calibration) : $antiPrefDefault min"
 
         var addBtn: android.widget.Button? = null
 
@@ -209,14 +213,7 @@ class PumpScheduleFragment : Fragment() {
                 return@manual
             }
 
-            val antiRaw = etAntiInterference.text?.toString()?.trim().orEmpty()
-            val antiMin = antiRaw.toIntOrNull()
-            if (antiRaw.isBlank() || antiMin == null || antiMin < 0) {
-                antiInterferenceLayout.error = "Valeur invalide"
-                addBtn?.isEnabled = false
-                Log.w("MANUAL_VALIDATE", "invalid reason=anti_min_invalid value=$antiRaw")
-                return@manual
-            }
+            val antiMin = antiPrefDefault
 
             val parsed = ScheduleOverlapUtils.parseTimeOrNull(etTime.text?.toString()?.trim().orEmpty())
             val qtyTenth = QuantityInputUtils.parseQuantityTenth(etQuantity.text?.toString().orEmpty())
@@ -315,14 +312,6 @@ class PumpScheduleFragment : Fragment() {
 
                 val time = etTime.text.toString().trim()
                 val qtyTenth = QuantityInputUtils.parseQuantityTenth(etQuantity.text.toString()) ?: return@setOnClickListener
-                val antiMin = etAntiInterference.text?.toString()?.trim()?.toIntOrNull()?.coerceAtLeast(0) ?: 0
-                val currentEspId = resolveEspIdOrNull()
-                if (currentEspId != null) {
-                    requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
-                        .edit()
-                        .putInt("esp_${currentEspId}_anti_overlap_minutes", antiMin)
-                        .apply()
-                }
                 addSchedule(time, qtyTenth)
                 dialog.dismiss()
             }
@@ -330,7 +319,6 @@ class PumpScheduleFragment : Fragment() {
 
         etTime.addTextChangedListener { validateManualInput.let { it() } }
         etQuantity.addTextChangedListener { validateManualInput.let { it() } }
-        etAntiInterference.addTextChangedListener { validateManualInput.let { it() } }
 
         dialog.show()
     }

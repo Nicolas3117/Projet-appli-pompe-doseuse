@@ -45,6 +45,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
     // ✅ places restantes avant d’atteindre 12 (en tenant compte des prefs existantes)
     private var remainingSlots: Int = MAX_SCHEDULES_PER_PUMP
+    private var calibrationAntiMin: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,6 +86,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         bindViews()
         computeRemainingSlots()
+        preloadAntiInterferenceDefault()
         setupListeners()
         updateUi()
     }
@@ -104,6 +106,20 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         proposalsContainer = findViewById(R.id.layout_proposals)
         addButton = findViewById(R.id.button_add_doses)
+    }
+
+
+    private fun preloadAntiInterferenceDefault() {
+        val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        calibrationAntiMin = prefs
+            .getInt("esp_${expectedEspId}_pump${pumpNumber}_anti_overlap_minutes", 0)
+            .coerceAtLeast(0)
+        antiOverlapInput.setText(calibrationAntiMin.toString())
+        antiOverlapLayout.helperText = "Valeur Calibration par défaut : $calibrationAntiMin min"
+        Log.i(
+            TAG_ANTI_INTERFERENCE,
+            "helper_anti_default moduleId=$expectedEspId pump=$pumpNumber antiMin=$calibrationAntiMin source=calibration"
+        )
     }
 
     private fun computeRemainingSlots() {
@@ -262,17 +278,23 @@ class ScheduleHelperActivity : AppCompatActivity() {
             isValid = false
         }
 
-        // ✅ Anti-chevauchement : vide => 0 (non bloquant)
         val antiText = antiOverlapInput.text?.toString()?.trim().orEmpty()
-        val antiOverlap = if (antiText.isEmpty()) 0 else antiText.toIntOrNull()
-        if (antiOverlap == null || antiOverlap < 0) {
+        val userAntiOverlap = antiText.toIntOrNull()
+        if (antiText.isNotEmpty() && (userAntiOverlap == null || userAntiOverlap < 0)) {
             antiOverlapLayout.error = getString(R.string.schedule_helper_error_anti_overlap)
             isValid = false
         }
+        val antiOverlap = if (antiText.isEmpty()) calibrationAntiMin else userAntiOverlap
+        val antiMinSource = if (antiText.isEmpty()) "calibration" else "user_override"
 
         if (!isValid || start == null || end == null || doseCountRaw == null || volumeTotal == null || antiOverlap == null) {
             return ValidationResult.invalid()
         }
+
+        Log.i(
+            TAG_ANTI_INTERFERENCE,
+            "helper_anti_selected moduleId=$expectedEspId pump=$pumpNumber antiMin=$antiOverlap antiMinSource=$antiMinSource raw=\"$antiText\""
+        )
 
         // ✅ Limite 12 en tenant compte de l’existant
         if (remainingSlots <= 0) {
@@ -418,10 +440,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
                 .show()
             return ValidationResult.invalid()
         }
-
-        prefs.edit()
-            .putInt("esp_${expectedEspId}_anti_overlap_minutes", antiOverlap)
-            .apply()
 
         Log.i(
             TAG_ANTI_INTERFERENCE,

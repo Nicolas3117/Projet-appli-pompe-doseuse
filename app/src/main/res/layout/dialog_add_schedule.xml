@@ -46,7 +46,7 @@
         android:id="@+id/layout_anti_interference"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Anti-interférence chimique (min)">
+        android:hint="Anti-interférence par défaut (Calibration) (min)">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/et_anti_interference"
