@@ -84,6 +84,51 @@ object ScheduleAddMergeUtils {
         )
     }
 
+
+    fun mergeSchedulesWithQuantities(
+        existing: List<PumpSchedule>,
+        newSchedules: List<PumpSchedule>,
+        cap: Int = MAX_SCHEDULES
+    ): MergeResult {
+        if (existing.size >= cap) {
+            return MergeResult(
+                merged = existing.take(cap).sortedBy { sortKeyMinutes(it.time) },
+                addedCount = 0,
+                skippedDuplicateCount = newSchedules.size,
+                wasAlreadyFull = true
+            )
+        }
+
+        val base = existing.toMutableList()
+        val existingTimes = base.map { it.time }.toMutableSet()
+
+        var added = 0
+        var skippedDuplicates = 0
+
+        for (schedule in newSchedules) {
+            if (schedule.time in existingTimes) {
+                skippedDuplicates++
+                continue
+            }
+            if (base.size >= cap) break
+            base.add(schedule)
+            existingTimes.add(schedule.time)
+            added++
+        }
+
+        val merged = base
+            .distinctBy { it.time }
+            .sortedBy { sortKeyMinutes(it.time) }
+            .take(cap)
+
+        return MergeResult(
+            merged = merged,
+            addedCount = added,
+            skippedDuplicateCount = skippedDuplicates,
+            wasAlreadyFull = false
+        )
+    }
+
     private fun sortKeyMinutes(time: String): Int {
         val parsed = ScheduleOverlapUtils.parseTimeOrNull(time)
         return if (parsed == null) Int.MAX_VALUE else parsed.first * 60 + parsed.second

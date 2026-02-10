@@ -323,10 +323,19 @@ class ScheduleActivity : AppCompatActivity() {
         Log.i(TAG_TIME_BUG, "activity_result newTimes=$newTimes")
         val flow = getSharedPreferences("prefs", Context.MODE_PRIVATE)
             .getFloat("esp_${active.id}_pump${pump}_flow", 0f)
+        val volumePerDoseTenthList =
+            data.getIntegerArrayListExtra(ScheduleHelperActivity.EXTRA_VOLUME_PER_DOSE_TENTH_LIST)
+                ?.toList()
+                .orEmpty()
         val volumePerDose = data.getDoubleExtra(ScheduleHelperActivity.EXTRA_VOLUME_PER_DOSE, 0.0)
-        val qtyTenth = when {
+        val qtyTenthDefault = when {
             flow > 0f && volumePerDose > 0.0 -> (volumePerDose * 10.0).roundToInt().coerceAtLeast(1)
             else -> 0
+        }
+        val qtyPerDoseTenth = if (volumePerDoseTenthList.size == newTimes.size) {
+            volumePerDoseTenthList
+        } else {
+            List(newTimes.size) { qtyTenthDefault }
         }
 
         val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
@@ -342,11 +351,18 @@ class ScheduleActivity : AppCompatActivity() {
             "before_merge pump=$pump existingSchedules=${existing.size} programCount=$beforeProgramCount"
         )
 
-        val mergeResult = ScheduleAddMergeUtils.mergeSchedules(
+        val newSchedules = newTimes.mapIndexed { index, time ->
+            PumpSchedule(
+                pumpNumber = pump,
+                time = time,
+                quantityTenth = qtyPerDoseTenth.getOrElse(index) { qtyTenthDefault },
+                enabled = true
+            )
+        }
+
+        val mergeResult = ScheduleAddMergeUtils.mergeSchedulesWithQuantities(
             existing = existing,
-            newTimes = newTimes,
-            pumpNumber = pump,
-            quantityTenthForNewLines = qtyTenth
+            newSchedules = newSchedules
         )
 
         if (mergeResult.wasAlreadyFull) {

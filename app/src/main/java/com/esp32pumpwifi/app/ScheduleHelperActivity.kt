@@ -186,7 +186,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
                 putExtra(EXTRA_START_MS, validation.startMs)
                 putExtra(EXTRA_END_MS, validation.endMs)
                 putExtra(EXTRA_ANTI_CHEV_MINUTES, validation.antiOverlapMinutes)
-                putExtra(EXTRA_VOLUME_PER_DOSE, validation.volumePerDose)
+                putExtra(EXTRA_VOLUME_PER_DOSE, validation.volumePerDoseMlList.firstOrNull() ?: 0.0)
+                putIntegerArrayListExtra(EXTRA_VOLUME_PER_DOSE_TENTH_LIST, ArrayList(validation.volumePerDoseTenthList))
                 putStringArrayListExtra(EXTRA_SCHEDULE_TIMES, ArrayList(validation.formattedTimes))
                 putExtra(EXTRA_SCHEDULE_MS, validation.proposedTimesMs.toLongArray())
             }
@@ -210,7 +211,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
             val text = getString(
                 R.string.schedule_helper_proposal_item,
                 time,
-                validation.volumePerDose
+                validation.volumePerDoseMlList.getOrElse(index) { 0.0 }
             )
             val item = TextView(this).apply {
                 setText(text)
@@ -343,7 +344,19 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
         val flowCurrentPump = prefs.getFloat("esp_${expectedEspId}_pump${pumpNumber}_flow", 0f)
-        val durationMs = DoseValidationUtils.computeDurationMs(volumeTotal / doseCount.toDouble(), flowCurrentPump)
+        val totalTenth = (volumeTotal * 10.0).roundToInt()
+        val volumePerDoseTenthList = splitTotalVolumeTenth(totalTenth, doseCount)
+        val volumePerDoseMlList = volumePerDoseTenthList.map { it / 10.0 }
+        val splitBase = if (doseCount > 0) totalTenth / doseCount else 0
+        val splitRemainder = if (doseCount > 0) totalTenth % doseCount else 0
+        val splitSum = volumePerDoseTenthList.sum()
+        Log.i(
+            TAG_HELPER_VOLUME_SPLIT,
+            "totalTenth=$totalTenth, doseCount=$doseCount, base=$splitBase, remainder=$splitRemainder, list=$volumePerDoseTenthList, sum=$splitSum"
+        )
+
+        val maxDoseMl = volumePerDoseMlList.maxOrNull() ?: 0.0
+        val durationMs = DoseValidationUtils.computeDurationMs(maxDoseMl, flowCurrentPump)
         if (durationMs == null) {
             volumeLayout.error = "Débit non calibré : impossible de calculer la durée."
             Log.w(
@@ -417,9 +430,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
         }
 
         val formattedTimes = proposedTimesMs.map { formatTimeMs(it) }
-        val volumePerDose = volumeTotal / doseCount.toDouble()
-
-        val durationSec = (volumePerDose / flowCurrentPump.toDouble())
+        val durationSec = (maxDoseMl / flowCurrentPump.toDouble())
         if (durationSec > MAX_DOSE_DURATION_SEC) {
             val maxVolume = flowCurrentPump.toDouble() * MAX_DOSE_DURATION_SEC.toDouble()
             AlertDialog.Builder(this)
@@ -445,7 +456,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
             endMs = end,
             antiOverlapMinutes = antiOverlap,
             doseCount = doseCount,
-            volumePerDose = volumePerDose,
+            volumePerDoseMlList = volumePerDoseMlList,
+            volumePerDoseTenthList = volumePerDoseTenthList,
             proposedTimesMs = proposedTimesMs,
             formattedTimes = formattedTimes
         )
@@ -494,6 +506,11 @@ class ScheduleHelperActivity : AppCompatActivity() {
         }
     }
 
+
+    private fun splitTotalVolumeTenth(totalTenth: Int, doseCount: Int): List<Int> {
+        return VolumeSplitUtils.splitTotalVolumeTenth(totalTenth, doseCount)
+    }
+
     private fun showTimePicker(initialMs: Long?, onSelected: (Long) -> Unit) {
         val calendar = Calendar.getInstance()
         val initialHour =
@@ -525,7 +542,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
         val endMs: Long,
         val antiOverlapMinutes: Int,
         val doseCount: Int,
-        val volumePerDose: Double,
+        val volumePerDoseMlList: List<Double>,
+        val volumePerDoseTenthList: List<Int>,
         val proposedTimesMs: List<Long>,
         val formattedTimes: List<String>
     ) {
@@ -537,7 +555,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
                     endMs = 0L,
                     antiOverlapMinutes = 0,
                     doseCount = 0,
-                    volumePerDose = 0.0,
+                    volumePerDoseMlList = emptyList(),
+                    volumePerDoseTenthList = emptyList(),
                     proposedTimesMs = emptyList(),
                     formattedTimes = emptyList()
                 )
@@ -554,6 +573,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
         const val EXTRA_VOLUME_PER_DOSE = "volumePerDose"
         const val EXTRA_SCHEDULE_TIMES = "scheduleTimes"
         const val EXTRA_SCHEDULE_MS = "scheduleMs"
+        const val EXTRA_VOLUME_PER_DOSE_TENTH_LIST = "volumePerDoseTenthList"
 
         private const val MAX_SCHEDULES_PER_PUMP = 12
         private const val MAX_DOSE_DURATION_SEC = 600
@@ -562,6 +582,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
         private const val MINUTES_IN_MS = 60_000.0
         private const val TAG_ANTI_INTERFERENCE = "ANTI_INTERFERENCE"
         private const val TAG_TIME_BUG = "TIME_BUG"
+        private const val TAG_HELPER_VOLUME_SPLIT = "HELPER_VOLUME_SPLIT"
         private const val MS_PER_HOUR = 3_600_000L
 
         private fun toMs(hour: Int, minute: Int): Long {
