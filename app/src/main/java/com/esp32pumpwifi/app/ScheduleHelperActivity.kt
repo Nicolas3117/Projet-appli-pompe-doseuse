@@ -391,8 +391,10 @@ class ScheduleHelperActivity : AppCompatActivity() {
                 globalErrorMessage = when (result.reason) {
                     DoseValidationReason.OVERLAP_SAME_PUMP ->
                         "Une distribution est déjà en cours à ce moment (P${result.conflictPump} de $conflictStart à $conflictEnd)."
-                    DoseValidationReason.ANTI_INTERFERENCE_GAP ->
-                        "Respectez au moins $antiOverlap min après la fin précédente. Prochaine heure possible : $nextAllowed."
+                    DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
+                        val blockedPumpName = result.conflictPumpNum?.let { getPumpName(it) } ?: "une autre pompe"
+                        "Respectez au moins $antiOverlap min après la fin de la distribution de la pompe $blockedPumpName. Prochaine heure possible : $nextAllowed."
+                    }
                     DoseValidationReason.OVERFLOW_MIDNIGHT -> {
                         val endText = result.overflowEndMs?.let {
                             formatTimeMs(((it % 86_400_000L) + 86_400_000L) % 86_400_000L)
@@ -403,7 +405,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
                 }
                 Log.w(
                     TAG_ANTI_INTERFERENCE,
-                    "helper_invalid reason=${result.reason} pump=$pumpNumber candidate=[$startCandidate,${startCandidate + durationMs}) antiMin=$antiOverlap nextAllowed=${result.nextAllowedStartMs} existingCount=${existingGlobalIntervals.size}"
+                    "helper_invalid reason=${result.reason} pump=$pumpNumber blockedByPump=${result.conflictPumpNum} candidate=[$startCandidate,${startCandidate + durationMs}) antiMin=$antiOverlap nextAllowed=${result.nextAllowedStartMs} existingCount=${existingGlobalIntervals.size}"
                 )
                 break
             }
@@ -449,6 +451,14 @@ class ScheduleHelperActivity : AppCompatActivity() {
             proposedTimesMs = proposedTimesMs,
             formattedTimes = formattedTimes
         )
+    }
+
+    private fun getPumpName(pump: Int): String {
+        val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        return prefs.getString(
+            "esp_${expectedEspId}_pump${pump}_name",
+            "Pompe $pump"
+        ) ?: "Pompe $pump"
     }
 
     private fun loadSchedulesByPump(): Map<Int, List<PumpSchedule>> {

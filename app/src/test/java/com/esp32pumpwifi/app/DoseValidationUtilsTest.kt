@@ -45,6 +45,7 @@ class DoseValidationUtilsTest {
 
         assertFalse(result.isValid)
         assertEquals(DoseValidationReason.ANTI_INTERFERENCE_GAP, result.reason)
+        assertEquals(2, result.conflictPumpNum)
         assertEquals(180_000L, result.nextAllowedStartMs)
     }
 
@@ -67,6 +68,7 @@ class DoseValidationUtilsTest {
 
         assertFalse(result.isValid)
         assertEquals(DoseValidationReason.ANTI_INTERFERENCE_GAP, result.reason)
+        assertEquals(2, result.conflictPumpNum)
         assertEquals(90_000L, result.nextAllowedStartMs)
     }
 
@@ -82,5 +84,21 @@ class DoseValidationUtilsTest {
         val sameResult = DoseValidationUtils.validateNewInterval(sameCandidate, samePump, antiMin = 0)
         assertFalse(sameResult.isValid)
         assertEquals(DoseValidationReason.OVERLAP_SAME_PUMP, sameResult.reason)
+    }
+
+    @Test
+    fun antiInterference_withMultipleCrossPumpConflicts_returnsBlockingPumpNumFromLatestNextAllowed() {
+        val existing = listOf(
+            DoseInterval(pump = 2, startMs = 60_000L, endMs = 120_000L),
+            DoseInterval(pump = 3, startMs = 100_000L, endMs = 160_000L)
+        )
+        val candidate = DoseInterval(pump = 1, startMs = 130_000L, endMs = 150_000L)
+
+        val result = DoseValidationUtils.validateNewInterval(candidate, existing, antiMin = 1)
+
+        assertFalse(result.isValid)
+        assertEquals(DoseValidationReason.ANTI_INTERFERENCE_GAP, result.reason)
+        assertEquals(3, result.conflictPumpNum)
+        assertEquals(220_000L, result.nextAllowedStartMs)
     }
 }

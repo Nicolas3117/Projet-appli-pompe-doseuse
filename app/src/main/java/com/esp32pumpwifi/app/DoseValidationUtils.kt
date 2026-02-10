@@ -21,6 +21,7 @@ enum class DoseValidationReason {
 data class DoseValidationResult(
     val isValid: Boolean,
     val reason: DoseValidationReason? = null,
+    val conflictPumpNum: Int? = null,
     val conflictPump: Int? = null,
     val conflictStartMs: Long? = null,
     val conflictEndMs: Long? = null,
@@ -97,6 +98,7 @@ object DoseValidationUtils {
             return DoseValidationResult(
                 isValid = false,
                 reason = DoseValidationReason.OVERLAP_SAME_PUMP,
+                conflictPumpNum = samePumpConflict.pump,
                 conflictPump = samePumpConflict.pump,
                 conflictStartMs = samePumpConflict.startMs,
                 conflictEndMs = samePumpConflict.endMs,
@@ -110,6 +112,7 @@ object DoseValidationUtils {
         }
 
         var nextAllowedStartMs: Long? = null
+        var blockingPumpNum: Int? = null
         for (interval in existing) {
             if (interval.pump == newInterval.pump) continue
 
@@ -117,18 +120,22 @@ object DoseValidationUtils {
             val validAfter = newInterval.startMs >= interval.endMs + antiGapMs
             if (!validBefore && !validAfter) {
                 val candidateStart = interval.endMs + antiGapMs
-                nextAllowedStartMs = maxOf(nextAllowedStartMs ?: candidateStart, candidateStart)
+                if (nextAllowedStartMs == null || candidateStart > nextAllowedStartMs) {
+                    nextAllowedStartMs = candidateStart
+                    blockingPumpNum = interval.pump
+                }
             }
         }
 
         if (nextAllowedStartMs != null) {
             android.util.Log.w(
                 "ANTI_INTERFERENCE",
-                "invalid reason=anti_gap candidate=$newInterval antiMin=$antiMin nextAllowedStartMs=$nextAllowedStartMs"
+                "reason=GAP pump=${newInterval.pump} blockedByPump=$blockingPumpNum nextAllowed=$nextAllowedStartMs antiMin=$antiMin"
             )
             return DoseValidationResult(
                 isValid = false,
                 reason = DoseValidationReason.ANTI_INTERFERENCE_GAP,
+                conflictPumpNum = blockingPumpNum,
                 nextAllowedStartMs = nextAllowedStartMs
             )
         }

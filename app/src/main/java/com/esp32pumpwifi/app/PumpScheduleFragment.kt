@@ -273,7 +273,8 @@ class PumpScheduleFragment : Fragment() {
                     }
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
                         val next = validation.nextAllowedStartMs?.let { ScheduleAddMergeUtils.toTimeString(it) } ?: "--:--"
-                        timeLayout.error = "Respectez au moins $antiMin min après la fin de la distribution précédente. Prochaine heure possible : $next."
+                        val blockedPumpLabel = validation.conflictPumpNum?.let { getPumpName(it) } ?: "une autre pompe"
+                        timeLayout.error = "Respectez au moins $antiMin min après la fin de la distribution de la pompe $blockedPumpLabel. Prochaine heure possible : $next."
                     }
                     DoseValidationReason.OVERFLOW_MIDNIGHT -> {
                         val endText = ScheduleAddMergeUtils.toTimeString(validation.overflowEndMs ?: 0L)
@@ -284,7 +285,7 @@ class PumpScheduleFragment : Fragment() {
                 addBtn?.isEnabled = false
                 Log.w(
                     "MANUAL_VALIDATE",
-                    "invalid reason=${validation.reason} candidate=[${candidate.startMs},${candidate.endMs}) antiMin=$antiMin nextAllowed=${validation.nextAllowedStartMs} durationMs=$durationMs"
+                    "invalid reason=${validation.reason} candidate=[${candidate.startMs},${candidate.endMs}) antiMin=$antiMin blockedByPump=${validation.conflictPumpNum} nextAllowed=${validation.nextAllowedStartMs} durationMs=$durationMs"
                 )
                 return@manual
             }
