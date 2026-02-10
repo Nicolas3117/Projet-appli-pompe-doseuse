@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -16,7 +17,6 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import java.util.Calendar
 import java.util.Locale
-import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 class ScheduleHelperActivity : AppCompatActivity() {
@@ -289,22 +289,44 @@ class ScheduleHelperActivity : AppCompatActivity() {
             }
         }
 
-        // ✅ Anti-interférences chimiques (anti chevauchement en minutes)
-        // Règle: si antiOverlap > 0 et doseCount > 1, l'écart minimal entre 2 doses doit être >= antiOverlap minutes.
+        val windowMs = end - start
         if (antiOverlap > 0 && doseCount > 1) {
-            val windowMinutes = (end - start).toDouble() / MS_PER_MINUTE.toDouble()
-            val requiredWindow = (doseCount - 1) * antiOverlap.toDouble()
+            val maxDosesPossible = ScheduleAntiInterferenceUtils.computeMaxDoses(windowMs, antiOverlap)
+            val requiredMinAnti = ScheduleAntiInterferenceUtils.minAntiMinutesRequired(windowMs, doseCount)
+            val actualSpacingMinutes = (windowMs.toDouble() / (doseCount - 1).toDouble()) / MINUTES_IN_MS
+            val actualSpacingText = String.format(Locale.getDefault(), "%.1f", actualSpacingMinutes)
 
-            if (windowMinutes < requiredWindow) {
-                val minNeeded = ceil(windowMinutes / (doseCount - 1).toDouble()).toInt().coerceAtLeast(0)
+            if (doseCount > maxDosesPossible) {
                 antiOverlapLayout.error =
-                    "Fenêtre trop courte. Réduisez le nombre de doses, élargissez la fenêtre, ou baissez l’anti-interférences.\n" +
-                            "Anti-interférences max possible ≈ $minNeeded min."
+                    "Avec $antiOverlap min d’anti-interférence, vous pouvez au maximum $maxDosesPossible doses sur cette plage. " +
+                            "Minimum requis : $requiredMinAnti min (actuel: $actualSpacingText min)."
+                Log.w(
+                    TAG_ANTI_INTERFERENCE,
+                    "invalid doseCount=$doseCount antiMin=$antiOverlap windowMs=$windowMs maxDoses=$maxDosesPossible requiredMinAnti=$requiredMinAnti actualSpacingMin=$actualSpacingMinutes reason=too_many_doses"
+                )
                 return ValidationResult.invalid()
             }
+
+            Log.i(
+                TAG_ANTI_INTERFERENCE,
+                "valid antiMin=$antiOverlap doseCount=$doseCount windowMs=$windowMs maxDoses=$maxDosesPossible requiredMinAnti=$requiredMinAnti actualSpacingMin=$actualSpacingMinutes"
+            )
+        } else {
+            Log.i(
+                TAG_ANTI_INTERFERENCE,
+                "no_constraint antiMin=$antiOverlap doseCount=$doseCount startMs=$start endMs=$end"
+            )
         }
 
         val proposedTimesMs = buildScheduleTimesMs(start, end, doseCount, antiOverlap)
+        if (proposedTimesMs.size != doseCount) {
+            antiOverlapLayout.error = "Intervalle insuffisant pour générer les doses demandées."
+            Log.w(
+                TAG_ANTI_INTERFERENCE,
+                "invalid_generation doseCount=$doseCount antiMin=$antiOverlap startMs=$start endMs=$end generated=${proposedTimesMs.size}"
+            )
+            return ValidationResult.invalid()
+        }
         val formattedTimes = proposedTimesMs.map { formatTimeMs(it) }
         val volumePerDose = volumeTotal / doseCount.toDouble()
 
@@ -340,34 +362,28 @@ class ScheduleHelperActivity : AppCompatActivity() {
         )
     }
 
-    /**
-     * Génération des horaires:
-     * - antiOverlapMinutes == 0 : répartition linéaire (comportement existant)
-     * - antiOverlapMinutes  > 0 : écart minimal fixe entre deux doses (= antiOverlapMinutes)
-     */
     private fun buildScheduleTimesMs(
         startMs: Long,
         endMs: Long,
         doseCount: Int,
         antiOverlapMinutes: Int
     ): List<Long> {
+        if (doseCount <= 0) return emptyList()
         if (doseCount == 1) return listOf(startMs)
 
-        val antiStepMs = antiOverlapMinutes.toLong() * MS_PER_MINUTE
-
-        // ✅ Mode anti-interférences : on impose l'écart
-        if (antiOverlapMinutes > 0) {
-            val times = (0 until doseCount).map { index ->
-                startMs + index * antiStepMs
-            }
-            // Sécurité : si jamais une valeur dépasse end (normalement déjà bloqué par validateInputs)
-            if (times.last() > endMs) return emptyList()
-            return times
-        }
-
-        // ✅ Mode historique : répartition linéaire
         val durationMs = endMs - startMs
         val stepMs = durationMs / (doseCount - 1).toLong()
+        if (antiOverlapMinutes > 0) {
+            val minStepMsRequired = antiOverlapMinutes.toLong() * MS_PER_MINUTE
+            if (stepMs < minStepMsRequired) {
+                Log.w(
+                    TAG_ANTI_INTERFERENCE,
+                    "build_invalid startMs=$startMs endMs=$endMs doseCount=$doseCount antiMin=$antiOverlapMinutes stepMs=$stepMs minStepMsRequired=$minStepMsRequired"
+                )
+                return emptyList()
+            }
+        }
+
         return (0 until doseCount).map { index ->
             startMs + index * stepMs
         }
@@ -438,6 +454,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
         private const val MAX_DOSE_DURATION_SEC = 600
 
         private const val MS_PER_MINUTE = 60_000L
+        private const val MINUTES_IN_MS = 60_000.0
+        private const val TAG_ANTI_INTERFERENCE = "ANTI_INTERFERENCE"
         private const val MS_PER_HOUR = 3_600_000L
 
         private fun toMs(hour: Int, minute: Int): Long {

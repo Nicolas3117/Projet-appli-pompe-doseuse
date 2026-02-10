@@ -47,7 +47,6 @@ class ScheduleActivity : AppCompatActivity() {
     private val line12DigitsRegex = Regex("""^\d{12}$""")
 
     private var didAutoCheckOnResume = false
-    private var skipAutoCheckOnce = false
     private var exitInProgress = false
 
     private var isReadOnly = false
@@ -118,7 +117,6 @@ class ScheduleActivity : AppCompatActivity() {
                 "SCHEDULE_ADD",
                 "helper_click pump=$pumpNumber moduleId=${locked.id} isReadOnly=$isReadOnly isUnsynced=$isUnsynced"
             )
-            skipAutoCheckOnce = true
 
             val intent = Intent(this, ScheduleHelperActivity::class.java).apply {
                 putExtra(ScheduleHelperActivity.EXTRA_PUMP_NUMBER, pumpNumber)
@@ -188,15 +186,13 @@ class ScheduleActivity : AppCompatActivity() {
         // - Au retour du helper, il est NORMAL que local != ESP tant que l'utilisateur n'a pas cliqué "Envoyer".
         // - Donc on NE compare PAS ici (sinon popup "Synchronisation impossible" immédiate).
         // - La comparaison reste faite uniquement sur "Quitter/Back" (runFinalExitCheck) ou "Envoyer".
-        if (skipAutoCheckOnce) {
-            skipAutoCheckOnce = false
-            didAutoCheckOnResume = true
+        // ✅ Auto-check normal à l’ouverture (import programme depuis l’ESP)
+        if (didAutoCheckOnResume) {
+            Log.i(TAG_EXIT_SYNC, "onResume skip_auto_check already_done=true")
             return
         }
-
-        // ✅ Auto-check normal à l’ouverture (import programme depuis l’ESP)
-        if (didAutoCheckOnResume) return
         didAutoCheckOnResume = true
+        Log.i(TAG_EXIT_SYNC, "onResume auto_check_on_open start")
         autoCheckProgramOnOpen()
     }
 
@@ -398,55 +394,59 @@ class ScheduleActivity : AppCompatActivity() {
 
     private suspend fun runFinalExitCheck(): Boolean {
         if (isUnsynced) {
+            Log.w(TAG_EXIT_SYNC, "exit_check blocked isUnsynced=true")
             showUnsyncedDialog()
             return false
         }
 
         val active = lockedModule ?: run {
+            Log.w(TAG_EXIT_SYNC, "exit_check blocked reason=locked_module_null")
             setUnsyncedState(true, "Synchronisation impossible")
             showUnsyncedDialog()
             return false
         }
 
+        Log.i(TAG_EXIT_SYNC, "exit_check fetch_esp_program start moduleId=${active.id}")
         val espProgram = withTimeoutOrNull(4000L) { fetchProgramFromEsp(active.ip) }
         if (espProgram == null) {
+            Log.w(TAG_EXIT_SYNC, "exit_check blocked reason=esp_fetch_failed")
             setUnsyncedState(true, "Synchronisation impossible")
             showUnsyncedDialog()
             return false
         }
 
         val localProgram = ProgramStore.buildMessageMs(this, active.id)
-        if (espProgram == localProgram) return true
+        val matches = espProgram == localProgram
+        Log.i(TAG_EXIT_SYNC, "exit_check compare moduleId=${active.id} matches=$matches")
+        if (matches) return true
 
         return suspendCancellableCoroutine { cont ->
             AlertDialog.Builder(this)
                 .setTitle("Programmation différente")
                 .setMessage("La programmation locale est différente de celle de la pompe.")
-                .setNeutralButton("Rester") { dialog, _ ->
+                .setNegativeButton("Rester") { dialog, _ ->
                     dialog.dismiss()
+                    Log.i(TAG_EXIT_SYNC, "exit_check dialog_action=stay")
                     if (cont.isActive) cont.resume(false)
-                }
-                .setNegativeButton("Quitter") { dialog, _ ->
-                    dialog.dismiss()
-                    if (cont.isActive) cont.resume(true)
                 }
                 .setPositiveButton("Sauvegarder-Envoyer et quitter") { dialog, _ ->
                     dialog.dismiss()
+                    Log.i(TAG_EXIT_SYNC, "exit_check dialog_action=save_send_and_exit")
                     lifecycleScope.launch {
                         val ok = sendIfPossible()
                         if (!ok) {
-                            setUnsyncedState(true, "Synchronisation impossible")
                             Toast.makeText(
                                 this@ScheduleActivity,
-                                "Envoi impossible : passage en mode lecture seule.",
+                                "Envoi impossible, fermeture annulée.",
                                 Toast.LENGTH_LONG
                             ).show()
-                            showUnsyncedDialog()
+                            Log.w(TAG_EXIT_SYNC, "exit_check send_failed stay_on_screen")
                         }
                         if (cont.isActive) cont.resume(ok)
                     }
                 }
                 .setOnCancelListener {
+                    Log.i(TAG_EXIT_SYNC, "exit_check dialog_cancelled")
                     if (cont.isActive) cont.resume(false)
                 }
                 .show()
@@ -469,6 +469,7 @@ class ScheduleActivity : AppCompatActivity() {
 
     private suspend fun sendIfPossible(): Boolean {
         val active = lockedModule ?: run {
+            Log.w(TAG_EXIT_SYNC, "send_if_possible blocked reason=locked_module_null")
             setUnsyncedState(true, "Synchronisation impossible")
             Toast.makeText(
                 this@ScheduleActivity,
@@ -478,7 +479,10 @@ class ScheduleActivity : AppCompatActivity() {
             showUnsyncedDialog()
             return false
         }
-        return sendSchedulesToESP32(active)
+        Log.i(TAG_EXIT_SYNC, "send_if_possible start moduleId=${active.id}")
+        val ok = sendSchedulesToESP32(active)
+        Log.i(TAG_EXIT_SYNC, "send_if_possible result=$ok moduleId=${active.id}")
+        return ok
     }
 
     private suspend fun sendSchedulesToESP32(
@@ -714,6 +718,7 @@ class ScheduleActivity : AppCompatActivity() {
         const val EXTRA_INITIAL_PROGRAM_576 = "EXTRA_INITIAL_PROGRAM_576"
         const val EXTRA_MODULE_ID = "EXTRA_MODULE_ID"
         private const val REQUEST_SCHEDULE_HELPER = 2001
+        private const val TAG_EXIT_SYNC = "EXIT_SYNC"
         private const val MIN_PUMP_DURATION_MS = 50
         private const val MAX_PUMP_DURATION_MS = 600_000
     }
