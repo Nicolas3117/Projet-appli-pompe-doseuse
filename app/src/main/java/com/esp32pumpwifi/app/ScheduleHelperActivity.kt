@@ -40,6 +40,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
     private var pumpNumber: Int = 1
     private var moduleId: String? = null
+    private var expectedEspId: Long = -1L
 
     // ✅ places restantes avant d’atteindre 12 (en tenant compte des prefs existantes)
     private var remainingSlots: Int = MAX_SCHEDULES_PER_PUMP
@@ -52,6 +53,23 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         pumpNumber = intent.getIntExtra(EXTRA_PUMP_NUMBER, 1)
         moduleId = intent.getStringExtra(EXTRA_MODULE_ID)
+
+        val parsedExpectedEspId = moduleId?.toLongOrNull()
+        if (parsedExpectedEspId == null) {
+            Toast.makeText(this, "Le module sélectionné n’est plus disponible.\nVeuillez fermer cet écran et réessayer.", Toast.LENGTH_LONG).show()
+            setResult(RESULT_CANCELED)
+            finish()
+            return
+        }
+        expectedEspId = parsedExpectedEspId
+
+        val active = Esp32Manager.getActive(this)
+        if (active != null && active.id != expectedEspId) {
+            Toast.makeText(this, "Module différent détecté. Fermez et rouvrez l’écran.", Toast.LENGTH_LONG).show()
+            setResult(RESULT_CANCELED)
+            finish()
+            return
+        }
 
         val pumpLabel = getString(R.string.pump_label, pumpNumber)
         findViewById<TextView>(R.id.tv_schedule_helper_pump).text = pumpLabel
@@ -80,13 +98,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
     }
 
     private fun computeRemainingSlots() {
-        val active = Esp32Manager.getActive(this) ?: run {
-            remainingSlots = MAX_SCHEDULES_PER_PUMP
-            return
-        }
-
         val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
-        val json = schedulesPrefs.getString("esp_${active.id}_pump$pumpNumber", null)
+        val json = schedulesPrefs.getString("esp_${expectedEspId}_pump$pumpNumber", null)
 
         val existingCount = json?.let {
             try {
@@ -271,25 +284,22 @@ class ScheduleHelperActivity : AppCompatActivity() {
         val volumePerDose = volumeTotal / doseCount.toDouble()
 
         // ✅ BONUS : bloquer si une dose > 600 secondes (si flow dispo)
-        val active = Esp32Manager.getActive(this)
-        if (active != null) {
-            val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
-            val flow = prefs.getFloat("esp_${active.id}_pump${pumpNumber}_flow", 0f) // mL/s
-            if (flow > 0f) {
-                val durationSec = (volumePerDose / flow.toDouble())
-                if (durationSec > MAX_DOSE_DURATION_SEC) {
-                    val maxVolume = flow.toDouble() * MAX_DOSE_DURATION_SEC.toDouble()
-                    AlertDialog.Builder(this)
-                        .setTitle("Durée trop longue")
-                        .setMessage(
-                            "Une distribution ne peut pas dépasser 600 secondes.\n" +
-                                    "Avec le débit actuel (${String.format(Locale.getDefault(), "%.1f", flow)} mL/s), " +
-                                    "la dose maximale est ${String.format(Locale.getDefault(), "%.1f", maxVolume)} mL."
-                        )
-                        .setPositiveButton("OK", null)
-                        .show()
-                    return ValidationResult.invalid()
-                }
+        val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        val flow = prefs.getFloat("esp_${expectedEspId}_pump${pumpNumber}_flow", 0f) // mL/s
+        if (flow > 0f) {
+            val durationSec = (volumePerDose / flow.toDouble())
+            if (durationSec > MAX_DOSE_DURATION_SEC) {
+                val maxVolume = flow.toDouble() * MAX_DOSE_DURATION_SEC.toDouble()
+                AlertDialog.Builder(this)
+                    .setTitle("Durée trop longue")
+                    .setMessage(
+                        "Une distribution ne peut pas dépasser 600 secondes.\n" +
+                                "Avec le débit actuel (${String.format(Locale.getDefault(), "%.1f", flow)} mL/s), " +
+                                "la dose maximale est ${String.format(Locale.getDefault(), "%.1f", maxVolume)} mL."
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+                return ValidationResult.invalid()
             }
         }
 
