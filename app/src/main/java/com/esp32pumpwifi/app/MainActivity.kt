@@ -69,6 +69,7 @@ class MainActivity : AppCompatActivity() {
         private const val LINE_LEN = 12
         private const val MIN_DURATION_MS = 50
         private const val MAX_DURATION_MS = 600_000
+        private val LINE_12_DIGITS_REGEX = Regex("^\\d{12}$")
     }
 
     // ================== FUTUR PLAN (Option A) ==================
@@ -178,7 +179,30 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.btn_schedule).setOnClickListener {
-            startActivity(Intent(this, ScheduleActivity::class.java))
+            val active = Esp32Manager.getActive(this)
+            if (active == null) {
+                Toast.makeText(this, "Pompe doseuse hors connexion", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+
+            lifecycleScope.launch {
+                val initialProgram = fetchProgramFromEsp(active.ip)
+                if (initialProgram == null) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Pompe doseuse hors connexion",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@launch
+                }
+
+                startActivity(
+                    Intent(this@MainActivity, ScheduleActivity::class.java).apply {
+                        putExtra(ScheduleActivity.EXTRA_INITIAL_PROGRAM_576, initialProgram)
+                        putExtra(ScheduleActivity.EXTRA_MODULE_ID, active.id.toString())
+                    }
+                )
+            }
         }
 
         findViewById<Button>(R.id.btn_calibration).setOnClickListener {
@@ -526,6 +550,43 @@ class MainActivity : AppCompatActivity() {
         if (!t.all(Char::isDigit)) return false
         if (t.all { it == '0' }) return false
         return t.firstOrNull() == '1'
+    }
+
+    private suspend fun fetchProgramFromEsp(ip: String): String? = withContext(Dispatchers.IO) {
+        var conn: HttpURLConnection? = null
+        return@withContext try {
+            conn = URL("http://$ip/read_ms").openConnection() as HttpURLConnection
+            conn?.requestMethod = "GET"
+            conn?.connectTimeout = HTTP_TIMEOUT_MS
+            conn?.readTimeout = HTTP_TIMEOUT_MS
+            conn?.useCaches = false
+            conn?.setRequestProperty("Connection", "close")
+
+            if (conn?.responseCode != HttpURLConnection.HTTP_OK) return@withContext null
+
+            val lines = conn?.inputStream
+                ?.bufferedReader()
+                ?.use { reader ->
+                    reader
+                        .lineSequence()
+                        .map { it.trim() }
+                        .toList()
+                }
+                ?: return@withContext null
+
+            if (lines.size != 48) return@withContext null
+            if (!lines.all { it.matches(LINE_12_DIGITS_REGEX) }) return@withContext null
+
+            val joined = lines.joinToString(separator = "")
+            if (joined.length == 576) joined else null
+        } catch (_: Exception) {
+            null
+        } finally {
+            try {
+                conn?.disconnect()
+            } catch (_: Exception) {
+            }
+        }
     }
 
     // ✅ prochaine dose basée sur ProgramStoreSynced (synced)

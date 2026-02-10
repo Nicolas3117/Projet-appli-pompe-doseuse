@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
@@ -43,7 +44,7 @@ class ScheduleActivity : AppCompatActivity() {
     private val tabsViewModel: ScheduleTabsViewModel by viewModels()
 
     private var lastProgramHash: String? = null
-    private val line12DigitsRegex = Regex("""\d{12}""")
+    private val line12DigitsRegex = Regex("""^\d{12}$""")
 
     private var didAutoCheckOnResume = false
     private var skipAutoCheckOnce = false
@@ -128,7 +129,13 @@ class ScheduleActivity : AppCompatActivity() {
             }
         }
 
-        lastProgramHash = null
+        val initialProgram576 = intent.getStringExtra(EXTRA_INITIAL_PROGRAM_576)?.trim()
+        if (initialProgram576 == null || initialProgram576.length != 576 || !initialProgram576.chunked(12).all { it.matches(line12DigitsRegex) }) {
+            setUnsyncedState(true, "Synchronisation impossible")
+            showUnsyncedDialog()
+        } else {
+            lastProgramHash = initialProgram576
+        }
 
         onBackPressedDispatcher.addCallback(
             this,
@@ -141,30 +148,12 @@ class ScheduleActivity : AppCompatActivity() {
                         return
                     }
 
-                    val currentHash = ProgramStore.buildMessageMs(this@ScheduleActivity)
-                    val locallyModified =
-                        lastProgramHash != null && lastProgramHash != currentHash
-
-                    if (!locallyModified) {
-                        finish()
-                        return
+                    exitInProgress = true
+                    lifecycleScope.launch {
+                        val shouldFinish = runFinalExitCheck()
+                        exitInProgress = false
+                        if (shouldFinish) finish()
                     }
-
-                    AlertDialog.Builder(this@ScheduleActivity)
-                        .setTitle("Programmation modifiée")
-                        .setMessage(
-                            "La programmation a été modifiée.\n" +
-                                    "Elle sera envoyée automatiquement à la fermeture."
-                        )
-                        .setPositiveButton("Envoyer et quitter") { _, _ ->
-                            exitInProgress = true
-                            lifecycleScope.launch {
-                                val ok = sendIfPossible()
-                                if (ok) finish()
-                            }
-                        }
-                        .setNegativeButton("Rester", null)
-                        .show()
                 }
             }
         )
@@ -271,6 +260,63 @@ class ScheduleActivity : AppCompatActivity() {
 
     // -------------------------------------------------------
 
+    private suspend fun runFinalExitCheck(): Boolean {
+        if (isUnsynced) {
+            showUnsyncedDialog()
+            return false
+        }
+
+        val active = Esp32Manager.getActive(this) ?: run {
+            setUnsyncedState(true, "Synchronisation impossible")
+            showUnsyncedDialog()
+            return false
+        }
+
+        val espProgram = withTimeoutOrNull(4000L) { fetchProgramFromEsp(active.ip) }
+        if (espProgram == null) {
+            setUnsyncedState(true, "Synchronisation impossible")
+            showUnsyncedDialog()
+            return false
+        }
+
+        val localProgram = ProgramStore.buildMessageMs(this)
+        if (espProgram == localProgram) return true
+
+        return suspendCancellableCoroutine { cont ->
+            AlertDialog.Builder(this)
+                .setTitle("Programmation différente")
+                .setMessage("La programmation locale est différente de celle de la pompe.")
+                .setNeutralButton("Rester") { dialog, _ ->
+                    dialog.dismiss()
+                    if (cont.isActive) cont.resume(false)
+                }
+                .setNegativeButton("Quitter") { dialog, _ ->
+                    dialog.dismiss()
+                    if (cont.isActive) cont.resume(true)
+                }
+                .setPositiveButton("Sauvegarder-Envoyer et quitter") { dialog, _ ->
+                    dialog.dismiss()
+                    lifecycleScope.launch {
+                        val ok = sendIfPossible()
+                        if (!ok) {
+                            setUnsyncedState(true, "Synchronisation impossible")
+                            Toast.makeText(
+                                this@ScheduleActivity,
+                                "Envoi impossible : passage en mode lecture seule.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            showUnsyncedDialog()
+                        }
+                        if (cont.isActive) cont.resume(ok)
+                    }
+                }
+                .setOnCancelListener {
+                    if (cont.isActive) cont.resume(false)
+                }
+                .show()
+        }
+    }
+
     private fun buildTabText(pumpName: String, shortText: String): String =
         "$pumpName\n$shortText"
 
@@ -329,15 +375,15 @@ class ScheduleActivity : AppCompatActivity() {
 
             if (conn.responseCode != HttpURLConnection.HTTP_OK) return@withContext null
 
-            val raw = conn.inputStream.bufferedReader().use { it.readText() }
-
-            val lines = raw
-                .lineSequence()
-                .map { it.trim() }
-                .filter { it.matches(line12DigitsRegex) }
-                .toList()
+            val lines = conn.inputStream.bufferedReader().use { reader ->
+                reader
+                    .lineSequence()
+                    .map { it.trim() }
+                    .toList()
+            }
 
             if (lines.size != 48) return@withContext null
+            if (!lines.all { it.matches(line12DigitsRegex) }) return@withContext null
 
             val joined = lines.joinToString(separator = "")
             if (joined.length == 576) joined else null
@@ -388,6 +434,8 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     companion object {
+        const val EXTRA_INITIAL_PROGRAM_576 = "EXTRA_INITIAL_PROGRAM_576"
+        const val EXTRA_MODULE_ID = "EXTRA_MODULE_ID"
         private const val REQUEST_SCHEDULE_HELPER = 2001
     }
 }
