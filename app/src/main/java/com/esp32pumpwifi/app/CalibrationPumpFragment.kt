@@ -139,7 +139,8 @@ class CalibrationPumpFragment : Fragment() {
                 )
                 AlertDialog.Builder(requireContext())
                     .setTitle("⚠️ Modification impossible")
-                    .setMessage("La programmation du module n’est pas vide. Videz la programmation avant de changer l’anti-interférence chimique.")
+                    .setMessage("Des programmations sont encore actives sur ce module.\n" +
+                            "Videz toutes les programmations avant de modifier l’anti-interférence chimique.")
                     .setPositiveButton("OK", null)
                     .show()
                 editAntiInterference.setText(oldValue.toString())
