@@ -40,6 +40,8 @@
 
     <!-- ✅ Libellé court conservé -->
     <string name="schedule_helper_anti_overlap">Anti-interférence chimique (min)</string>
+    <string name="anti_interference_calibration_read_only">Valeur définie dans la calibration du module</string>
+    <string name="anti_interference_gap_error">Respectez au moins %1$d min après la fin de la distribution de la pompe %2$s. Prochaine heure possible : %3$s</string>
 
     <string name="schedule_helper_proposals">Propositions</string>
     <string name="schedule_helper_proposal_item">%1$s → %2$.1f mL</string>

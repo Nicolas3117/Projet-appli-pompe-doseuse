@@ -190,15 +190,13 @@ class PumpScheduleFragment : Fragment() {
 
         val espId = resolveEspIdOrNull()
         val antiPrefDefault = if (espId != null) {
-            requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
-                .getInt("esp_${espId}_pump${pumpNumber}_anti_overlap_minutes", 0)
-                .coerceAtLeast(0)
+            getAntiInterferenceMinutes(requireContext(), espId).coerceAtLeast(0)
         } else 0
         etAntiInterference.setText(antiPrefDefault.toString())
         etAntiInterference.isEnabled = false
         etAntiInterference.isFocusable = false
         etAntiInterference.isFocusableInTouchMode = false
-        antiInterferenceLayout.helperText = "Valeur définie dans la calibration de la pompe"
+        antiInterferenceLayout.helperText = getString(R.string.anti_interference_calibration_read_only)
 
         var addBtn: android.widget.Button? = null
 
@@ -272,9 +270,8 @@ class PumpScheduleFragment : Fragment() {
                         timeLayout.error = "Une distribution est déjà en cours à ce moment. Prochaine heure possible : $next"
                     }
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
-                        val next = validation.nextAllowedStartMs?.let { ScheduleAddMergeUtils.toTimeString(it) } ?: "--:--"
                         val blockedPumpLabel = validation.conflictPumpNum?.let { getPumpName(it) } ?: "une autre pompe"
-                        timeLayout.error = "Respectez au moins $antiMin min après la fin de la distribution de la pompe $blockedPumpLabel. Prochaine heure possible : $next."
+                        timeLayout.error = antiInterferenceGapErrorMessage(antiMin, blockedPumpLabel, validation.nextAllowedStartMs)
                     }
                     DoseValidationReason.OVERFLOW_MIDNIGHT -> {
                         val endText = ScheduleAddMergeUtils.toTimeString(validation.overflowEndMs ?: 0L)

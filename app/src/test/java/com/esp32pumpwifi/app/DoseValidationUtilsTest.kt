@@ -17,6 +17,7 @@ class DoseValidationUtilsTest {
         assertFalse(result.isValid)
         assertEquals(DoseValidationReason.OVERLAP_SAME_PUMP, result.reason)
         assertEquals(1, result.conflictPump)
+        assertEquals(1, result.conflictPumpNum)
     }
 
 
@@ -38,15 +39,15 @@ class DoseValidationUtilsTest {
 
     @Test
     fun antiInterference_detectedWithNextAllowedStart() {
-        val existing = listOf(DoseInterval(pump = 2, startMs = 60_000L, endMs = 120_000L))
-        val candidate = DoseInterval(pump = 1, startMs = 130_000L, endMs = 150_000L)
+        val existing = listOf(DoseInterval(pump = 2, startMs = TestTimeUtils.ms(1), endMs = TestTimeUtils.ms(2)))
+        val candidate = DoseInterval(pump = 1, startMs = TestTimeUtils.ms(2) + 10_000L, endMs = TestTimeUtils.ms(2) + 30_000L)
 
         val result = DoseValidationUtils.validateNewInterval(candidate, existing, antiMin = 1)
 
         assertFalse(result.isValid)
         assertEquals(DoseValidationReason.ANTI_INTERFERENCE_GAP, result.reason)
         assertEquals(2, result.conflictPumpNum)
-        assertEquals(180_000L, result.nextAllowedStartMs)
+        assertEquals(TestTimeUtils.ms(3), result.nextAllowedStartMs)
     }
 
     @Test
@@ -92,7 +93,7 @@ class DoseValidationUtilsTest {
             DoseInterval(pump = 2, startMs = 60_000L, endMs = 120_000L),
             DoseInterval(pump = 3, startMs = 100_000L, endMs = 160_000L)
         )
-        val candidate = DoseInterval(pump = 1, startMs = 130_000L, endMs = 150_000L)
+        val candidate = DoseInterval(pump = 1, startMs = TestTimeUtils.ms(2) + 10_000L, endMs = TestTimeUtils.ms(2) + 30_000L)
 
         val result = DoseValidationUtils.validateNewInterval(candidate, existing, antiMin = 1)
 
@@ -101,4 +102,15 @@ class DoseValidationUtilsTest {
         assertEquals(3, result.conflictPumpNum)
         assertEquals(220_000L, result.nextAllowedStartMs)
     }
+
+    @Test
+    fun antiInterference_errorMessageFormat_expected() {
+        val message = formatAntiInterferenceGapErrorMessage(10, "Pompe 2", "08:45")
+
+        assertEquals(
+            "Respectez au moins 10 min après la fin de la distribution de la pompe Pompe 2. Prochaine heure possible : 08:45",
+            message
+        )
+    }
+
 }

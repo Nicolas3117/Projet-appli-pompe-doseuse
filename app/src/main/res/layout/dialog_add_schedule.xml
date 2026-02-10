@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -46,13 +47,16 @@
         android:id="@+id/layout_anti_interference"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Anti-interférence chimique (min)">
+        android:hint="Anti-interférence chimique (min)"
+        app:helperText="@string/anti_interference_calibration_read_only">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/et_anti_interference"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:digits="0123456789"
+            android:enabled="false"
+            android:focusable="false"
             android:inputType="number" />
     </com.google.android.material.textfield.TextInputLayout>
 

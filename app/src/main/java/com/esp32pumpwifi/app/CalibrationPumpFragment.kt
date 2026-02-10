@@ -87,8 +87,7 @@ class CalibrationPumpFragment : Fragment() {
         val schedulesPrefs = requireContext().getSharedPreferences("schedules", Context.MODE_PRIVATE)
         val pumpNameKey = "esp_${moduleId}_pump${pumpNum}_name"
         val pumpFlowKey = "esp_${moduleId}_pump${pumpNum}_flow"
-        val antiInterferenceKey = "esp_${moduleId}_pump${pumpNum}_anti_overlap_minutes"
-        val scheduleKey = "esp_${moduleId}_pump${pumpNum}"
+        val antiInterferenceKey = "esp_${moduleId}_anti_overlap_minutes"
 
         val currentName = prefs.getString(pumpNameKey, "")
         val displayName = if (!currentName.isNullOrBlank()) currentName else "Pompe $pumpNum"
@@ -102,27 +101,21 @@ class CalibrationPumpFragment : Fragment() {
         var previousAntiMin = prefs.getInt(antiInterferenceKey, 0).coerceAtLeast(0)
         editAntiInterference.setText(previousAntiMin.toString())
 
-        fun isCurrentPumpScheduleNonEmpty(): Boolean {
-            val json = schedulesPrefs.getString(scheduleKey, null)
-            val hasJson = !json.isNullOrBlank()
-            val schedules = if (!hasJson) {
-                emptyList()
-            } else {
-                runCatching { PumpScheduleJson.fromJson(json!!).toList() }
-                    .onFailure {
-                        Log.w(
-                            "CALIB_ANTI",
-                            "parse_failed moduleId=$moduleId pump=$pumpNum scheduleKey=$scheduleKey error=${it.message}"
-                        )
-                    }
-                    .getOrDefault(emptyList())
+        fun isModuleScheduleNonEmpty(): Boolean {
+            val enabledTotal = (1..4).sumOf { pump ->
+                val json = schedulesPrefs.getString("esp_${moduleId}_pump$pump", null)
+                if (json.isNullOrBlank()) {
+                    0
+                } else {
+                    runCatching { PumpScheduleJson.fromJson(json).count { it.enabled } }
+                        .onFailure {
+                            Log.w("CALIB_ANTI", "parse_failed moduleId=$moduleId pump=$pump error=${it.message}")
+                        }
+                        .getOrDefault(0)
+                }
             }
-            val enabledCount = schedules.count { it.enabled }
-            Log.i(
-                "CALIB_ANTI",
-                "schedule_check moduleId=$moduleId pump=$pumpNum scheduleKey=$scheduleKey jsonPresent=$hasJson parsedCount=${schedules.size} enabledCount=$enabledCount"
-            )
-            return enabledCount > 0
+            Log.i("CALIB_ANTI", "schedule_check moduleId=$moduleId enabledTotal=$enabledTotal")
+            return enabledTotal > 0
         }
 
         fun attemptSaveAntiInterference() {
@@ -139,14 +132,14 @@ class CalibrationPumpFragment : Fragment() {
                 return
             }
 
-            if (isCurrentPumpScheduleNonEmpty()) {
+            if (isModuleScheduleNonEmpty()) {
                 Log.i(
                     "CALIB_ANTI",
                     "blocked_non_empty moduleId=$moduleId pump=$pumpNum old=$oldValue new=$newValue"
                 )
                 AlertDialog.Builder(requireContext())
                     .setTitle("⚠️ Modification impossible")
-                    .setMessage("La programmation de cette pompe n’est pas vide. Videz la programmation avant de changer l’anti-interférence chimique.")
+                    .setMessage("La programmation du module n’est pas vide. Videz la programmation avant de changer l’anti-interférence chimique.")
                     .setPositiveButton("OK", null)
                     .show()
                 editAntiInterference.setText(oldValue.toString())
@@ -159,7 +152,7 @@ class CalibrationPumpFragment : Fragment() {
                 "CALIB_ANTI",
                 "saved_ok moduleId=$moduleId pump=$pumpNum old=$oldValue new=$newValue"
             )
-            Toast.makeText(requireContext(), "Anti-interférence sauvegardée", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "Anti-interférence module sauvegardée", Toast.LENGTH_SHORT).show()
         }
 
         btnSaveAntiInterference.setOnClickListener {

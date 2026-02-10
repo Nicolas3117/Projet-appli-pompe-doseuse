@@ -110,14 +110,11 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
 
     private fun preloadAntiInterferenceDefault() {
-        val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
-        calibrationAntiMin = prefs
-            .getInt("esp_${expectedEspId}_pump${pumpNumber}_anti_overlap_minutes", 0)
-            .coerceAtLeast(0)
+        calibrationAntiMin = getAntiInterferenceMinutes(this, expectedEspId).coerceAtLeast(0)
         antiOverlapInput.setText(calibrationAntiMin.toString())
         antiOverlapInput.isEnabled = false
         antiOverlapLayout.isEnabled = false
-        antiOverlapLayout.helperText = "Valeur définie dans la calibration de la pompe"
+        antiOverlapLayout.helperText = getString(R.string.anti_interference_calibration_read_only)
         Log.i(
             TAG_ANTI_INTERFERENCE,
             "ANTI_INTERFERENCE source=calibration value=$calibrationAntiMin pump=$pumpNumber moduleId=$expectedEspId"
@@ -286,7 +283,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         Log.i(
             TAG_ANTI_INTERFERENCE,
-            "helper_anti_selected moduleId=$expectedEspId pump=$pumpNumber antiMin=$antiOverlap antiMinSource=calibration"
+            "ANTI_INTERFERENCE reason=helper_anti_selected moduleId=$expectedEspId pump=$pumpNumber blockedByPump=-1 antiMin=$antiOverlap nextAllowed=-1 existingCount=0"
         )
 
         // ✅ Limite 12 en tenant compte de l’existant
@@ -393,7 +390,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
                         "Une distribution est déjà en cours à ce moment (P${result.conflictPump} de $conflictStart à $conflictEnd)."
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
                         val blockedPumpName = result.conflictPumpNum?.let { getPumpName(it) } ?: "une autre pompe"
-                        "Respectez au moins $antiOverlap min après la fin de la distribution de la pompe $blockedPumpName. Prochaine heure possible : $nextAllowed."
+                        antiInterferenceGapErrorMessage(antiOverlap, blockedPumpName, result.nextAllowedStartMs)
                     }
                     DoseValidationReason.OVERFLOW_MIDNIGHT -> {
                         val endText = result.overflowEndMs?.let {
@@ -405,7 +402,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
                 }
                 Log.w(
                     TAG_ANTI_INTERFERENCE,
-                    "helper_invalid reason=${result.reason} pump=$pumpNumber blockedByPump=${result.conflictPumpNum} candidate=[$startCandidate,${startCandidate + durationMs}) antiMin=$antiOverlap nextAllowed=${result.nextAllowedStartMs} existingCount=${existingGlobalIntervals.size}"
+                    "ANTI_INTERFERENCE reason=${result.reason} moduleId=$expectedEspId pump=$pumpNumber blockedByPump=${result.conflictPumpNum} antiMin=$antiOverlap nextAllowed=${result.nextAllowedStartMs} existingCount=${existingGlobalIntervals.size}"
                 )
                 break
             }

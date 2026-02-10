@@ -79,6 +79,8 @@
                     android:id="@+id/input_dose_count"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:enabled="false"
+                    android:focusable="false"
                     android:inputType="number"
                     android:importantForAutofill="no" />
             </com.google.android.material.textfield.TextInputLayout>
@@ -103,12 +105,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:hint="@string/schedule_helper_anti_overlap">
+                android:hint="@string/schedule_helper_anti_overlap"
+                app:helperText="@string/anti_interference_calibration_read_only">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/input_anti_overlap"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:enabled="false"
+                    android:focusable="false"
                     android:inputType="number"
                     android:importantForAutofill="no" />
             </com.google.android.material.textfield.TextInputLayout>
