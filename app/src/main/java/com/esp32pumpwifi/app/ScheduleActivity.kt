@@ -184,39 +184,17 @@ class ScheduleActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
 
-        // ✅ Retour du helper : on évite l’autoCheck destructif
-        // MAIS on vérifie quand même que l’ESP n’a pas changé
+        // ✅ Option B :
+        // - Au retour du helper, il est NORMAL que local != ESP tant que l'utilisateur n'a pas cliqué "Envoyer".
+        // - Donc on NE compare PAS ici (sinon popup "Synchronisation impossible" immédiate).
+        // - La comparaison reste faite uniquement sur "Quitter/Back" (runFinalExitCheck) ou "Envoyer".
         if (skipAutoCheckOnce) {
             skipAutoCheckOnce = false
             didAutoCheckOnResume = true
-
-            lifecycleScope.launch {
-                val active = lockedModule ?: run {
-                    setUnsyncedState(true, "Synchronisation impossible")
-                    showUnsyncedDialog()
-                    return@launch
-                }
-
-                val espProgram = fetchProgramFromEsp(active.ip)
-                if (espProgram == null) {
-                    // ✅ pas de divergence silencieuse
-                    setUnsyncedState(true, "Synchronisation impossible")
-                    showUnsyncedDialog()
-                    return@launch
-                }
-
-                val localProgram = ProgramStore.buildMessageMs(this@ScheduleActivity, active.id)
-
-                if (espProgram != localProgram) {
-                    setUnsyncedState(true, "Synchronisation impossible")
-                    showUnsyncedDialog()
-                }
-            }
-
             return
         }
 
-        // ✅ Auto-check normal à l’ouverture
+        // ✅ Auto-check normal à l’ouverture (import programme depuis l’ESP)
         if (didAutoCheckOnResume) return
         didAutoCheckOnResume = true
         autoCheckProgramOnOpen()
@@ -262,7 +240,8 @@ class ScheduleActivity : AppCompatActivity() {
             return
         }
 
-        val scheduleMs = data.getLongArrayExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS)?.toList().orEmpty()
+        val scheduleMs =
+            data.getLongArrayExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS)?.toList().orEmpty()
         if (scheduleMs.isEmpty()) {
             Toast.makeText(this, "Aucune dose à ajouter (données vides).", Toast.LENGTH_LONG).show()
             return
@@ -381,6 +360,7 @@ class ScheduleActivity : AppCompatActivity() {
                 lifecycleScope.launch { sendIfPossible() }
                 true
             }
+
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -610,7 +590,8 @@ class ScheduleActivity : AppCompatActivity() {
 
             for (pump in 1..4) {
                 // Actives ESP: depuis ProgramStoreSynced (déjà filtrées enable=1 + garde-fous)
-                val espLines = ProgramStoreSynced.loadEncodedLines(this@ScheduleActivity, active.id, pump)
+                val espLines =
+                    ProgramStoreSynced.loadEncodedLines(this@ScheduleActivity, active.id, pump)
 
                 val flow = prefs.getFloat("esp_${active.id}_pump${pump}_flow", 0f)
 
@@ -642,7 +623,8 @@ class ScheduleActivity : AppCompatActivity() {
                 }
 
                 val localJson = schedulesPrefs.getString("esp_${active.id}_pump$pump", null)
-                val localList = if (localJson.isNullOrBlank()) emptyList() else PumpScheduleJson.fromJson(localJson)
+                val localList =
+                    if (localJson.isNullOrBlank()) emptyList() else PumpScheduleJson.fromJson(localJson)
 
                 val disabledLocal = localList
                     .filter { it.pumpNumber == pump && !it.enabled }
@@ -701,6 +683,7 @@ class ScheduleActivity : AppCompatActivity() {
             setReadOnlyMode(false, null)
         }
     }
+
     private fun showUnsyncedDialog() {
         if (unsyncedDialogShowing) return
         unsyncedDialogShowing = true
