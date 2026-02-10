@@ -2,6 +2,7 @@ package com.esp32pumpwifi.app
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -62,6 +63,8 @@ class CalibrationPumpFragment : Fragment() {
 
         val editPumpName = view.findViewById<EditText>(R.id.edit_pump_name)
         val btnSavePumpName = view.findViewById<ImageButton>(R.id.btn_save_pump_name)
+        val editAntiInterference = view.findViewById<EditText>(R.id.edit_anti_interference)
+        val btnSaveAntiInterference = view.findViewById<ImageButton>(R.id.btn_save_anti_interference)
         val tvResult = view.findViewById<TextView>(R.id.tv_result)
         val editDuration = view.findViewById<EditText>(R.id.edit_duration)
         val editVolume = view.findViewById<EditText>(R.id.edit_volume)
@@ -81,8 +84,11 @@ class CalibrationPumpFragment : Fragment() {
         val esp32IpForCalibration = activeModule.ip
 
         val prefs = requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        val schedulesPrefs = requireContext().getSharedPreferences("schedules", Context.MODE_PRIVATE)
         val pumpNameKey = "esp_${moduleId}_pump${pumpNum}_name"
         val pumpFlowKey = "esp_${moduleId}_pump${pumpNum}_flow"
+        val antiInterferenceKey = "esp_${moduleId}_pump${pumpNum}_anti_overlap_minutes"
+        val scheduleKey = "esp_${moduleId}_pump${pumpNum}"
 
         val currentName = prefs.getString(pumpNameKey, "")
         val displayName = if (!currentName.isNullOrBlank()) currentName else "Pompe $pumpNum"
@@ -91,6 +97,60 @@ class CalibrationPumpFragment : Fragment() {
         if (prefs.contains(pumpFlowKey)) {
             val flow = prefs.getFloat(pumpFlowKey, 0f)
             tvResult.text = "Débit : ${formatFlow(flow)} mL/s"
+        }
+
+        var previousAntiMin = prefs.getInt(antiInterferenceKey, 0).coerceAtLeast(0)
+        editAntiInterference.setText(previousAntiMin.toString())
+
+        fun isCurrentPumpScheduleNonEmpty(): Boolean {
+            val json = schedulesPrefs.getString(scheduleKey, null)
+            val schedules = if (json.isNullOrBlank()) {
+                emptyList()
+            } else {
+                runCatching { PumpScheduleJson.fromJson(json).toList() }.getOrDefault(emptyList())
+            }
+            return schedules.any { it.enabled }
+        }
+
+        fun attemptSaveAntiInterference() {
+            val oldValue = previousAntiMin
+            val newValue = editAntiInterference.text?.toString()?.trim()?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+
+            Log.i(
+                "CALIB_ANTI",
+                "attempt_change moduleId=$moduleId pump=$pumpNum old=$oldValue new=$newValue"
+            )
+
+            if (isCurrentPumpScheduleNonEmpty()) {
+                Log.i(
+                    "CALIB_ANTI",
+                    "blocked_non_empty moduleId=$moduleId pump=$pumpNum old=$oldValue new=$newValue"
+                )
+                AlertDialog.Builder(requireContext())
+                    .setTitle("⚠️ Modification impossible")
+                    .setMessage("La programmation de cette pompe n’est pas vide. Videz la programmation avant de changer l’anti-interférence chimique.")
+                    .setPositiveButton("OK", null)
+                    .show()
+                editAntiInterference.setText(oldValue.toString())
+                return
+            }
+
+            prefs.edit().putInt(antiInterferenceKey, newValue).apply()
+            previousAntiMin = newValue
+            Log.i(
+                "CALIB_ANTI",
+                "saved_ok moduleId=$moduleId pump=$pumpNum old=$oldValue new=$newValue"
+            )
+        }
+
+        editAntiInterference.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                attemptSaveAntiInterference()
+            }
+        }
+
+        btnSaveAntiInterference.setOnClickListener {
+            attemptSaveAntiInterference()
         }
 
         btnSavePumpName.setOnClickListener {
