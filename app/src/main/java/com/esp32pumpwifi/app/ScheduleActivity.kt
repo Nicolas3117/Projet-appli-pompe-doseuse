@@ -47,6 +47,7 @@ class ScheduleActivity : AppCompatActivity() {
     private val line12DigitsRegex = Regex("""^\d{12}$""")
 
     private var didAutoCheckOnResume = false
+    private var returningFromHelper = false
     private var exitInProgress = false
 
     private var isReadOnly = false
@@ -122,6 +123,8 @@ class ScheduleActivity : AppCompatActivity() {
                 putExtra(ScheduleHelperActivity.EXTRA_PUMP_NUMBER, pumpNumber)
                 putExtra(ScheduleHelperActivity.EXTRA_MODULE_ID, locked.id.toString())
             }
+            returningFromHelper = true
+            Log.i(TAG_EXIT_SYNC, "helper_navigation start returningFromHelper=true")
             startActivityForResult(intent, REQUEST_SCHEDULE_HELPER)
         }
 
@@ -187,18 +190,31 @@ class ScheduleActivity : AppCompatActivity() {
         // - Donc on NE compare PAS ici (sinon popup "Synchronisation impossible" immédiate).
         // - La comparaison reste faite uniquement sur "Quitter/Back" (runFinalExitCheck) ou "Envoyer".
         // ✅ Auto-check normal à l’ouverture (import programme depuis l’ESP)
+        if (returningFromHelper) {
+            Log.i(
+                TAG_EXIT_SYNC,
+                "onResume skip_auto_check reason=return_helper didAutoCheckOnResume=$didAutoCheckOnResume"
+            )
+            return
+        }
+
         if (didAutoCheckOnResume) {
-            Log.i(TAG_EXIT_SYNC, "onResume skip_auto_check already_done=true")
+            Log.i(TAG_EXIT_SYNC, "onResume skip_auto_check reason=already_done didAutoCheckOnResume=true")
             return
         }
         didAutoCheckOnResume = true
-        Log.i(TAG_EXIT_SYNC, "onResume auto_check_on_open start")
+        Log.i(TAG_EXIT_SYNC, "onResume auto_check_on_open start reason=first_open didAutoCheckOnResume=true")
         autoCheckProgramOnOpen()
     }
 
     override fun onPause() {
         super.onPause()
+        Log.i(
+            TAG_EXIT_SYNC,
+            "onPause didAutoCheckOnResume_before=$didAutoCheckOnResume isFinishing=$isFinishing returningFromHelper=$returningFromHelper"
+        )
         didAutoCheckOnResume = false
+        Log.i(TAG_EXIT_SYNC, "onPause didAutoCheckOnResume_after=$didAutoCheckOnResume")
     }
 
     @Deprecated("Deprecated in Java")
@@ -214,8 +230,16 @@ class ScheduleActivity : AppCompatActivity() {
             "SCHEDULE_ADD",
             "helper_result requestCode=$requestCode resultCode=$resultCode extras=[$extraKeys] pumpExtra=$pumpExtra moduleIdExtra=$moduleIdExtra"
         )
+        Log.i(
+            TAG_EXIT_SYNC,
+            "onActivityResult return_from_helper requestCode=$requestCode resultCode=$resultCode returningFromHelper_before=$returningFromHelper"
+        )
 
         if (requestCode != REQUEST_SCHEDULE_HELPER) return
+
+        returningFromHelper = false
+        Log.i(TAG_EXIT_SYNC, "onActivityResult return_from_helper returningFromHelper_after=false")
+
         if (resultCode != RESULT_OK || data == null) return
 
         val active = lockedModule
