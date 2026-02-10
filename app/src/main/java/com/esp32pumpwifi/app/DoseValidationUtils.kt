@@ -77,22 +77,31 @@ object DoseValidationUtils {
 
         val antiGapMs = antiMin.coerceAtLeast(0).toLong() * MINUTE_MS
 
+        var samePumpConflict: DoseInterval? = null
+        var samePumpNextAllowedStartMs: Long? = null
         for (interval in existing) {
             val overlaps = newInterval.startMs < interval.endMs && newInterval.endMs > interval.startMs
             if (interval.pump == newInterval.pump && overlaps) {
-                android.util.Log.w(
-                    "ANTI_INTERFERENCE",
-                    "invalid reason=overlap_same_pump candidate=$newInterval conflict=$interval"
-                )
-                return DoseValidationResult(
-                    isValid = false,
-                    reason = DoseValidationReason.OVERLAP_SAME_PUMP,
-                    conflictPump = interval.pump,
-                    conflictStartMs = interval.startMs,
-                    conflictEndMs = interval.endMs,
-                    nextAllowedStartMs = interval.endMs
-                )
+                if (samePumpConflict == null) {
+                    samePumpConflict = interval
+                }
+                samePumpNextAllowedStartMs = maxOf(samePumpNextAllowedStartMs ?: interval.endMs, interval.endMs)
             }
+        }
+
+        if (samePumpConflict != null) {
+            android.util.Log.w(
+                "ANTI_INTERFERENCE",
+                "invalid reason=overlap_same_pump candidate=$newInterval conflict=$samePumpConflict nextAllowedStartMs=$samePumpNextAllowedStartMs"
+            )
+            return DoseValidationResult(
+                isValid = false,
+                reason = DoseValidationReason.OVERLAP_SAME_PUMP,
+                conflictPump = samePumpConflict.pump,
+                conflictStartMs = samePumpConflict.startMs,
+                conflictEndMs = samePumpConflict.endMs,
+                nextAllowedStartMs = samePumpNextAllowedStartMs
+            )
         }
 
         if (antiGapMs <= 0L) {

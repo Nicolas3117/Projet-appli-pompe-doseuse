@@ -271,7 +271,8 @@ class PumpScheduleFragment : Fragment() {
             if (!validation.isValid) {
                 when (validation.reason) {
                     DoseValidationReason.OVERLAP_SAME_PUMP -> {
-                        timeLayout.error = "Une distribution est déjà en cours à ce moment (pompe $pumpNumber)."
+                        val next = validation.nextAllowedStartMs?.let { ScheduleAddMergeUtils.toTimeString(it) } ?: "--:--"
+                        timeLayout.error = "Une distribution est déjà en cours à ce moment. Prochaine heure possible : $next"
                     }
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
                         val next = validation.nextAllowedStartMs?.let { ScheduleAddMergeUtils.toTimeString(it) } ?: "--:--"

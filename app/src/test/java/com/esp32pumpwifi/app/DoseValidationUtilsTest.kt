@@ -19,6 +19,23 @@ class DoseValidationUtilsTest {
         assertEquals(1, result.conflictPump)
     }
 
+
+    @Test
+    fun overlapIntraPump_returnsMaxEndAsNextAllowedStart() {
+        val existing = listOf(
+            DoseInterval(pump = 1, startMs = 10_000L, endMs = 25_000L),
+            DoseInterval(pump = 1, startMs = 15_000L, endMs = 30_000L),
+            DoseInterval(pump = 2, startMs = 11_000L, endMs = 40_000L)
+        )
+        val candidate = DoseInterval(pump = 1, startMs = 12_000L, endMs = 20_000L)
+
+        val result = DoseValidationUtils.validateNewInterval(candidate, existing, antiMin = 0)
+
+        assertFalse(result.isValid)
+        assertEquals(DoseValidationReason.OVERLAP_SAME_PUMP, result.reason)
+        assertEquals(30_000L, result.nextAllowedStartMs)
+    }
+
     @Test
     fun antiInterference_detectedWithNextAllowedStart() {
         val existing = listOf(DoseInterval(pump = 2, startMs = 60_000L, endMs = 120_000L))
