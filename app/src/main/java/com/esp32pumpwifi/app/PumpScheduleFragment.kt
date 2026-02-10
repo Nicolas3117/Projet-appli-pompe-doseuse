@@ -27,7 +27,6 @@ class PumpScheduleFragment : Fragment() {
 
     private var isReadOnly: Boolean = false
     private var addButton: Button? = null
-    private var listView: ListView? = null
 
     // ✅ Optionnel : module verrouillé (anti mélange multi-modules)
     private var lockedEspId: Long? = null
@@ -83,9 +82,8 @@ class PumpScheduleFragment : Fragment() {
             }
         )
 
-        listView = view.findViewById<ListView>(R.id.lv_schedules).also {
-            it.adapter = adapter
-        }
+        view.findViewById<ListView>(R.id.lv_schedules).adapter = adapter
+
 
         addButton = view.findViewById<Button>(R.id.btn_add_schedule).also {
             it.setOnClickListener { showAddScheduleDialog() }

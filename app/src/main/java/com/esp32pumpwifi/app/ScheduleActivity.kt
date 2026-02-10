@@ -44,7 +44,6 @@ class ScheduleActivity : AppCompatActivity() {
     private val pumpNames = mutableMapOf<Int, String>()
     private val tabsViewModel: ScheduleTabsViewModel by viewModels()
 
-    private var lastProgramHash: String? = null
     private val line12DigitsRegex = Regex("""^\d{12}$""")
 
     private var didAutoCheckOnResume = false
@@ -154,7 +153,6 @@ class ScheduleActivity : AppCompatActivity() {
             setUnsyncedState(true, "Synchronisation impossible")
             showUnsyncedDialog()
         } else {
-            lastProgramHash = initialProgram576
         }
 
         onBackPressedDispatcher.addCallback(
@@ -229,7 +227,6 @@ class ScheduleActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != REQUEST_SCHEDULE_HELPER || resultCode != RESULT_OK || data == null) return
-        handleScheduleHelperResult(data)
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -388,7 +385,6 @@ class ScheduleActivity : AppCompatActivity() {
                         active.ip,
                         message
                     ) {
-                        lastProgramHash = message
                         if (cont.isActive) cont.resume(true)
                     }
                 }
@@ -574,16 +570,8 @@ class ScheduleActivity : AppCompatActivity() {
 
             setUnsyncedState(false, null)
             setReadOnlyMode(false, null)
-
-            lastProgramHash = ProgramStore.buildMessageMs(this@ScheduleActivity, active.id)
         }
     }
-
-    private fun handleScheduleHelperResult(data: Intent) {
-        // ⚠️ ICI : garde TA vraie implémentation (ajout helper)
-        Log.d("SCHEDULE", "handleScheduleHelperResult called (repo method)")
-    }
-
     private fun showUnsyncedDialog() {
         if (unsyncedDialogShowing) return
         unsyncedDialogShowing = true
