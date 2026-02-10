@@ -57,4 +57,11 @@ class ScheduleAddMergeUtilsTest {
         assertEquals(12, result.merged.size)
         assertEquals(existing.map { it.time }, result.merged.map { it.time })
     }
+
+    @Test
+    fun toTimeString_msSinceMidnight_formatsExpectedTime() {
+        assertEquals("10:00", ScheduleAddMergeUtils.toTimeString(36_000_000L))
+        assertEquals("11:00", ScheduleAddMergeUtils.toTimeString(39_600_000L))
+        assertTrue(ScheduleAddMergeUtils.isValidMsOfDay(36_000_000L))
+    }
 }

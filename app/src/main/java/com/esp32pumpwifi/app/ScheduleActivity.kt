@@ -238,12 +238,30 @@ class ScheduleActivity : AppCompatActivity() {
 
         val scheduleMs =
             data.getLongArrayExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS)?.toList().orEmpty()
+
+        Log.i(
+            TAG_TIME_BUG,
+            "activity_result keys=[$extraKeys] pump=$pump moduleId=$moduleIdExtra scheduleMsRaw=$scheduleMs"
+        )
+
         if (scheduleMs.isEmpty()) {
             Toast.makeText(this, "Aucune dose à ajouter (données vides).", Toast.LENGTH_LONG).show()
             return
         }
 
+        val invalidMs = scheduleMs.filterNot { ScheduleAddMergeUtils.isValidMsOfDay(it) }
+        if (invalidMs.isNotEmpty()) {
+            Log.w(TAG_TIME_BUG, "activity_result invalid_ms=$invalidMs")
+            Toast.makeText(this, "Heures invalides reçues (hors 24h), ajout annulé.", Toast.LENGTH_LONG).show()
+            return
+        }
+
         val newTimes = scheduleMs.map { ScheduleAddMergeUtils.toTimeString(it) }
+        Log.i(
+            TAG_TIME_BUG,
+            "activity_result convertedTimes=${scheduleMs.zip(newTimes).joinToString { "${it.first}->${it.second}" }}"
+        )
+        Log.i(TAG_TIME_BUG, "activity_result newTimes=$newTimes")
         val flow = getSharedPreferences("prefs", Context.MODE_PRIVATE)
             .getFloat("esp_${active.id}_pump${pump}_flow", 0f)
         val volumePerDose = data.getDoubleExtra(ScheduleHelperActivity.EXTRA_VOLUME_PER_DOSE, 0.0)
@@ -287,6 +305,9 @@ class ScheduleActivity : AppCompatActivity() {
             "SCHEDULE_ADD",
             "after_merge pump=$pump mergedSize=${mergeResult.merged.size} first=$first last=$last added=${mergeResult.addedCount} duplicates=${mergeResult.skippedDuplicateCount}"
         )
+        val mergedTimes = mergeResult.merged.map { it.time }
+        val mergedSummary = if (mergedTimes.size <= 12) mergedTimes.toString() else "size=${mergedTimes.size}"
+        Log.i(TAG_TIME_BUG, "mergedTimes first=$first last=$last list=$mergedSummary")
 
         while (ProgramStore.count(this, active.id, pump) > 0) {
             ProgramStore.removeLine(this, active.id, pump, 0)
@@ -719,6 +740,7 @@ class ScheduleActivity : AppCompatActivity() {
         const val EXTRA_MODULE_ID = "EXTRA_MODULE_ID"
         private const val REQUEST_SCHEDULE_HELPER = 2001
         private const val TAG_EXIT_SYNC = "EXIT_SYNC"
+        private const val TAG_TIME_BUG = "TIME_BUG"
         private const val MIN_PUMP_DURATION_MS = 50
         private const val MAX_PUMP_DURATION_MS = 600_000
     }
