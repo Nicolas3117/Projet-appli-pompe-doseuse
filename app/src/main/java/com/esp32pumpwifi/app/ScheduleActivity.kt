@@ -283,7 +283,6 @@ class ScheduleActivity : AppCompatActivity() {
             false
         }
     }
-
     private fun autoCheckProgramOnOpen() {
         // inchangé (logique ESP / merge / sync)
     }
