@@ -28,7 +28,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 import kotlin.coroutines.resume
-import kotlin.math.roundToInt
 
 class ScheduleActivity : AppCompatActivity() {
 
@@ -202,10 +201,43 @@ class ScheduleActivity : AppCompatActivity() {
         autoCheckProgramOnOpen()
     }
 
-
     override fun onPause() {
         super.onPause()
         didAutoCheckOnResume = false
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_SCHEDULE_HELPER || resultCode != RESULT_OK || data == null) return
+        handleScheduleHelperResult(data)
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.menu_schedule, menu)
+        return true
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
+        val sendItem = menu?.findItem(R.id.action_send)
+        if (isReadOnly || isUnsynced) {
+            sendItem?.isEnabled = false
+            sendItem?.isVisible = false
+        } else {
+            sendItem?.isEnabled = true
+            sendItem?.isVisible = true
+        }
+        return super.onPrepareOptionsMenu(menu)
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_send -> {
+                lifecycleScope.launch { sendIfPossible() }
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 
     // -------------------------------------------------------
@@ -223,8 +255,7 @@ class ScheduleActivity : AppCompatActivity() {
 
         // ✅ DÉSACTIVATION VISUELLE DU HELPER
         btnScheduleHelper.isEnabled = !(readOnly || isUnsynced)
-        btnScheduleHelper.alpha =
-            if (btnScheduleHelper.isEnabled) 1f else 0.4f
+        btnScheduleHelper.alpha = if (btnScheduleHelper.isEnabled) 1f else 0.4f
 
         invalidateOptionsMenu()
     }
@@ -273,7 +304,7 @@ class ScheduleActivity : AppCompatActivity() {
                         message
                     ) {
                         lastProgramHash = message
-                        cont.resume(true)
+                        if (cont.isActive) cont.resume(true)
                     }
                 }
             }
@@ -283,10 +314,53 @@ class ScheduleActivity : AppCompatActivity() {
             false
         }
     }
-    private fun autoCheckProgramOnOpen() {
-        // inchangé (logique ESP / merge / sync)
+
+    /**
+     * ✅ Lecture /read_ms (utilisée par le check léger après retour helper).
+     * Parsing STRICT ligne par ligne pour éviter les faux-positifs.
+     */
+    private suspend fun fetchProgramFromEsp(ip: String): String? = withContext(Dispatchers.IO) {
+        var conn: HttpURLConnection? = null
+        try {
+            conn = URL("http://$ip/read_ms").openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 3000
+            conn.readTimeout = 3000
+
+            if (conn.responseCode != HttpURLConnection.HTTP_OK) return@withContext null
+
+            val raw = conn.inputStream.bufferedReader().use { it.readText() }
+
+            val lines = raw
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.matches(line12DigitsRegex) }
+                .toList()
+
+            if (lines.size != 48) return@withContext null
+
+            val joined = lines.joinToString(separator = "")
+            if (joined.length == 576) joined else null
+        } catch (_: Exception) {
+            null
+        } finally {
+            try {
+                conn?.disconnect()
+            } catch (_: Exception) {
+            }
+        }
     }
 
+    private fun autoCheckProgramOnOpen() {
+        // ⚠️ ICI : garde TA vraie implémentation (ESP / merge / sync)
+    }
+
+    private fun handleScheduleHelperResult(data: Intent) {
+        // ⚠️ ICI : garde TA vraie implémentation (ajout helper)
+        Log.d("SCHEDULE", "handleScheduleHelperResult called (repo method)")
+    }
+
+    // ✅ RESTAURÉ : "Quitter (mode dégradé)" + comportement identique à ton ancien code
     private fun showUnsyncedDialog() {
         if (unsyncedDialogShowing) return
         unsyncedDialogShowing = true
@@ -294,12 +368,23 @@ class ScheduleActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("⚠️ Synchronisation impossible")
             .setMessage(
-                "La programmation n’a pas pu être synchronisée avec la pompe.\n" +
-                        "Les modifications sont désactivées."
+                "Un problème est survenu et la programmation n’a pas pu être synchronisée avec la pompe.\n" +
+                        "Tant que la synchronisation n’est pas faite, aucune modification ne sera possible pour éviter toute incohérence."
             )
-            .setPositiveButton("OK", null)
+            .setPositiveButton("Rester (recommandé)") { dialog, _ -> dialog.dismiss() }
+            .setNegativeButton("Quitter (mode dégradé)") { dialog, _ ->
+                dialog.dismiss()
+                finish()
+            }
             .setOnDismissListener { unsyncedDialogShowing = false }
-            .show()
+            .create()
+            .also { dlg ->
+                if (isFinishing || isDestroyed) {
+                    unsyncedDialogShowing = false
+                    return
+                }
+                dlg.show()
+            }
     }
 
     companion object {
