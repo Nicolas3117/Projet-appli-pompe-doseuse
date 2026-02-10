@@ -29,6 +29,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 import kotlin.coroutines.resume
+import kotlin.math.roundToInt
 
 class ScheduleActivity : AppCompatActivity() {
 
@@ -101,10 +102,7 @@ class ScheduleActivity : AppCompatActivity() {
 
             val intent = Intent(this, ScheduleHelperActivity::class.java).apply {
                 putExtra(ScheduleHelperActivity.EXTRA_PUMP_NUMBER, pumpNumber)
-                putExtra(
-                    ScheduleHelperActivity.EXTRA_MODULE_ID,
-                    activeModule.id.toString()
-                )
+                putExtra(ScheduleHelperActivity.EXTRA_MODULE_ID, activeModule.id.toString())
             }
             startActivityForResult(intent, REQUEST_SCHEDULE_HELPER)
         }
@@ -112,6 +110,7 @@ class ScheduleActivity : AppCompatActivity() {
         adapter = PumpPagerAdapter(this)
         viewPager.adapter = adapter
 
+        // ✅ anti mélange multi-modules
         if (expectedModuleId != null && activeModule.id.toString() != expectedModuleId) {
             setUnsyncedState(true, "Synchronisation impossible")
             showUnsyncedDialog()
@@ -140,8 +139,9 @@ class ScheduleActivity : AppCompatActivity() {
             }
         }
 
+        // ✅ baseline à partir de l’extra d’entrée si valide
         val initialProgram576 = intent.getStringExtra(EXTRA_INITIAL_PROGRAM_576)?.trim()
-        if (initialProgram576 == null || initialProgram576.length != 576 || !initialProgram576.chunked(12).all { it.matches(line12DigitsRegex) }) {
+        if (!isValidMessage576(initialProgram576)) {
             setUnsyncedState(true, "Synchronisation impossible")
             showUnsyncedDialog()
         } else {
@@ -179,12 +179,11 @@ class ScheduleActivity : AppCompatActivity() {
             skipAutoCheckOnce = false
             didAutoCheckOnResume = true
 
-            // 🆕 CHECK LÉGER DE COHÉRENCE ESP ↔ LOCAL
             lifecycleScope.launch {
-                val active = Esp32Manager.getActive(this@ScheduleActivity) ?: return@launch
+                val active = lockedModule ?: return@launch
                 val espProgram = fetchProgramFromEsp(active.ip) ?: return@launch
 
-                val localProgram = ProgramStore.buildMessageMs(this@ScheduleActivity)
+                val localProgram = ProgramStore.buildMessageMs(this@ScheduleActivity, active.id)
 
                 if (espProgram != localProgram) {
                     setUnsyncedState(true, "Synchronisation impossible")
@@ -290,7 +289,7 @@ class ScheduleActivity : AppCompatActivity() {
             return false
         }
 
-        val localProgram = ProgramStore.buildMessageMs(this)
+        val localProgram = ProgramStore.buildMessageMs(this, active.id)
         if (espProgram == localProgram) return true
 
         return suspendCancellableCoroutine { cont ->
@@ -343,7 +342,7 @@ class ScheduleActivity : AppCompatActivity() {
     // -------------------------------------------------------
 
     private suspend fun sendIfPossible(): Boolean {
-        val active = Esp32Manager.getActive(this) ?: return false
+        val active = lockedModule ?: return false
         return sendSchedulesToESP32(active)
     }
 
@@ -373,8 +372,8 @@ class ScheduleActivity : AppCompatActivity() {
     }
 
     /**
-     * ✅ Lecture /read_ms (utilisée par le check léger après retour helper).
-     * Parsing STRICT ligne par ligne pour éviter les faux-positifs.
+     * ✅ Lecture /read_ms
+     * Parsing STRICT ligne par ligne (48 lignes exactes de 12 digits).
      */
     private suspend fun fetchProgramFromEsp(ip: String): String? = withContext(Dispatchers.IO) {
         var conn: HttpURLConnection? = null
@@ -387,10 +386,7 @@ class ScheduleActivity : AppCompatActivity() {
             if (conn.responseCode != HttpURLConnection.HTTP_OK) return@withContext null
 
             val lines = conn.inputStream.bufferedReader().use { reader ->
-                reader
-                    .lineSequence()
-                    .map { it.trim() }
-                    .toList()
+                reader.lineSequence().map { it.trim() }.toList()
             }
 
             if (lines.size != 48) return@withContext null
@@ -408,8 +404,161 @@ class ScheduleActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * ✅ Sync/merge minimal à l'ouverture :
+     * - ESP32 source de vérité (actives)
+     * - merge + cap 12 avec disabled locales
+     * - push UI via adapter.updateSchedules
+     * - align ProgramStore (actifs) sur ESP
+     * - baseline lastProgramHash stable
+     */
     private fun autoCheckProgramOnOpen() {
-        // ⚠️ ICI : garde TA vraie implémentation (ESP / merge / sync)
+        lifecycleScope.launch {
+            val active = lockedModule ?: run {
+                setUnsyncedState(true, "Synchronisation impossible")
+                showUnsyncedDialog()
+                return@launch
+            }
+
+            val initial = intent.getStringExtra(EXTRA_INITIAL_PROGRAM_576)?.trim()
+            val espProgram576 = if (isValidMessage576(initial)) {
+                initial!!
+            } else {
+                withTimeoutOrNull(4000L) { fetchProgramFromEsp(active.ip) }
+            }
+
+            if (espProgram576 == null) {
+                setUnsyncedState(true, "Synchronisation impossible")
+                showUnsyncedDialog()
+                return@launch
+            }
+
+            val ok = ProgramStoreSynced.setFromMessage576(this@ScheduleActivity, active.id, espProgram576)
+            if (!ok) {
+                setUnsyncedState(true, "Synchronisation impossible")
+                showUnsyncedDialog()
+                return@launch
+            }
+
+            val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
+            val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
+            val editor = schedulesPrefs.edit()
+
+            for (pump in 1..4) {
+                val espActiveEncoded = ProgramStoreSynced
+                    .loadEncodedLines(this@ScheduleActivity, active.id, pump)
+                    .take(12)
+
+                val flow = prefs.getFloat("esp_${active.id}_pump${pump}_flow", 0f)
+
+                val espActiveSchedules = espActiveEncoded.mapNotNull { encoded ->
+                    encodedLineToActiveScheduleOrNull(
+                        expectedPump = pump,
+                        encoded = encoded,
+                        flow = flow
+                    )
+                }
+
+                val key = "esp_${active.id}_pump$pump"
+                val localJson = schedulesPrefs.getString(key, null)
+                val localList =
+                    if (localJson.isNullOrBlank()) emptyList()
+                    else PumpScheduleJson.fromJson(localJson)
+
+                val disabledLocal = localList
+                    .filter { it.pumpNumber == pump && !it.enabled }
+                    .sortedWith(compareBy<PumpSchedule> {
+                        val t = ScheduleOverlapUtils.parseTimeOrNull(it.time)
+                        if (t == null) Int.MAX_VALUE else (t.first * 60 + t.second)
+                    }.thenBy { it.time })
+
+                val merged = if (espActiveSchedules.size >= 12) {
+                    espActiveSchedules.take(12) // règle produit
+                } else {
+                    (espActiveSchedules + disabledLocal).take(12)
+                }
+
+                editor.putString(key, PumpScheduleJson.toJson(merged, gson))
+                adapter.updateSchedules(pump, merged)
+
+                // Align ProgramStore: actifs = ESP (encodés)
+                clearProgramStorePump(active.id, pump)
+                for (encoded in espActiveEncoded) {
+                    val line = encodedLineToProgramLineOrNull(encoded) ?: continue
+                    ProgramStore.addLine(this@ScheduleActivity, active.id, pump, line)
+                }
+            }
+
+            editor.apply()
+
+            val baseline = ProgramStore.buildMessageMs(this@ScheduleActivity, active.id)
+            lastProgramHash = baseline
+
+            if (baseline != espProgram576) {
+                setUnsyncedState(true, "Synchronisation impossible")
+                showUnsyncedDialog()
+            } else {
+                setUnsyncedState(false, null)
+                setReadOnlyMode(false, null)
+            }
+        }
+    }
+
+    private fun isValidMessage576(message: String?): Boolean {
+        if (message.isNullOrBlank() || message.length != 576) return false
+        return message.chunked(12).all { it.matches(line12DigitsRegex) }
+    }
+
+    private fun clearProgramStorePump(espId: Long, pump: Int) {
+        repeat(12) {
+            val removed = ProgramStore.removeLine(this, espId, pump, 0)
+            if (!removed) return
+        }
+    }
+
+    private fun encodedLineToProgramLineOrNull(encoded: String): ProgramLine? {
+        if (!encoded.matches(line12DigitsRegex)) return null
+        if (encoded == "000000000000") return null
+
+        val enabled = encoded[0] == '1'
+        val pump = encoded.substring(1, 2).toIntOrNull() ?: return null
+        val hh = encoded.substring(2, 4).toIntOrNull() ?: return null
+        val mm = encoded.substring(4, 6).toIntOrNull() ?: return null
+        val ms = encoded.substring(6, 12).toIntOrNull() ?: return null
+
+        if (pump !in 1..4 || hh !in 0..23 || mm !in 0..59) return null
+        if (ms !in 50..600000) return null
+
+        return ProgramLine(
+            enabled = enabled,
+            pump = pump,
+            hour = hh,
+            minute = mm,
+            qtyMs = ms
+        )
+    }
+
+    private fun encodedLineToActiveScheduleOrNull(
+        expectedPump: Int,
+        encoded: String,
+        flow: Float
+    ): PumpSchedule? {
+        val line = encodedLineToProgramLineOrNull(encoded) ?: return null
+        if (!line.enabled) return null
+        if (line.pump != expectedPump) return null
+
+        val qtyTenth = if (flow > 0f) {
+            ((line.qtyMs / 1000f) * flow * 10f).roundToInt().coerceAtLeast(1)
+        } else {
+            0
+        }
+
+        return PumpSchedule(
+            pumpNumber = expectedPump,
+            time = String.format(Locale.getDefault(), "%02d:%02d", line.hour, line.minute),
+            quantityTenth = qtyTenth,
+            enabled = true
+        )
     }
 
     private fun handleScheduleHelperResult(data: Intent) {
@@ -417,7 +566,6 @@ class ScheduleActivity : AppCompatActivity() {
         Log.d("SCHEDULE", "handleScheduleHelperResult called (repo method)")
     }
 
-    // ✅ RESTAURÉ : "Quitter (mode dégradé)" + comportement identique à ton ancien code
     private fun showUnsyncedDialog() {
         if (unsyncedDialogShowing) return
         unsyncedDialogShowing = true
