@@ -182,15 +182,26 @@ class PumpScheduleFragment : Fragment() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_add_schedule, null)
         val etTime = dialogView.findViewById<EditText>(R.id.et_time)
         val etQuantity = dialogView.findViewById<EditText>(R.id.et_quantity)
+        val etAntiInterference = dialogView.findViewById<EditText>(R.id.et_anti_interference)
         val timeLayout = dialogView.findViewById<TextInputLayout>(R.id.layout_time)
         val quantityLayout = dialogView.findViewById<TextInputLayout>(R.id.layout_quantity)
+        val antiInterferenceLayout = dialogView.findViewById<TextInputLayout>(R.id.layout_anti_interference)
         QuantityInputUtils.applyInputFilter(etQuantity)
+
+        val espId = resolveEspIdOrNull()
+        val antiPrefDefault = if (espId != null) {
+            requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
+                .getInt("esp_${espId}_anti_overlap_minutes", 0)
+                .coerceAtLeast(0)
+        } else 0
+        etAntiInterference.setText(antiPrefDefault.toString())
 
         var addBtn: android.widget.Button? = null
 
         val validateManualInput: () -> Unit = manual@{
             timeLayout.error = null
             quantityLayout.error = null
+            antiInterferenceLayout.error = null
 
             if (schedules.size >= MAX_SCHEDULES_PER_PUMP) {
                 timeLayout.error = "Aucune place disponible (max 12)."
@@ -198,12 +209,14 @@ class PumpScheduleFragment : Fragment() {
                 return@manual
             }
 
-            val espId = resolveEspIdOrNull()
-            val antiMin = if (espId != null) {
-                requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
-                    .getInt("esp_${espId}_anti_overlap_minutes", 0)
-                    .coerceAtLeast(0)
-            } else 0
+            val antiRaw = etAntiInterference.text?.toString()?.trim().orEmpty()
+            val antiMin = antiRaw.toIntOrNull()
+            if (antiRaw.isBlank() || antiMin == null || antiMin < 0) {
+                antiInterferenceLayout.error = "Valeur invalide"
+                addBtn?.isEnabled = false
+                Log.w("MANUAL_VALIDATE", "invalid reason=anti_min_invalid value=$antiRaw")
+                return@manual
+            }
 
             val parsed = ScheduleOverlapUtils.parseTimeOrNull(etTime.text?.toString()?.trim().orEmpty())
             val qtyTenth = QuantityInputUtils.parseQuantityTenth(etQuantity.text?.toString().orEmpty())
@@ -243,13 +256,6 @@ class PumpScheduleFragment : Fragment() {
             }
 
             val candidate = DoseInterval(pump = pumpNumber, startMs = startMs, endMs = startMs + durationMs)
-            if (candidate.endMs >= 86_400_000L) {
-                val endText = String.format(java.util.Locale.getDefault(), "%02d:%02d", ((candidate.endMs % 86_400_000L) / 3_600_000L).toInt(), (((candidate.endMs % 3_600_000L) / 60_000L).toInt()))
-                quantityLayout.error = "Cette dose finirait après minuit (fin estimée : $endText). Avancez l’heure ou réduisez le volume."
-                addBtn?.isEnabled = false
-                Log.w("MANUAL_VALIDATE", "invalid reason=overflow endMs=${candidate.endMs}")
-                return@manual
-            }
 
             val allSchedules = (1..4).associateWith { pump ->
                 val json = requireContext().getSharedPreferences("schedules", Context.MODE_PRIVATE)
@@ -265,13 +271,11 @@ class PumpScheduleFragment : Fragment() {
             if (!validation.isValid) {
                 when (validation.reason) {
                     DoseValidationReason.OVERLAP_SAME_PUMP -> {
-                        val cStart = ScheduleAddMergeUtils.toTimeString(validation.conflictStartMs ?: 0L)
-                        val cEnd = ScheduleAddMergeUtils.toTimeString((validation.conflictEndMs ?: 0L).coerceAtMost(86_399_999L))
-                        timeLayout.error = "Une distribution est déjà en cours à ce moment (P${validation.conflictPump} de $cStart à $cEnd)."
+                        timeLayout.error = "Une distribution est déjà en cours à ce moment (pompe $pumpNumber)."
                     }
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
                         val next = validation.nextAllowedStartMs?.let { ScheduleAddMergeUtils.toTimeString(it) } ?: "--:--"
-                        timeLayout.error = "Respectez au moins $antiMin min après la fin précédente. Prochaine heure possible : $next."
+                        timeLayout.error = "Respectez au moins $antiMin min après la fin de la distribution précédente. Prochaine heure possible : $next."
                     }
                     DoseValidationReason.OVERFLOW_MIDNIGHT -> {
                         val endText = ScheduleAddMergeUtils.toTimeString(validation.overflowEndMs ?: 0L)
@@ -282,7 +286,7 @@ class PumpScheduleFragment : Fragment() {
                 addBtn?.isEnabled = false
                 Log.w(
                     "MANUAL_VALIDATE",
-                    "invalid reason=${validation.reason} candidate=[${candidate.startMs},${candidate.endMs}) antiMin=$antiMin nextAllowed=${validation.nextAllowedStartMs}"
+                    "invalid reason=${validation.reason} candidate=[${candidate.startMs},${candidate.endMs}) antiMin=$antiMin nextAllowed=${validation.nextAllowedStartMs} durationMs=$durationMs"
                 )
                 return@manual
             }
@@ -290,7 +294,7 @@ class PumpScheduleFragment : Fragment() {
             addBtn?.isEnabled = true
             Log.i(
                 "MANUAL_VALIDATE",
-                "valid pump=$pumpNumber interval=[${candidate.startMs},${candidate.endMs}) antiMin=$antiMin"
+                "valid pump=$pumpNumber interval=[${candidate.startMs},${candidate.endMs}) antiMin=$antiMin durationMs=$durationMs"
             )
         }
 
@@ -310,6 +314,14 @@ class PumpScheduleFragment : Fragment() {
 
                 val time = etTime.text.toString().trim()
                 val qtyTenth = QuantityInputUtils.parseQuantityTenth(etQuantity.text.toString()) ?: return@setOnClickListener
+                val antiMin = etAntiInterference.text?.toString()?.trim()?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+                val currentEspId = resolveEspIdOrNull()
+                if (currentEspId != null) {
+                    requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putInt("esp_${currentEspId}_anti_overlap_minutes", antiMin)
+                        .apply()
+                }
                 addSchedule(time, qtyTenth)
                 dialog.dismiss()
             }
@@ -317,6 +329,7 @@ class PumpScheduleFragment : Fragment() {
 
         etTime.addTextChangedListener { validateManualInput.let { it() } }
         etQuantity.addTextChangedListener { validateManualInput.let { it() } }
+        etAntiInterference.addTextChangedListener { validateManualInput.let { it() } }
 
         dialog.show()
     }

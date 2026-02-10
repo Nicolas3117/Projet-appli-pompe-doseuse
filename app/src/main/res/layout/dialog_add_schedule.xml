@@ -31,6 +31,7 @@
         android:id="@+id/layout_quantity"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
         android:hint="Volume (mL)">
 
         <com.google.android.material.textfield.TextInputEditText
@@ -39,6 +40,20 @@
             android:layout_height="wrap_content"
             android:digits="0123456789.,"
             android:inputType="numberDecimal" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/layout_anti_interference"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Anti-interférence chimique (min)">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/et_anti_interference"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:digits="0123456789"
+            android:inputType="number" />
     </com.google.android.material.textfield.TextInputLayout>
 
 </LinearLayout>

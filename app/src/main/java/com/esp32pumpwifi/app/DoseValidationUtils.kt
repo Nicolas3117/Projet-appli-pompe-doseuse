@@ -63,9 +63,11 @@ object DoseValidationUtils {
         antiMin: Int
     ): DoseValidationResult {
         if (newInterval.startMs < 0L || newInterval.endMs <= newInterval.startMs) {
+            android.util.Log.w("ANTI_INTERFERENCE", "invalid_interval candidate=$newInterval")
             return DoseValidationResult(isValid = false, reason = DoseValidationReason.INVALID_INTERVAL)
         }
         if (newInterval.endMs >= DAY_MS) {
+            android.util.Log.w("ANTI_INTERFERENCE", "overflow candidate=$newInterval")
             return DoseValidationResult(
                 isValid = false,
                 reason = DoseValidationReason.OVERFLOW_MIDNIGHT,
@@ -74,41 +76,55 @@ object DoseValidationUtils {
         }
 
         val antiGapMs = antiMin.coerceAtLeast(0).toLong() * MINUTE_MS
-        var nextAllowedStartMs: Long? = null
 
-        for (it in existing) {
-            val overlaps = newInterval.startMs < it.endMs && newInterval.endMs > it.startMs
-            if (it.pump == newInterval.pump && overlaps) {
-                val candidate = it.endMs
-                nextAllowedStartMs = maxOf(nextAllowedStartMs ?: candidate, candidate)
+        for (interval in existing) {
+            val overlaps = newInterval.startMs < interval.endMs && newInterval.endMs > interval.startMs
+            if (interval.pump == newInterval.pump && overlaps) {
+                android.util.Log.w(
+                    "ANTI_INTERFERENCE",
+                    "invalid reason=overlap_same_pump candidate=$newInterval conflict=$interval"
+                )
                 return DoseValidationResult(
                     isValid = false,
                     reason = DoseValidationReason.OVERLAP_SAME_PUMP,
-                    conflictPump = it.pump,
-                    conflictStartMs = it.startMs,
-                    conflictEndMs = it.endMs,
-                    nextAllowedStartMs = nextAllowedStartMs
-                )
-            }
-
-            if (antiGapMs <= 0L || it.pump == newInterval.pump) continue
-
-            val validBefore = newInterval.endMs + antiGapMs <= it.startMs
-            val validAfter = newInterval.startMs >= it.endMs + antiGapMs
-            if (!validBefore && !validAfter) {
-                val candidate = it.endMs + antiGapMs
-                nextAllowedStartMs = maxOf(nextAllowedStartMs ?: candidate, candidate)
-                return DoseValidationResult(
-                    isValid = false,
-                    reason = DoseValidationReason.ANTI_INTERFERENCE_GAP,
-                    conflictPump = it.pump,
-                    conflictStartMs = it.startMs,
-                    conflictEndMs = it.endMs,
-                    nextAllowedStartMs = nextAllowedStartMs
+                    conflictPump = interval.pump,
+                    conflictStartMs = interval.startMs,
+                    conflictEndMs = interval.endMs,
+                    nextAllowedStartMs = interval.endMs
                 )
             }
         }
 
+        if (antiGapMs <= 0L) {
+            android.util.Log.i("ANTI_INTERFERENCE", "valid antiMin=0 candidate=$newInterval")
+            return DoseValidationResult(isValid = true)
+        }
+
+        var nextAllowedStartMs: Long? = null
+        for (interval in existing) {
+            if (interval.pump == newInterval.pump) continue
+
+            val validBefore = newInterval.endMs + antiGapMs <= interval.startMs
+            val validAfter = newInterval.startMs >= interval.endMs + antiGapMs
+            if (!validBefore && !validAfter) {
+                val candidateStart = interval.endMs + antiGapMs
+                nextAllowedStartMs = maxOf(nextAllowedStartMs ?: candidateStart, candidateStart)
+            }
+        }
+
+        if (nextAllowedStartMs != null) {
+            android.util.Log.w(
+                "ANTI_INTERFERENCE",
+                "invalid reason=anti_gap candidate=$newInterval antiMin=$antiMin nextAllowedStartMs=$nextAllowedStartMs"
+            )
+            return DoseValidationResult(
+                isValid = false,
+                reason = DoseValidationReason.ANTI_INTERFERENCE_GAP,
+                nextAllowedStartMs = nextAllowedStartMs
+            )
+        }
+
+        android.util.Log.i("ANTI_INTERFERENCE", "valid candidate=$newInterval antiMin=$antiMin")
         return DoseValidationResult(isValid = true)
     }
 }

@@ -42,6 +42,18 @@ class DoseValidationUtilsTest {
     }
 
     @Test
+    fun antiPositive_forbidsInterPumpSimultaneous() {
+        val existing = listOf(DoseInterval(pump = 2, startMs = 10_000L, endMs = 30_000L))
+        val candidate = DoseInterval(pump = 1, startMs = 20_000L, endMs = 25_000L)
+
+        val result = DoseValidationUtils.validateNewInterval(candidate, existing, antiMin = 1)
+
+        assertFalse(result.isValid)
+        assertEquals(DoseValidationReason.ANTI_INTERFERENCE_GAP, result.reason)
+        assertEquals(90_000L, result.nextAllowedStartMs)
+    }
+
+    @Test
     fun antiZero_ignoresCrossPump_butKeepsIntra() {
         val crossPump = listOf(DoseInterval(pump = 2, startMs = 1_000L, endMs = 5_000L))
         val crossCandidate = DoseInterval(pump = 1, startMs = 2_000L, endMs = 4_000L)
