@@ -55,6 +55,7 @@ class ScheduleActivity : AppCompatActivity() {
     private var unsyncedDialogShowing = false
 
     private val gson = Gson()
+    private var lockedModule: EspModule? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,6 +76,8 @@ class ScheduleActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        val expectedModuleId = intent.getStringExtra(EXTRA_MODULE_ID)
 
         viewPager = findViewById(R.id.viewPager)
         tabLayout = findViewById(R.id.tabLayout)
@@ -108,6 +111,14 @@ class ScheduleActivity : AppCompatActivity() {
 
         adapter = PumpPagerAdapter(this)
         viewPager.adapter = adapter
+
+        if (expectedModuleId != null && activeModule.id.toString() != expectedModuleId) {
+            setUnsyncedState(true, "Synchronisation impossible")
+            showUnsyncedDialog()
+            return
+        }
+
+        lockedModule = activeModule
 
         val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
         val moduleId = activeModule.id
@@ -266,7 +277,7 @@ class ScheduleActivity : AppCompatActivity() {
             return false
         }
 
-        val active = Esp32Manager.getActive(this) ?: run {
+        val active = lockedModule ?: run {
             setUnsyncedState(true, "Synchronisation impossible")
             showUnsyncedDialog()
             return false
