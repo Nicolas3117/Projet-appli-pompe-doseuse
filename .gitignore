@@ -1,15 +1,22 @@
+# ===== Android / Gradle =====
+.gradle/
+build/
+app/build/
+app/release/
+
+# ===== Android Studio / IntelliJ =====
+.idea/
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
 local.properties
+
+# ===== Kotlin / IDE logs =====
+.kotlin/errors/
+*.log
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Native build =====
+.externalNativeBuild/
+.cxx/

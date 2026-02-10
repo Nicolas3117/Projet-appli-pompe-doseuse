@@ -1,3 +1,15 @@
+# Kotlin / IDE logs
+.kotlin/errors/
+*.log
+
+# Android build outputs
+app/release/
+app/build/
+build/
 # Default ignored files
 /shelf/
 /workspace.xml
+# Android Studio / IntelliJ
+.idea/
+.gradle/
+local.properties
