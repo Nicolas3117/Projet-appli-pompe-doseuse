@@ -219,11 +219,25 @@ class CalibrationPumpFragment : Fragment() {
                 flow1
             }
 
+            logPumpSchedulesSnapshot(
+                schedulesPrefs = schedulesPrefs,
+                moduleId = moduleId,
+                pump = pumpNum,
+                phase = "schedules_before"
+            )
+
             tvResult.text = "Débit : ${formatFlow(flowFinal)} mL/s"
 
             prefs.edit()
                 .putFloat("esp_${moduleId}_pump${pumpNum}_flow", flowFinal)
                 .apply()
+
+            logPumpSchedulesSnapshot(
+                schedulesPrefs = schedulesPrefs,
+                moduleId = moduleId,
+                pump = pumpNum,
+                phase = "schedules_after"
+            )
 
             AlertDialog.Builder(requireContext())
                 .setTitle("Attention")
@@ -302,6 +316,25 @@ class CalibrationPumpFragment : Fragment() {
                     .show()
             }
         }
+    }
+
+    private fun logPumpSchedulesSnapshot(
+        schedulesPrefs: android.content.SharedPreferences,
+        moduleId: Long,
+        pump: Int,
+        phase: String
+    ) {
+        val schedules = schedulesPrefs.getString("esp_${moduleId}_pump$pump", null)
+            ?.let { PumpScheduleJson.fromJson(it) }
+            .orEmpty()
+            .filter { it.pumpNumber == pump && it.enabled }
+            .sortedBy {
+                val t = ScheduleOverlapUtils.parseTimeOrNull(it.time)
+                if (t == null) Int.MAX_VALUE else t.first * 60 + t.second
+            }
+
+        val list = schedules.joinToString(separator = ",") { "${it.time}=${it.quantityTenth}" }
+        Log.i("FLOW_NO_VOLUME_CHANGE", "$phase pump=$pump list=[$list]")
     }
 
     private fun formatFlow(flow: Float): String {

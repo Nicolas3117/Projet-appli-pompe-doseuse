@@ -585,6 +585,7 @@ class ScheduleActivity : AppCompatActivity() {
         active: EspModule,
         timeoutMs: Long = 4000L
     ): Boolean {
+        rebuildProgramStoreFromSchedules(active.id)
         val message = ProgramStore.buildMessageMs(this, active.id)
         return try {
             withTimeout(timeoutMs) {
@@ -602,6 +603,49 @@ class ScheduleActivity : AppCompatActivity() {
             setUnsyncedState(true, "Synchronisation impossible")
             showUnsyncedDialog()
             false
+        }
+    }
+
+    private fun rebuildProgramStoreFromSchedules(moduleId: Long) {
+        val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
+
+        for (pump in 1..4) {
+            while (ProgramStore.count(this, moduleId, pump) > 0) {
+                ProgramStore.removeLine(this, moduleId, pump, 0)
+            }
+
+            val flow = prefs.getFloat("esp_${moduleId}_pump${pump}_flow", 0f)
+            if (flow <= 0f) continue
+
+            val schedules = schedulesPrefs.getString("esp_${moduleId}_pump$pump", null)
+                ?.let { PumpScheduleJson.fromJson(it) }
+                .orEmpty()
+
+            schedules.forEach { schedule ->
+                if (!schedule.enabled) return@forEach
+                val parsed = ScheduleOverlapUtils.parseTimeOrNull(schedule.time) ?: return@forEach
+                val durationMs = (schedule.quantityMl / flow * 1000f).roundToInt()
+                    .coerceIn(MIN_PUMP_DURATION_MS, MAX_PUMP_DURATION_MS)
+
+                Log.i(
+                    "FLOW_NO_VOLUME_CHANGE",
+                    "send_calc pump=$pump time=${schedule.time} volumeTenth=${schedule.quantityTenth} flow=$flow durationMs=$durationMs"
+                )
+
+                ProgramStore.addLine(
+                    this,
+                    moduleId,
+                    pump,
+                    ProgramLine(
+                        enabled = true,
+                        pump = pump,
+                        hour = parsed.first,
+                        minute = parsed.second,
+                        qtyMs = durationMs
+                    )
+                )
+            }
         }
     }
 
@@ -695,6 +739,13 @@ class ScheduleActivity : AppCompatActivity() {
             var removeLineCalls = 0
             val importedCounts = mutableMapOf<Int, Int>()
             for (pump in 1..4) {
+                val localJson = schedulesPrefs.getString("esp_${active.id}_pump$pump", null)
+                val localList =
+                    if (localJson.isNullOrBlank()) emptyList() else PumpScheduleJson.fromJson(localJson)
+                val localEnabledQtyByTime = localList
+                    .filter { it.pumpNumber == pump && it.enabled }
+                    .associate { it.time to it.quantityTenth }
+
                 // Actives ESP: depuis ProgramStoreSynced (déjà filtrées enable=1 + garde-fous)
                 val espLines =
                     ProgramStoreSynced.loadEncodedLines(this@ScheduleActivity, active.id, pump)
@@ -713,7 +764,8 @@ class ScheduleActivity : AppCompatActivity() {
                     if (hh !in 0..23 || mm !in 0..59) return@mapNotNull null
                     if (ms !in 50..600000) return@mapNotNull null
 
-                    val qtyTenth = if (flow > 0f) {
+                    val time = String.format(Locale.getDefault(), "%02d:%02d", hh, mm)
+                    val qtyTenth = localEnabledQtyByTime[time] ?: if (flow > 0f) {
                         val qtyMl = flow * (ms / 1000f)
                         (qtyMl * 10f).roundToInt().coerceAtLeast(1)
                     } else {
@@ -722,15 +774,11 @@ class ScheduleActivity : AppCompatActivity() {
 
                     PumpSchedule(
                         pumpNumber = pump,
-                        time = String.format(Locale.getDefault(), "%02d:%02d", hh, mm),
+                        time = time,
                         quantityTenth = qtyTenth,
                         enabled = true
                     )
                 }
-
-                val localJson = schedulesPrefs.getString("esp_${active.id}_pump$pump", null)
-                val localList =
-                    if (localJson.isNullOrBlank()) emptyList() else PumpScheduleJson.fromJson(localJson)
 
                 val disabledLocal = localList
                     .filter { it.pumpNumber == pump && !it.enabled }
