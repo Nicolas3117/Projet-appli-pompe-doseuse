@@ -16,6 +16,7 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 class ScheduleHelperActivity : AppCompatActivity() {
@@ -56,7 +57,11 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         val parsedExpectedEspId = moduleId?.toLongOrNull()
         if (parsedExpectedEspId == null) {
-            Toast.makeText(this, "Le module sélectionné n’est plus disponible.\nVeuillez fermer cet écran et réessayer.", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                this,
+                "Le module sélectionné n’est plus disponible.\nVeuillez fermer cet écran et réessayer.",
+                Toast.LENGTH_LONG
+            ).show()
             setResult(RESULT_CANCELED)
             finish()
             return
@@ -65,7 +70,11 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         val active = Esp32Manager.getActive(this)
         if (active != null && active.id != expectedEspId) {
-            Toast.makeText(this, "Module différent détecté. Fermez et rouvrez l’écran.", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                this,
+                "Module différent détecté. Fermez et rouvrez l’écran.",
+                Toast.LENGTH_LONG
+            ).show()
             setResult(RESULT_CANCELED)
             finish()
             return
@@ -187,7 +196,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                     )
-                    params.topMargin = resources.getDimensionPixelSize(R.dimen.schedule_helper_proposal_spacing)
+                    params.topMargin =
+                        resources.getDimensionPixelSize(R.dimen.schedule_helper_proposal_spacing)
                     layoutParams = params
                 }
             }
@@ -279,7 +289,22 @@ class ScheduleHelperActivity : AppCompatActivity() {
             }
         }
 
-        val proposedTimesMs = buildScheduleTimesMs(start, end, doseCount)
+        // ✅ Anti-interférences chimiques (anti chevauchement en minutes)
+        // Règle: si antiOverlap > 0 et doseCount > 1, l'écart minimal entre 2 doses doit être >= antiOverlap minutes.
+        if (antiOverlap > 0 && doseCount > 1) {
+            val windowMinutes = (end - start).toDouble() / MS_PER_MINUTE.toDouble()
+            val requiredWindow = (doseCount - 1) * antiOverlap.toDouble()
+
+            if (windowMinutes < requiredWindow) {
+                val minNeeded = ceil(windowMinutes / (doseCount - 1).toDouble()).toInt().coerceAtLeast(0)
+                antiOverlapLayout.error =
+                    "Fenêtre trop courte. Réduisez le nombre de doses, élargissez la fenêtre, ou baissez l’anti-interférences.\n" +
+                            "Anti-interférences max possible ≈ $minNeeded min."
+                return ValidationResult.invalid()
+            }
+        }
+
+        val proposedTimesMs = buildScheduleTimesMs(start, end, doseCount, antiOverlap)
         val formattedTimes = proposedTimesMs.map { formatTimeMs(it) }
         val volumePerDose = volumeTotal / doseCount.toDouble()
 
@@ -315,8 +340,32 @@ class ScheduleHelperActivity : AppCompatActivity() {
         )
     }
 
-    private fun buildScheduleTimesMs(startMs: Long, endMs: Long, doseCount: Int): List<Long> {
+    /**
+     * Génération des horaires:
+     * - antiOverlapMinutes == 0 : répartition linéaire (comportement existant)
+     * - antiOverlapMinutes  > 0 : écart minimal fixe entre deux doses (= antiOverlapMinutes)
+     */
+    private fun buildScheduleTimesMs(
+        startMs: Long,
+        endMs: Long,
+        doseCount: Int,
+        antiOverlapMinutes: Int
+    ): List<Long> {
         if (doseCount == 1) return listOf(startMs)
+
+        val antiStepMs = antiOverlapMinutes.toLong() * MS_PER_MINUTE
+
+        // ✅ Mode anti-interférences : on impose l'écart
+        if (antiOverlapMinutes > 0) {
+            val times = (0 until doseCount).map { index ->
+                startMs + index * antiStepMs
+            }
+            // Sécurité : si jamais une valeur dépasse end (normalement déjà bloqué par validateInputs)
+            if (times.last() > endMs) return emptyList()
+            return times
+        }
+
+        // ✅ Mode historique : répartition linéaire
         val durationMs = endMs - startMs
         val stepMs = durationMs / (doseCount - 1).toLong()
         return (0 until doseCount).map { index ->
@@ -326,8 +375,11 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
     private fun showTimePicker(initialMs: Long?, onSelected: (Long) -> Unit) {
         val calendar = Calendar.getInstance()
-        val initialHour = initialMs?.let { (it / MS_PER_HOUR).toInt() } ?: calendar.get(Calendar.HOUR_OF_DAY)
-        val initialMinute = initialMs?.let { ((it % MS_PER_HOUR) / MS_PER_MINUTE).toInt() } ?: calendar.get(Calendar.MINUTE)
+        val initialHour =
+            initialMs?.let { (it / MS_PER_HOUR).toInt() } ?: calendar.get(Calendar.HOUR_OF_DAY)
+        val initialMinute =
+            initialMs?.let { ((it % MS_PER_HOUR) / MS_PER_MINUTE).toInt() }
+                ?: calendar.get(Calendar.MINUTE)
 
         TimePickerDialog(
             this,
