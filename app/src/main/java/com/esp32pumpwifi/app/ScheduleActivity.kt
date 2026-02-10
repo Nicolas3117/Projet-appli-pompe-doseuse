@@ -114,6 +114,10 @@ class ScheduleActivity : AppCompatActivity() {
             }
 
             val pumpNumber = viewPager.currentItem + 1
+            Log.i(
+                "SCHEDULE_ADD",
+                "helper_click pump=$pumpNumber moduleId=${locked.id} isReadOnly=$isReadOnly isUnsynced=$isUnsynced"
+            )
             skipAutoCheckOnce = true
 
             val intent = Intent(this, ScheduleHelperActivity::class.java).apply {
@@ -226,7 +230,132 @@ class ScheduleActivity : AppCompatActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_SCHEDULE_HELPER || resultCode != RESULT_OK || data == null) return
+
+        val extras = data?.extras
+        val extraKeys = extras?.keySet()?.joinToString(",") ?: "none"
+        val pumpExtra = data?.getIntExtra(ScheduleHelperActivity.EXTRA_PUMP_NUMBER, -1) ?: -1
+        val moduleIdExtra = data?.getStringExtra(ScheduleHelperActivity.EXTRA_MODULE_ID)
+
+        Log.i(
+            "SCHEDULE_ADD",
+            "helper_result requestCode=$requestCode resultCode=$resultCode extras=[$extraKeys] pumpExtra=$pumpExtra moduleIdExtra=$moduleIdExtra"
+        )
+
+        if (requestCode != REQUEST_SCHEDULE_HELPER) return
+        if (resultCode != RESULT_OK || data == null) return
+
+        val active = lockedModule
+        if (active == null) {
+            Toast.makeText(this, "Module verrouillé introuvable.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        if (moduleIdExtra != active.id.toString()) {
+            Toast.makeText(this, "Ajout ignoré : module différent.", Toast.LENGTH_LONG).show()
+            Log.w("SCHEDULE_ADD", "module_mismatch expected=${active.id} got=$moduleIdExtra")
+            return
+        }
+
+        val pump = data.getIntExtra(ScheduleHelperActivity.EXTRA_PUMP_NUMBER, -1)
+        if (pump !in 1..4) {
+            Toast.makeText(this, "Ajout ignoré : pompe invalide.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val scheduleMs = data.getLongArrayExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS)?.toList().orEmpty()
+        if (scheduleMs.isEmpty()) {
+            Toast.makeText(this, "Aucune dose à ajouter (données vides).", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val newTimes = scheduleMs.map { ScheduleAddMergeUtils.toTimeString(it) }
+        val flow = getSharedPreferences("prefs", Context.MODE_PRIVATE)
+            .getFloat("esp_${active.id}_pump${pump}_flow", 0f)
+        val volumePerDose = data.getDoubleExtra(ScheduleHelperActivity.EXTRA_VOLUME_PER_DOSE, 0.0)
+        val qtyTenth = when {
+            flow > 0f && volumePerDose > 0.0 -> (volumePerDose * 10.0).roundToInt().coerceAtLeast(1)
+            else -> 0
+        }
+
+        val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
+        val key = "esp_${active.id}_pump$pump"
+        val existing = schedulesPrefs.getString(key, null)
+            ?.let { PumpScheduleJson.fromJson(it) }
+            ?.toList()
+            .orEmpty()
+
+        val beforeProgramCount = ProgramStore.count(this, active.id, pump)
+        Log.i(
+            "SCHEDULE_ADD",
+            "before_merge pump=$pump existingSchedules=${existing.size} programCount=$beforeProgramCount"
+        )
+
+        val mergeResult = ScheduleAddMergeUtils.mergeSchedules(
+            existing = existing,
+            newTimes = newTimes,
+            pumpNumber = pump,
+            quantityTenthForNewLines = qtyTenth
+        )
+
+        if (mergeResult.wasAlreadyFull) {
+            Toast.makeText(this, "Pompe déjà pleine (12 doses max).", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        schedulesPrefs.edit()
+            .putString(key, PumpScheduleJson.toJson(mergeResult.merged, gson))
+            .apply()
+
+        val first = mergeResult.merged.firstOrNull()?.time ?: "none"
+        val last = mergeResult.merged.lastOrNull()?.time ?: "none"
+        Log.i(
+            "SCHEDULE_ADD",
+            "after_merge pump=$pump mergedSize=${mergeResult.merged.size} first=$first last=$last added=${mergeResult.addedCount} duplicates=${mergeResult.skippedDuplicateCount}"
+        )
+
+        while (ProgramStore.count(this, active.id, pump) > 0) {
+            ProgramStore.removeLine(this, active.id, pump, 0)
+        }
+        if (flow > 0f) {
+            mergeResult.merged.forEach { schedule ->
+                if (!schedule.enabled) return@forEach
+                val parsed = ScheduleOverlapUtils.parseTimeOrNull(schedule.time) ?: return@forEach
+                val qtyMl = schedule.quantityTenth / 10f
+                val qtyMs = (qtyMl / flow * 1000f).roundToInt()
+                    .coerceIn(MIN_PUMP_DURATION_MS, MAX_PUMP_DURATION_MS)
+                ProgramStore.addLine(
+                    this,
+                    active.id,
+                    pump,
+                    ProgramLine(
+                        enabled = true,
+                        pump = pump,
+                        hour = parsed.first,
+                        minute = parsed.second,
+                        qtyMs = qtyMs
+                    )
+                )
+            }
+        }
+
+        val rebuiltCount = ProgramStore.count(this, active.id, pump)
+        Log.i(
+            "PROGRAM_BUILD",
+            "after_helper_merge pump=$pump flow=$flow rebuiltCount=$rebuiltCount"
+        )
+
+        adapter.updateSchedules(pump, mergeResult.merged)
+        val totalTenth = mergeResult.merged.filter { it.enabled }.sumOf { it.quantityTenth }
+        tabsViewModel.setActiveTotal(pump, totalTenth)
+
+        Log.i(
+            "SCHEDULE_ADD",
+            "after_ui pump=$pump adapterUpdateCalled=true totalTenth=$totalTenth"
+        )
+
+        if (mergeResult.addedCount <= 0) {
+            Toast.makeText(this, "Aucune nouvelle dose (doublons).", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -602,5 +731,7 @@ class ScheduleActivity : AppCompatActivity() {
         const val EXTRA_INITIAL_PROGRAM_576 = "EXTRA_INITIAL_PROGRAM_576"
         const val EXTRA_MODULE_ID = "EXTRA_MODULE_ID"
         private const val REQUEST_SCHEDULE_HELPER = 2001
+        private const val MIN_PUMP_DURATION_MS = 50
+        private const val MAX_PUMP_DURATION_MS = 600_000
     }
 }
