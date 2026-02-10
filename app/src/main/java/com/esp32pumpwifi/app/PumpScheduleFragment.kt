@@ -2,6 +2,7 @@ package com.esp32pumpwifi.app
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -10,9 +11,11 @@ import android.widget.EditText
 import android.widget.ListView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.core.widget.addTextChangedListener
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import com.google.gson.Gson
+import com.google.android.material.textfield.TextInputLayout
 import kotlin.math.roundToInt
 
 class PumpScheduleFragment : Fragment() {
@@ -179,51 +182,143 @@ class PumpScheduleFragment : Fragment() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_add_schedule, null)
         val etTime = dialogView.findViewById<EditText>(R.id.et_time)
         val etQuantity = dialogView.findViewById<EditText>(R.id.et_quantity)
+        val timeLayout = dialogView.findViewById<TextInputLayout>(R.id.layout_time)
+        val quantityLayout = dialogView.findViewById<TextInputLayout>(R.id.layout_quantity)
         QuantityInputUtils.applyInputFilter(etQuantity)
 
-        AlertDialog.Builder(requireContext())
+        var addBtn: android.widget.Button? = null
+
+        val validateManualInput: () -> Unit = manual@{
+            timeLayout.error = null
+            quantityLayout.error = null
+
+            if (schedules.size >= MAX_SCHEDULES_PER_PUMP) {
+                timeLayout.error = "Aucune place disponible (max 12)."
+                addBtn?.isEnabled = false
+                return@manual
+            }
+
+            val espId = resolveEspIdOrNull()
+            val antiMin = if (espId != null) {
+                requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
+                    .getInt("esp_${espId}_anti_overlap_minutes", 0)
+                    .coerceAtLeast(0)
+            } else 0
+
+            val parsed = ScheduleOverlapUtils.parseTimeOrNull(etTime.text?.toString()?.trim().orEmpty())
+            val qtyTenth = QuantityInputUtils.parseQuantityTenth(etQuantity.text?.toString().orEmpty())
+
+            if (parsed == null) {
+                timeLayout.error = "Format invalide"
+                addBtn?.isEnabled = false
+                return@manual
+            }
+            if (qtyTenth == null) {
+                quantityLayout.error = "Format invalide"
+                addBtn?.isEnabled = false
+                return@manual
+            }
+            if (espId == null) {
+                timeLayout.error = "Module introuvable"
+                addBtn?.isEnabled = false
+                return@manual
+            }
+
+            val prefs = requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
+            val flow = prefs.getFloat("esp_${espId}_pump${pumpNumber}_flow", 0f)
+            val startMs = (parsed.first * 3600L + parsed.second * 60L) * 1000L
+            val volumeMl = QuantityInputUtils.quantityMl(qtyTenth).toDouble()
+            val durationMs = DoseValidationUtils.computeDurationMs(volumeMl, flow)
+
+            Log.i(
+                "MANUAL_VALIDATE",
+                "input pump=$pumpNumber startMs=$startMs qtyTenth=$qtyTenth volumeMl=$volumeMl flow=$flow antiMin=$antiMin"
+            )
+
+            if (durationMs == null) {
+                quantityLayout.error = "Débit non calibré : impossible de calculer la durée."
+                addBtn?.isEnabled = false
+                Log.w("MANUAL_VALIDATE", "invalid reason=flow_missing pump=$pumpNumber flow=$flow")
+                return@manual
+            }
+
+            val candidate = DoseInterval(pump = pumpNumber, startMs = startMs, endMs = startMs + durationMs)
+            if (candidate.endMs >= 86_400_000L) {
+                val endText = String.format(java.util.Locale.getDefault(), "%02d:%02d", ((candidate.endMs % 86_400_000L) / 3_600_000L).toInt(), (((candidate.endMs % 3_600_000L) / 60_000L).toInt()))
+                quantityLayout.error = "Cette dose finirait après minuit (fin estimée : $endText). Avancez l’heure ou réduisez le volume."
+                addBtn?.isEnabled = false
+                Log.w("MANUAL_VALIDATE", "invalid reason=overflow endMs=${candidate.endMs}")
+                return@manual
+            }
+
+            val allSchedules = (1..4).associateWith { pump ->
+                val json = requireContext().getSharedPreferences("schedules", Context.MODE_PRIVATE)
+                    .getString("esp_${espId}_pump$pump", null)
+                if (json.isNullOrBlank()) emptyList() else runCatching { PumpScheduleJson.fromJson(json).toList() }.getOrDefault(emptyList())
+            }
+            val flowByPump = (1..4).associateWith { pump ->
+                prefs.getFloat("esp_${espId}_pump${pump}_flow", 0f)
+            }
+            val existing = DoseValidationUtils.buildIntervalsFromSchedules(allSchedules, flowByPump)
+            val validation = DoseValidationUtils.validateNewInterval(candidate, existing, antiMin)
+
+            if (!validation.isValid) {
+                when (validation.reason) {
+                    DoseValidationReason.OVERLAP_SAME_PUMP -> {
+                        val cStart = ScheduleAddMergeUtils.toTimeString(validation.conflictStartMs ?: 0L)
+                        val cEnd = ScheduleAddMergeUtils.toTimeString((validation.conflictEndMs ?: 0L).coerceAtMost(86_399_999L))
+                        timeLayout.error = "Une distribution est déjà en cours à ce moment (P${validation.conflictPump} de $cStart à $cEnd)."
+                    }
+                    DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
+                        val next = validation.nextAllowedStartMs?.let { ScheduleAddMergeUtils.toTimeString(it) } ?: "--:--"
+                        timeLayout.error = "Respectez au moins $antiMin min après la fin précédente. Prochaine heure possible : $next."
+                    }
+                    DoseValidationReason.OVERFLOW_MIDNIGHT -> {
+                        val endText = ScheduleAddMergeUtils.toTimeString(validation.overflowEndMs ?: 0L)
+                        quantityLayout.error = "Cette dose finirait après minuit (fin estimée : $endText). Avancez l’heure ou réduisez le volume."
+                    }
+                    else -> timeLayout.error = "Format invalide"
+                }
+                addBtn?.isEnabled = false
+                Log.w(
+                    "MANUAL_VALIDATE",
+                    "invalid reason=${validation.reason} candidate=[${candidate.startMs},${candidate.endMs}) antiMin=$antiMin nextAllowed=${validation.nextAllowedStartMs}"
+                )
+                return@manual
+            }
+
+            addBtn?.isEnabled = true
+            Log.i(
+                "MANUAL_VALIDATE",
+                "valid pump=$pumpNumber interval=[${candidate.startMs},${candidate.endMs}) antiMin=$antiMin"
+            )
+        }
+
+        val dialog = AlertDialog.Builder(requireContext())
             .setTitle("Ajouter une programmation")
             .setView(dialogView)
-            .setPositiveButton("Enregistrer") { _, _ ->
+            .setPositiveButton("Enregistrer", null)
+            .setNegativeButton("Annuler", null)
+            .create()
 
-                // ✅ Limite 12 TOTAL (actives + désactivées)
-                if (schedules.size >= MAX_SCHEDULES_PER_PUMP) {
-                    showLimitReachedPopup()
-                    return@setPositiveButton
-                }
+        dialog.setOnShowListener {
+            addBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            validateManualInput.let { it() }
+            addBtn?.setOnClickListener {
+                validateManualInput.let { it() }
+                if (addBtn?.isEnabled != true) return@setOnClickListener
 
                 val time = etTime.text.toString().trim()
-                val qtyTenth = QuantityInputUtils.parseQuantityTenth(etQuantity.text.toString())
-
-                if (parseTimeOrNull(time) == null || qtyTenth == null) {
-                    Toast.makeText(requireContext(), "Format invalide", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-
-                val check = detectConflicts(time, qtyTenth)
-
-                if (check.blockingMessage != null) {
-                    if (check.isPopup) showBlockingPopup(check.blockingMessage)
-                    else Toast.makeText(requireContext(), check.blockingMessage, Toast.LENGTH_LONG).show()
-                    return@setPositiveButton
-                }
-
-                if (check.warningMessage != null) {
-                    AlertDialog.Builder(requireContext())
-                        .setTitle("Chevauchement détecté")
-                        .setMessage(check.warningMessage)
-                        .setPositiveButton("Oui") { _, _ ->
-                            addSchedule(time, qtyTenth)
-                        }
-                        .setNegativeButton("Non", null)
-                        .show()
-                    return@setPositiveButton
-                }
-
+                val qtyTenth = QuantityInputUtils.parseQuantityTenth(etQuantity.text.toString()) ?: return@setOnClickListener
                 addSchedule(time, qtyTenth)
+                dialog.dismiss()
             }
-            .setNegativeButton("Annuler", null)
-            .show()
+        }
+
+        etTime.addTextChangedListener { validateManualInput.let { it() } }
+        etQuantity.addTextChangedListener { validateManualInput.let { it() } }
+
+        dialog.show()
     }
 
     private fun addSchedule(time: String, qtyTenth: Int) {

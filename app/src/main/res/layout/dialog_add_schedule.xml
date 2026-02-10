@@ -8,25 +8,37 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
         android:text="Nouvelle programmation"
         android:textSize="18sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="16dp" />
+        android:textStyle="bold" />
 
-    <EditText
-        android:id="@+id/et_time"
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/layout_time"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Heure (HH:MM)"
-        android:inputType="time"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginBottom="12dp"
+        android:hint="Heure (HH:MM)">
 
-    <EditText
-        android:id="@+id/et_quantity"
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/et_time"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="time" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/layout_quantity"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Volume (mL)"
-        android:inputType="numberDecimal"
-        android:digits="0123456789.," />
+        android:hint="Volume (mL)">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/et_quantity"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:digits="0123456789.,"
+            android:inputType="numberDecimal" />
+    </com.google.android.material.textfield.TextInputLayout>
 
 </LinearLayout>
