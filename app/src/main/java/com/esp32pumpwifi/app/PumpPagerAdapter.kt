@@ -8,7 +8,17 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.viewpager2.adapter.FragmentStateAdapter
 
-class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activity) {
+/**
+ * Adapter ViewPager2 des 4 pompes.
+ *
+ * ✅ Patch minimal :
+ * - support optionnel d’un espId verrouillé pour éviter tout mélange multi-modules
+ * - si lockedEspId == null : comportement inchangé (fragment utilisera getActive() comme avant)
+ */
+class PumpPagerAdapter(
+    activity: AppCompatActivity,
+    private val lockedEspId: Long? = null
+) : FragmentStateAdapter(activity) {
 
     private val fragmentManager = activity.supportFragmentManager
     private var readOnly = false
@@ -53,9 +63,17 @@ class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activ
 
     override fun createFragment(position: Int): Fragment {
         val pumpNumber = position + 1
-        return PumpScheduleFragment.newInstance(pumpNumber).also { fragment ->
+
+        // ✅ Si espId verrouillé fourni : on crée le fragment avec espId -> anti mélange multi-modules
+        val fragment = if (lockedEspId != null) {
+            PumpScheduleFragment.newInstance(pumpNumber, lockedEspId)
+        } else {
+            PumpScheduleFragment.newInstance(pumpNumber)
+        }
+
+        return fragment.also {
             // OK même avant onCreateView : le fragment appliquera l’état lors de applyReadOnlyState()
-            if (readOnly) fragment.setReadOnly(true)
+            if (readOnly) it.setReadOnly(true)
         }
     }
 
@@ -100,8 +118,8 @@ class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activ
             Log.i(
                 "SCHED_TRACE",
                 "updateSchedules pump=$pumpNumber fragmentFound=$fragmentFoundMethod " +
-                    "fragment=${fragment?.hashCode()} isAdded=${fragment?.isAdded} " +
-                    "viewReady=${fragment?.view != null} -> pendingSchedules set"
+                        "fragment=${fragment?.hashCode()} isAdded=${fragment?.isAdded} " +
+                        "viewReady=${fragment?.view != null} -> pendingSchedules set"
             )
             return
         }
@@ -110,7 +128,7 @@ class PumpPagerAdapter(activity: AppCompatActivity) : FragmentStateAdapter(activ
             Log.i(
                 "SCHED_TRACE",
                 "updateSchedules pump=$pumpNumber fragmentFound=$fragmentFoundMethod " +
-                    "fragment=${fragment.hashCode()} isAdded=${fragment.isAdded} viewReady=${fragment.view != null}"
+                        "fragment=${fragment.hashCode()} isAdded=${fragment.isAdded} viewReady=${fragment.view != null}"
             )
             fragment.replaceSchedules(schedules)
         }

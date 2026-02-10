@@ -7,7 +7,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -30,21 +29,37 @@ class PumpScheduleFragment : Fragment() {
     private var addButton: Button? = null
     private var listView: ListView? = null
 
+    // ✅ Optionnel : module verrouillé (anti mélange multi-modules)
+    private var lockedEspId: Long? = null
+
     companion object {
         const val MAX_PUMP_DURATION_SEC = 600
         private const val MAX_SCHEDULES_PER_PUMP = 12
 
+        private const val ARG_PUMP_NUMBER = "pumpNumber"
+        private const val ARG_ESP_ID = "espId" // Long
+
         fun newInstance(pumpNumber: Int): PumpScheduleFragment =
             PumpScheduleFragment().apply {
                 arguments = Bundle().apply {
-                    putInt("pumpNumber", pumpNumber)
+                    putInt(ARG_PUMP_NUMBER, pumpNumber)
+                }
+            }
+
+        // ✅ Variante compatible future (si ScheduleActivity/Adapter passe l’ID module)
+        fun newInstance(pumpNumber: Int, espId: Long): PumpScheduleFragment =
+            PumpScheduleFragment().apply {
+                arguments = Bundle().apply {
+                    putInt(ARG_PUMP_NUMBER, pumpNumber)
+                    putLong(ARG_ESP_ID, espId)
                 }
             }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        pumpNumber = arguments?.getInt("pumpNumber") ?: 1
+        pumpNumber = arguments?.getInt(ARG_PUMP_NUMBER) ?: 1
+        lockedEspId = arguments?.takeIf { it.containsKey(ARG_ESP_ID) }?.getLong(ARG_ESP_ID)
     }
 
     override fun onCreateView(
@@ -60,6 +75,7 @@ class PumpScheduleFragment : Fragment() {
             onScheduleChanged = {
                 // ✅ important : l'ordre affiché doit rester cohérent
                 sortSchedulesByTime()
+                enforceMaxSchedulesCap()
                 saveSchedules()
                 syncToProgramStore()
                 notifyActiveTotalChanged()
@@ -89,6 +105,13 @@ class PumpScheduleFragment : Fragment() {
     }
 
     // ---------------------------------------------------------------------
+    // ✅ Résolution espId : priorité au verrouillage, sinon getActive() (comportement actuel)
+    // ---------------------------------------------------------------------
+    private fun resolveEspIdOrNull(): Long? {
+        return lockedEspId ?: Esp32Manager.getActive(requireContext())?.id
+    }
+
+    // ---------------------------------------------------------------------
     // ✅ Tri stable par heure (utile pour #1..#12)
     // ---------------------------------------------------------------------
     private fun sortSchedulesByTime() {
@@ -96,6 +119,15 @@ class PumpScheduleFragment : Fragment() {
             val p = parseTimeOrNull(it.time)
             if (p == null) Int.MAX_VALUE else (p.first * 60 + p.second)
         }.thenBy { it.time })
+    }
+
+    // ✅ Cap dur (évite JSON corrompu > 12)
+    private fun enforceMaxSchedulesCap() {
+        if (schedules.size <= MAX_SCHEDULES_PER_PUMP) return
+        // On garde les 12 premières après tri
+        while (schedules.size > MAX_SCHEDULES_PER_PUMP) {
+            schedules.removeAt(schedules.size - 1)
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -109,11 +141,11 @@ class PumpScheduleFragment : Fragment() {
     // 🔤 NOM PERSONNALISÉ DE LA POMPE
     // ---------------------------------------------------------------------
     private fun getPumpName(pump: Int): String {
-        val active = Esp32Manager.getActive(requireContext()) ?: return "Pompe $pump"
+        val espId = resolveEspIdOrNull() ?: return "Pompe $pump"
         val prefs = requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
         return prefs.getString(
-            "esp_${active.id}_pump${pump}_name",
+            "esp_${espId}_pump${pump}_name",
             "Pompe $pump"
         ) ?: "Pompe $pump"
     }
@@ -208,6 +240,7 @@ class PumpScheduleFragment : Fragment() {
 
         // ✅ tri avant affichage (numérotation stable)
         sortSchedulesByTime()
+        enforceMaxSchedulesCap()
 
         if (this::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
@@ -225,13 +258,13 @@ class PumpScheduleFragment : Fragment() {
         time: String,
         quantityTenth: Int
     ): ConflictResult {
-        val active = Esp32Manager.getActive(requireContext()) ?: return ConflictResult()
+        val espId = resolveEspIdOrNull() ?: return ConflictResult()
         val prefs = requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
         val startMs = ScheduleOverlapUtils.timeToStartMs(time)
             ?: return ConflictResult(blockingMessage = "Format invalide", isPopup = false)
 
-        val flow = prefs.getFloat("esp_${active.id}_pump${pumpNumber}_flow", 0f)
+        val flow = prefs.getFloat("esp_${espId}_pump${pumpNumber}_flow", 0f)
         if (flow <= 0f) {
             return ConflictResult(blockingMessage = "Pompe non calibrée", isPopup = false)
         }
@@ -255,7 +288,7 @@ class PumpScheduleFragment : Fragment() {
 
         val overlapResult = ScheduleOverlapUtils.findOverlaps(
             context = requireContext(),
-            espId = active.id,
+            espId = espId,
             pumpNumber = pumpNumber,
             candidateWindow = ScheduleOverlapUtils.ScheduleWindow(startMs, endMs),
             samePumpSchedules = schedules
@@ -293,13 +326,17 @@ class PumpScheduleFragment : Fragment() {
     // 💾 SAUVEGARDE / CHARGEMENT
     // ---------------------------------------------------------------------
     private fun saveSchedules() {
-        val active = Esp32Manager.getActive(requireContext()) ?: return
+        val espId = resolveEspIdOrNull() ?: return
+
+        // ✅ normalise avant persist
+        sortSchedulesByTime()
+        enforceMaxSchedulesCap()
 
         requireContext()
             .getSharedPreferences("schedules", Context.MODE_PRIVATE)
             .edit()
             .putString(
-                "esp_${active.id}_pump$pumpNumber",
+                "esp_${espId}_pump$pumpNumber",
                 PumpScheduleJson.toJson(schedules, gson)
             )
             .apply()
@@ -307,9 +344,9 @@ class PumpScheduleFragment : Fragment() {
 
     // Retourne true si on a réellement chargé des données depuis prefs
     private fun loadSchedules(): Boolean {
-        val active = Esp32Manager.getActive(requireContext()) ?: return false
+        val espId = resolveEspIdOrNull() ?: return false
 
-        val key = "esp_${active.id}_pump$pumpNumber"
+        val key = "esp_${espId}_pump$pumpNumber"
         val json = requireContext()
             .getSharedPreferences("schedules", Context.MODE_PRIVATE)
             .getString(key, null) ?: return false
@@ -319,8 +356,9 @@ class PumpScheduleFragment : Fragment() {
         schedules.clear()
         schedules.addAll(loaded)
 
-        // ✅ tri avant affichage (numérotation stable)
+        // ✅ tri + cap dur (évite injection > 12)
         sortSchedulesByTime()
+        enforceMaxSchedulesCap()
 
         if (this::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
@@ -333,14 +371,14 @@ class PumpScheduleFragment : Fragment() {
     // 🔁 SYNC → ProgramStore
     // ---------------------------------------------------------------------
     private fun syncToProgramStore() {
-        val active = Esp32Manager.getActive(requireContext()) ?: return
+        val espId = resolveEspIdOrNull() ?: return
         val prefs = requireContext().getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
-        while (ProgramStore.count(requireContext(), active.id, pumpNumber) > 0) {
-            ProgramStore.removeLine(requireContext(), active.id, pumpNumber, 0)
+        while (ProgramStore.count(requireContext(), espId, pumpNumber) > 0) {
+            ProgramStore.removeLine(requireContext(), espId, pumpNumber, 0)
         }
 
-        val flow = prefs.getFloat("esp_${active.id}_pump${pumpNumber}_flow", 0f)
+        val flow = prefs.getFloat("esp_${espId}_pump${pumpNumber}_flow", 0f)
         if (flow <= 0f) return
 
         val minMl = flow * (ManualDoseActivity.MIN_PUMP_DURATION_MS / 1000f)
@@ -385,7 +423,7 @@ class PumpScheduleFragment : Fragment() {
                 qtyMs = durationMs
             )
 
-            ProgramStore.addLine(requireContext(), active.id, pumpNumber, line)
+            ProgramStore.addLine(requireContext(), espId, pumpNumber, line)
         }
 
         if (ignoredCount > 0) {
@@ -407,8 +445,9 @@ class PumpScheduleFragment : Fragment() {
         schedules.clear()
         schedules.addAll(newSchedules)
 
-        // ✅ tri avant affichage (numérotation stable)
+        // ✅ tri + cap dur (évite injection > 12)
         sortSchedulesByTime()
+        enforceMaxSchedulesCap()
 
         if (this::adapter.isInitialized) {
             adapter.notifyDataSetChanged()
