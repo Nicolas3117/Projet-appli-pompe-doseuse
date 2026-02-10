@@ -49,6 +49,7 @@ class ScheduleActivity : AppCompatActivity() {
     private var didAutoCheckOnResume = false
     private var returningFromHelper = false
     private var exitInProgress = false
+    private val instanceId: String = Integer.toHexString(System.identityHashCode(this))
 
     private var isReadOnly = false
     private var isUnsynced = false
@@ -60,6 +61,9 @@ class ScheduleActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_schedule)
+
+        didAutoCheckOnResume = savedInstanceState?.getBoolean(STATE_DID_AUTO_CHECK_ON_RESUME) ?: false
+        returningFromHelper = savedInstanceState?.getBoolean(STATE_RETURNING_FROM_HELPER) ?: false
 
         toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
@@ -78,6 +82,10 @@ class ScheduleActivity : AppCompatActivity() {
         }
 
         val expectedModuleId = intent.getStringExtra(EXTRA_MODULE_ID)
+        Log.i(
+            TAG_EXIT_SYNC,
+            "onCreate instance=$instanceId saved=${savedInstanceState != null} moduleIdExtra=$expectedModuleId didAutoCheckOnResume=$didAutoCheckOnResume returningFromHelper=$returningFromHelper"
+        )
 
         // ✅ anti mélange multi-modules AVANT tout
         if (expectedModuleId != null && activeModule.id.toString() != expectedModuleId) {
@@ -124,7 +132,10 @@ class ScheduleActivity : AppCompatActivity() {
                 putExtra(ScheduleHelperActivity.EXTRA_MODULE_ID, locked.id.toString())
             }
             returningFromHelper = true
-            Log.i(TAG_EXIT_SYNC, "helper_navigation start returningFromHelper=true")
+            Log.i(
+                TAG_EXIT_SYNC,
+                "launch_helper instance=$instanceId returningFromHelper set true requestCode=$REQUEST_SCHEDULE_HELPER"
+            )
             startActivityForResult(intent, REQUEST_SCHEDULE_HELPER)
         }
 
@@ -184,6 +195,10 @@ class ScheduleActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        Log.i(
+            TAG_EXIT_SYNC,
+            "onResume instance=$instanceId returningFromHelper=$returningFromHelper didAutoCheckOnResume=$didAutoCheckOnResume isFinishing=$isFinishing lockedModuleId=${lockedModule?.id}"
+        )
 
         // ✅ Option B :
         // - Au retour du helper, il est NORMAL que local != ESP tant que l'utilisateur n'a pas cliqué "Envoyer".
@@ -193,17 +208,19 @@ class ScheduleActivity : AppCompatActivity() {
         if (returningFromHelper) {
             Log.i(
                 TAG_EXIT_SYNC,
-                "onResume skip_auto_check reason=return_helper didAutoCheckOnResume=$didAutoCheckOnResume"
+                "onResume instance=$instanceId action=skip_auto_check reason=return_helper didAutoCheckOnResume=$didAutoCheckOnResume"
             )
+            returningFromHelper = false
+            Log.i(TAG_EXIT_SYNC, "onResume instance=$instanceId returningFromHelper reset false after helper return")
             return
         }
 
         if (didAutoCheckOnResume) {
-            Log.i(TAG_EXIT_SYNC, "onResume skip_auto_check reason=already_done didAutoCheckOnResume=true")
+            Log.i(TAG_EXIT_SYNC, "onResume instance=$instanceId action=skip_auto_check reason=already_done")
             return
         }
         didAutoCheckOnResume = true
-        Log.i(TAG_EXIT_SYNC, "onResume auto_check_on_open start reason=first_open didAutoCheckOnResume=true")
+        Log.i(TAG_EXIT_SYNC, "onResume instance=$instanceId action=auto_check_on_open reason=first_open")
         autoCheckProgramOnOpen()
     }
 
@@ -211,10 +228,27 @@ class ScheduleActivity : AppCompatActivity() {
         super.onPause()
         Log.i(
             TAG_EXIT_SYNC,
-            "onPause didAutoCheckOnResume_before=$didAutoCheckOnResume isFinishing=$isFinishing returningFromHelper=$returningFromHelper"
+            "onPause instance=$instanceId didAutoCheckOnResume_before=$didAutoCheckOnResume isFinishing=$isFinishing returningFromHelper=$returningFromHelper"
         )
-        didAutoCheckOnResume = false
-        Log.i(TAG_EXIT_SYNC, "onPause didAutoCheckOnResume_after=$didAutoCheckOnResume")
+        Log.i(TAG_EXIT_SYNC, "onPause instance=$instanceId didAutoCheckOnResume_after=$didAutoCheckOnResume")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Log.i(
+            TAG_EXIT_SYNC,
+            "onStop instance=$instanceId didAutoCheckOnResume=$didAutoCheckOnResume returningFromHelper=$returningFromHelper isFinishing=$isFinishing"
+        )
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(STATE_DID_AUTO_CHECK_ON_RESUME, didAutoCheckOnResume)
+        outState.putBoolean(STATE_RETURNING_FROM_HELPER, returningFromHelper)
+        Log.i(
+            TAG_EXIT_SYNC,
+            "onSaveInstanceState instance=$instanceId didAutoCheckOnResume=$didAutoCheckOnResume returningFromHelper=$returningFromHelper"
+        )
+        super.onSaveInstanceState(outState)
     }
 
     @Deprecated("Deprecated in Java")
@@ -232,13 +266,10 @@ class ScheduleActivity : AppCompatActivity() {
         )
         Log.i(
             TAG_EXIT_SYNC,
-            "onActivityResult return_from_helper requestCode=$requestCode resultCode=$resultCode returningFromHelper_before=$returningFromHelper"
+            "result_from_helper instance=$instanceId requestCode=$requestCode resultCode=$resultCode returningFromHelper(before)=$returningFromHelper"
         )
 
         if (requestCode != REQUEST_SCHEDULE_HELPER) return
-
-        returningFromHelper = false
-        Log.i(TAG_EXIT_SYNC, "onActivityResult return_from_helper returningFromHelper_after=false")
 
         if (resultCode != RESULT_OK || data == null) return
 
@@ -262,6 +293,10 @@ class ScheduleActivity : AppCompatActivity() {
 
         val scheduleMs =
             data.getLongArrayExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS)?.toList().orEmpty()
+        Log.i(
+            TAG_EXIT_SYNC,
+            "result_from_helper instance=$instanceId scheduleMs_size=${scheduleMs.size} returningFromHelper(after)=$returningFromHelper"
+        )
 
         Log.i(
             TAG_TIME_BUG,
@@ -605,9 +640,11 @@ class ScheduleActivity : AppCompatActivity() {
      */
     private fun autoCheckProgramOnOpen() {
         lifecycleScope.launch {
+            Log.i(TAG_EXIT_SYNC, "AUTO_CHECK_START instance=$instanceId")
             val active = lockedModule ?: run {
                 setUnsyncedState(true, "Synchronisation impossible")
                 showUnsyncedDialog()
+                Log.w(TAG_EXIT_SYNC, "AUTO_CHECK_END instance=$instanceId result=locked_module_null")
                 return@launch
             }
 
@@ -621,6 +658,7 @@ class ScheduleActivity : AppCompatActivity() {
             if (program576 == null) {
                 setUnsyncedState(true, "Synchronisation impossible")
                 showUnsyncedDialog()
+                Log.w(TAG_EXIT_SYNC, "AUTO_CHECK_END instance=$instanceId result=program576_null")
                 return@launch
             }
 
@@ -629,6 +667,7 @@ class ScheduleActivity : AppCompatActivity() {
             if (!okSynced) {
                 setUnsyncedState(true, "Synchronisation impossible")
                 showUnsyncedDialog()
+                Log.w(TAG_EXIT_SYNC, "AUTO_CHECK_END instance=$instanceId result=store_sync_failed")
                 return@launch
             }
 
@@ -637,6 +676,8 @@ class ScheduleActivity : AppCompatActivity() {
             val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
             val editor = schedulesPrefs.edit()
 
+            var removeLineCalls = 0
+            val importedCounts = mutableMapOf<Int, Int>()
             for (pump in 1..4) {
                 // Actives ESP: depuis ProgramStoreSynced (déjà filtrées enable=1 + garde-fous)
                 val espLines =
@@ -697,8 +738,10 @@ class ScheduleActivity : AppCompatActivity() {
 
                 while (ProgramStore.count(this@ScheduleActivity, active.id, pump) > 0) {
                     ProgramStore.removeLine(this@ScheduleActivity, active.id, pump, 0)
+                    removeLineCalls++
                 }
 
+                var importedCount = 0
                 espLines.take(12).forEach { line12 ->
                     if (line12.length != 12 || !line12.all(Char::isDigit)) return@forEach
                     if (line12[0] != '1') return@forEach
@@ -723,13 +766,19 @@ class ScheduleActivity : AppCompatActivity() {
                             qtyMs = ms
                         )
                     )
+                    importedCount++
                 }
+                importedCounts[pump] = importedCount
             }
 
             editor.apply()
 
             setUnsyncedState(false, null)
             setReadOnlyMode(false, null)
+            Log.i(
+                TAG_EXIT_SYNC,
+                "AUTO_CHECK_END instance=$instanceId moduleId=${active.id} imported=$importedCounts removeLineCalls=$removeLineCalls"
+            )
         }
     }
 
@@ -767,5 +816,7 @@ class ScheduleActivity : AppCompatActivity() {
         private const val TAG_TIME_BUG = "TIME_BUG"
         private const val MIN_PUMP_DURATION_MS = 50
         private const val MAX_PUMP_DURATION_MS = 600_000
+        private const val STATE_DID_AUTO_CHECK_ON_RESUME = "STATE_DID_AUTO_CHECK_ON_RESUME"
+        private const val STATE_RETURNING_FROM_HELPER = "STATE_RETURNING_FROM_HELPER"
     }
 }
