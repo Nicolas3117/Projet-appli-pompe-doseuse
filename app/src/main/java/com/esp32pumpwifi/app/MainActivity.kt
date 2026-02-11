@@ -26,12 +26,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.Calendar
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
@@ -74,11 +74,10 @@ class MainActivity : AppCompatActivity() {
 
     // ================== FUTUR PLAN (Option A) ==================
     private data class FuturePlan(val count: Int, val ml: Float)
+    private data class DailyDone(val count: Int, val ml: Float)
 
     /**
      * Calcule le "reste à faire aujourd'hui" (strictement futur) à partir de ProgramStoreSynced.
-     * - Ne touche pas aux compteurs "done" (DailyProgramTrackingStore)
-     * - Évite le double comptage en excluant les lignes à la minute "now"
      */
     private fun computeFuturePlan(espId: Long, pumpNum: Int, flow: Float): FuturePlan {
         if (flow <= 0f) return FuturePlan(0, 0f)
@@ -86,8 +85,8 @@ class MainActivity : AppCompatActivity() {
         val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
         if (encodedLines.isEmpty()) return FuturePlan(0, 0f)
 
-        val now = Calendar.getInstance()
-        val nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+        val nowLocal = Instant.ofEpochMilli(System.currentTimeMillis()).atZone(ZoneId.systemDefault()).toLocalTime()
+        val nowMinutes = nowLocal.hour * 60 + nowLocal.minute
 
         var futureCount = 0
         var futureMl = 0f
@@ -240,7 +239,6 @@ class MainActivity : AppCompatActivity() {
 
         tvActiveModule.text = "Sélectionné : ${activeModule.displayName}"
 
-        DailyProgramTrackingStore.resetIfNewDay(this)
         TankScheduleHelper.recalculateFromLastTime(this, activeModule.id)
 
         updateTankSummary(activeModule)
@@ -539,7 +537,22 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateDailySummary(activeModule: EspModule) {
         dailySummaryContainer.visibility = View.VISIBLE
-        for (pumpNum in 1..4) updateOneDaily(activeModule.id, pumpNum)
+        lifecycleScope.launch(Dispatchers.IO) {
+            DailyDoseStore.buildAutoDoseEventsForToday(this@MainActivity, activeModule.id)
+            val dayStartMs = DailyDoseStore.todayRange().dayStartMs
+            val doneByPump = (1..4).associateWith { pumpNum ->
+                DailyDone(
+                    count = DailyDoseStore.countForDay(this@MainActivity, activeModule.id, pumpNum, dayStartMs),
+                    ml = DailyDoseStore.sumMlForDay(this@MainActivity, activeModule.id, pumpNum, dayStartMs)
+                )
+            }
+            withContext(Dispatchers.Main) {
+                for (pumpNum in 1..4) {
+                    val done = doneByPump[pumpNum] ?: DailyDone(0, 0f)
+                    updateOneDaily(activeModule.id, pumpNum, done)
+                }
+            }
+        }
     }
 
     private fun formatMl(value: Float): String =
@@ -616,8 +629,8 @@ class MainActivity : AppCompatActivity() {
 
         if (entries.isEmpty()) return "Aucune dose prévue"
 
-        val now = Calendar.getInstance()
-        val nowMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+        val nowLocal = Instant.ofEpochMilli(System.currentTimeMillis()).atZone(ZoneId.systemDefault()).toLocalTime()
+        val nowMinutes = nowLocal.hour * 60 + nowLocal.minute
 
         val next = entries.firstOrNull { it.minutes > nowMinutes } ?: entries.first()
         val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", next.hh, next.mm)
@@ -631,7 +644,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ================== ✅ UPDATE DAILY (Option A "béton") ==================
-    private fun updateOneDaily(espId: Long, pumpNum: Int) {
+    private fun updateOneDaily(espId: Long, pumpNum: Int, done: DailyDone) {
         val nameId = resources.getIdentifier("tv_daily_name_$pumpNum", "id", packageName)
         val progressId = resources.getIdentifier("pb_daily_$pumpNum", "id", packageName)
         val minId = resources.getIdentifier("tv_daily_min_$pumpNum", "id", packageName)
@@ -646,11 +659,8 @@ class MainActivity : AppCompatActivity() {
         val name =
             prefs.getString("esp_${espId}_pump${pumpNum}_name", "Pompe $pumpNum") ?: "Pompe $pumpNum"
 
-        // Done (immuable aujourd’hui)
-        val rawDoneDoseCountToday =
-            DailyProgramTrackingStore.getDoneDoseCountToday(this, espId, pumpNum)
-        val rawDoneMlToday =
-            DailyProgramTrackingStore.getDoneMlToday(this, espId, pumpNum)
+        val doneDoseCountToday = done.count
+        val doneMlToday = done.ml
 
         // Flow (calibration)
         val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
@@ -658,19 +668,11 @@ class MainActivity : AppCompatActivity() {
         // Future (selon programmation actuelle synced)
         val future = computeFuturePlan(espId, pumpNum, flow)
 
-        // ✅ Total journée = done + future
-        val plannedDoseCountToday = rawDoneDoseCountToday + future.count
-        val plannedMlToday = rawDoneMlToday + future.ml
+        val plannedDoseCountToday = doneDoseCountToday + future.count
+        val plannedMlToday = doneMlToday + future.ml
 
-        val (doneDoseCountToday, doneMlToday, progressValue, doseText) =
-            if (plannedDoseCountToday <= 0 || plannedMlToday <= 0f) {
-                Quad(0, 0f, 0, "Dose : 0/0")
-            } else {
-                val safeDoneDose = min(rawDoneDoseCountToday, plannedDoseCountToday)
-                val safeDoneMl = min(rawDoneMlToday, plannedMlToday)
-                val pct = (safeDoneMl / plannedMlToday * 100f).roundToInt()
-                Quad(safeDoneDose, safeDoneMl, pct, "Dose : $safeDoneDose/$plannedDoseCountToday")
-            }
+        val progressValue = if (plannedMlToday <= 0f || doneMlToday <= 0f) 0 else (doneMlToday / plannedMlToday * 100f).roundToInt()
+        val doseText = "Dose : $doneDoseCountToday/$plannedDoseCountToday"
 
         val insideText =
             if (plannedMlToday <= 0f || doneMlToday <= 0f) "${formatMl(0f)} ml"
@@ -715,11 +717,4 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Petit helper interne pour éviter 4 variables mutables
-    private data class Quad(
-        val a: Int,
-        val b: Float,
-        val c: Int,
-        val d: String
-    )
 }
