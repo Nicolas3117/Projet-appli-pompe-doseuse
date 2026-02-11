@@ -86,10 +86,53 @@ class ScheduleHelperActivity : AppCompatActivity() {
         supportActionBar?.subtitle = currentPumpName
 
         bindViews()
+        restoreTimeWindowState(savedInstanceState)
+        initDefaultWindowIfEmpty()
         computeRemainingSlots()
         preloadAntiInterferenceDefault()
         setupListeners()
         updateUi()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        startMs?.let { outState.putLong(STATE_START_MS, it) }
+        endMs?.let { outState.putLong(STATE_END_MS, it) }
+    }
+
+    private fun restoreTimeWindowState(savedInstanceState: Bundle?) {
+        if (savedInstanceState == null) return
+
+        if (savedInstanceState.containsKey(STATE_START_MS)) {
+            startMs = savedInstanceState.getLong(STATE_START_MS)
+            startInput.setText(formatTimeMs(startMs ?: 0L))
+        }
+
+        if (savedInstanceState.containsKey(STATE_END_MS)) {
+            endMs = savedInstanceState.getLong(STATE_END_MS)
+            endInput.setText(formatTimeMs(endMs ?: 0L))
+        }
+    }
+
+    private fun initDefaultWindowIfEmpty() {
+        var applied = false
+
+        if (startMs == null || startInput.text?.toString()?.trim().isNullOrEmpty()) {
+            startMs = 0L
+            startInput.setText(formatTimeMs(0L))
+            applied = true
+        }
+
+        val endOfDayMs = toMs(23, 59)
+        if (endMs == null || endInput.text?.toString()?.trim().isNullOrEmpty()) {
+            endMs = endOfDayMs
+            endInput.setText(formatTimeMs(endOfDayMs))
+            applied = true
+        }
+
+        if (applied) {
+            Log.i("HELPER_DEFAULT_WINDOW", "HELPER_DEFAULT_WINDOW applied startMs=$startMs endMs=$endMs")
+        }
     }
 
     private fun bindViews() {
@@ -704,6 +747,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
         private const val TAG_TIME_BUG = "TIME_BUG"
         private const val TAG_HELPER_VOLUME_SPLIT = "HELPER_VOLUME_SPLIT"
         private const val MS_PER_HOUR = 3_600_000L
+        private const val STATE_START_MS = "state_start_ms"
+        private const val STATE_END_MS = "state_end_ms"
 
         private fun toMs(hour: Int, minute: Int): Long {
             return (hour * 60L + minute) * MS_PER_MINUTE
