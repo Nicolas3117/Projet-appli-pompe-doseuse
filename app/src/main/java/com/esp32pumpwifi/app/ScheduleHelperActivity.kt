@@ -5,10 +5,10 @@ import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.addTextChangedListener
@@ -109,7 +109,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
         addButton = findViewById(R.id.button_add_doses)
     }
 
-
     private fun preloadAntiInterferenceDefault() {
         calibrationAntiMin = getAntiInterferenceMinutes(this, expectedEspId).coerceAtLeast(0)
         antiOverlapInput.setText(calibrationAntiMin.toString())
@@ -186,7 +185,10 @@ class ScheduleHelperActivity : AppCompatActivity() {
                 putExtra(EXTRA_END_MS, validation.endMs)
                 putExtra(EXTRA_ANTI_CHEV_MINUTES, validation.antiOverlapMinutes)
                 putExtra(EXTRA_VOLUME_PER_DOSE, validation.volumePerDoseMlList.firstOrNull() ?: 0.0)
-                putIntegerArrayListExtra(EXTRA_VOLUME_PER_DOSE_TENTH_LIST, ArrayList(validation.volumePerDoseTenthList))
+                putIntegerArrayListExtra(
+                    EXTRA_VOLUME_PER_DOSE_TENTH_LIST,
+                    ArrayList(validation.volumePerDoseTenthList)
+                )
                 putStringArrayListExtra(EXTRA_SCHEDULE_TIMES, ArrayList(validation.formattedTimes))
                 putExtra(EXTRA_SCHEDULE_MS, validation.proposedTimesMs.toLongArray())
             }
@@ -343,9 +345,11 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
         val flowCurrentPump = prefs.getFloat("esp_${expectedEspId}_pump${pumpNumber}_flow", 0f)
+
         val totalTenth = (volumeTotal * 10.0).roundToInt()
         val volumePerDoseTenthList = splitTotalVolumeTenth(totalTenth, doseCount)
         val volumePerDoseMlList = volumePerDoseTenthList.map { it / 10.0 }
+
         val splitBase = if (doseCount > 0) totalTenth / doseCount else 0
         val splitRemainder = if (doseCount > 0) totalTenth % doseCount else 0
         val splitSum = volumePerDoseTenthList.sum()
@@ -365,22 +369,44 @@ class ScheduleHelperActivity : AppCompatActivity() {
             )
             return ValidationResult.invalid()
         }
-        val durationMsPerDoseSafe = durationMsPerDose.filterNotNull()
 
-        val proposedTimesMs = buildScheduleTimesMs(start, end, doseCount, antiOverlap)
-        if (proposedTimesMs.size != doseCount) {
+        val durationMsPerDoseSafe: List<Long> = durationMsPerDose.filterNotNull()
+
+        // ✅ FIX BUILD: List<Long> -> IntArray (pas de toIntArray() sur Collection<Long>)
+        val durationsMsIntArray: IntArray = durationMsPerDoseSafe.map { it.toInt() }.toIntArray()
+
+        val baseTimesMs = buildScheduleTimesMs(start, end, doseCount, antiOverlap)
+        if (baseTimesMs.size != doseCount) {
             antiOverlapLayout.error = "Intervalle insuffisant pour générer les doses demandées."
             Log.w(
                 TAG_ANTI_INTERFERENCE,
-                "invalid_generation doseCount=$doseCount antiMin=$antiOverlap startMs=$start endMs=$end generated=${proposedTimesMs.size}"
+                "invalid_generation doseCount=$doseCount antiMin=$antiOverlap startMs=$start endMs=$end generated=${baseTimesMs.size}"
             )
             return ValidationResult.invalid()
         }
+
+        val offsetsMs = LongArray(doseCount) { index -> baseTimesMs[index] - baseTimesMs[0] }
+
         val allSchedules = loadSchedulesByPump()
         val flowByPump = (1..4).associateWith { pump ->
             prefs.getFloat("esp_${expectedEspId}_pump${pump}_flow", 0f)
         }
         val existingGlobalIntervals = DoseValidationUtils.buildIntervalsFromSchedules(allSchedules, flowByPump)
+
+        val start0 = findGlidedStart0(
+            windowStartMs = start,
+            windowEndMs = end,
+            offsetsMs = offsetsMs,
+            durationsMs = durationsMsIntArray,
+            antiMin = antiOverlap,
+            existingGlobal = existingGlobalIntervals,
+            pumpNumber = pumpNumber
+        ) ?: run {
+            antiOverlapLayout.error = "Intervalle insuffisant pour générer les doses demandées."
+            return ValidationResult.invalid()
+        }
+
+        val proposedTimesMs = offsetsMs.map { start0 + it }
         val acceptedIntervals = mutableListOf<DoseInterval>()
         var globalErrorMessage: String? = null
 
@@ -404,16 +430,20 @@ class ScheduleHelperActivity : AppCompatActivity() {
                 globalErrorMessage = when (result.reason) {
                     DoseValidationReason.OVERLAP_SAME_PUMP ->
                         "Une distribution est déjà en cours à ce moment (${result.conflictPumpNum?.let { getPumpDisplayName(it) } ?: "une autre pompe"} de $conflictStart à $conflictEnd)."
+
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
-                        val blockedPumpName = result.conflictPumpNum?.let { getPumpDisplayName(it) } ?: "une autre pompe"
+                        val blockedPumpName =
+                            result.conflictPumpNum?.let { getPumpDisplayName(it) } ?: "une autre pompe"
                         antiInterferenceGapErrorMessage(antiOverlap, blockedPumpName, result.nextAllowedStartMs)
                     }
+
                     DoseValidationReason.OVERFLOW_MIDNIGHT -> {
                         val endText = result.overflowEndMs?.let {
                             formatTimeMs(((it % 86_400_000L) + 86_400_000L) % 86_400_000L)
                         } ?: "--:--"
                         "Cette dose finirait après minuit (fin estimée : $endText). Avancez l’heure ou réduisez le volume."
                     }
+
                     else -> "Intervalle invalide."
                 }
                 Log.w(
@@ -432,6 +462,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
         }
 
         val formattedTimes = proposedTimesMs.map { formatTimeMs(it) }
+
         val maxDurationMs = durationMsPerDoseSafe.maxOrNull() ?: 0L
         if (maxDurationMs > MAX_DOSE_DURATION_SEC * 1000L) {
             val maxVolume = flowCurrentPump.toDouble() * MAX_DOSE_DURATION_SEC.toDouble()
@@ -472,7 +503,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
         val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
         return (1..4).associateWith { pump ->
             val json = schedulesPrefs.getString("esp_${expectedEspId}_pump$pump", null)
-            if (json.isNullOrBlank()) emptyList() else runCatching { PumpScheduleJson.fromJson(json).toList() }.getOrDefault(emptyList())
+            if (json.isNullOrBlank()) emptyList()
+            else runCatching { PumpScheduleJson.fromJson(json).toList() }.getOrDefault(emptyList())
         }
     }
 
@@ -503,6 +535,62 @@ class ScheduleHelperActivity : AppCompatActivity() {
         }
     }
 
+    private fun findGlidedStart0(
+        windowStartMs: Long,
+        windowEndMs: Long,
+        offsetsMs: LongArray,
+        durationsMs: IntArray,
+        antiMin: Int,
+        existingGlobal: List<DoseInterval>,
+        pumpNumber: Int
+    ): Long? {
+        val dayEndStrict = 86_400_000L - 1L
+        val ws = (windowStartMs / MS_PER_MINUTE) * MS_PER_MINUTE
+        val we = (windowEndMs / MS_PER_MINUTE) * MS_PER_MINUTE
+        val doseCount = offsetsMs.size
+        Log.i("HELPER_GLIDE", "start anti=$antiMin window=[$ws,$we] count=$doseCount pump=$pumpNumber")
+
+        fun isValidStart(start0: Long): Boolean {
+            if (start0 < ws || doseCount == 0 || durationsMs.size != doseCount) return false
+
+            val accepted = mutableListOf<DoseInterval>()
+            for (i in 0 until doseCount) {
+                val start = start0 + offsetsMs[i]
+                val end = start + durationsMs[i].toLong()
+
+                // ✅ IMPORTANT: la dose doit tenir dans la fenêtre ET finir strictement avant minuit
+                if (start < ws) return false
+                if (start > windowEndMs) return false
+                if (end > windowEndMs) return false
+                if (end > dayEndStrict) return false
+
+                val newInterval = DoseInterval(pump = pumpNumber, startMs = start, endMs = end)
+                val res = DoseValidationUtils.validateNewInterval(newInterval, existingGlobal + accepted, antiMin)
+                if (!res.isValid) return false
+                accepted.add(newInterval)
+            }
+            return true
+        }
+
+        var start0: Long? = null
+
+        // Forward minute-by-minute
+        var candidate = ws
+        while (candidate <= we && start0 == null) {
+            if (isValidStart(candidate)) start0 = candidate
+            candidate += MS_PER_MINUTE
+        }
+
+        // Backward minute-by-minute
+        candidate = we
+        while (candidate >= ws && start0 == null) {
+            if (isValidStart(candidate)) start0 = candidate
+            candidate -= MS_PER_MINUTE
+        }
+
+        Log.i("HELPER_GLIDE", start0?.let { "result start0=$it" } ?: "result NO_SPACE")
+        return start0
+    }
 
     private fun splitTotalVolumeTenth(totalTenth: Int, doseCount: Int): List<Int> {
         return VolumeSplitUtils.splitTotalVolumeTenth(totalTenth, doseCount)
