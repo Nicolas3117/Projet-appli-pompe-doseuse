@@ -166,57 +166,66 @@ class ManualDoseFragment : Fragment() {
                     ip = espIp,
                     pump = pumpNumber,
                     durationMs = durationMs
-                )
+                ) { success ->
+                    if (!success) return@sendManualCommandMs
 
-                // 🔋 DÉCRÉMENTATION (EXCEPTION NORMALE POUR LE MANUEL)
-                TankManager.decrement(
-                    context = requireContext(),
-                    espId = espId,
-                    pumpNum = pumpNumber,
-                    volumeMl = volumeMl
-                )
-
-                // =====================================================
-                // 🔔 ALERTES (Telegram + notif Android)
-                // =====================================================
-                val level =
-                    TankManager.getTankLevel(
+                    DailyDoseStore.saveManualDoseEvent(
                         context = requireContext(),
-                        espId = espId,
-                        pumpNum = pumpNumber
+                        moduleId = espId,
+                        pumpNum = pumpNumber,
+                        volumeMl = volumeMl
                     )
 
-                val thresholdPercent =
-                    prefs.getInt(thresholdKey, 20)
-
-                val lowAlertKey =
-                    "esp_${espId}_pump${pumpNumber}_low_alert_sent"
-
-                val emptyAlertKey =
-                    "esp_${espId}_pump${pumpNumber}_empty_alert_sent"
-
-                val lowAlertSent =
-                    prefs.getBoolean(lowAlertKey, false)
-
-                val emptyAlertSent =
-                    prefs.getBoolean(emptyAlertKey, false)
-
-                val (newLow, newEmpty) =
-                    TankAlertManager.checkAndNotify(
+                    // 🔋 DÉCRÉMENTATION (EXCEPTION NORMALE POUR LE MANUEL)
+                    TankManager.decrement(
                         context = requireContext(),
                         espId = espId,
                         pumpNum = pumpNumber,
-                        remainingMl = level.remainingMl,
-                        capacityMl = level.capacityMl,
-                        thresholdPercent = thresholdPercent,
-                        lowAlertSent = lowAlertSent,
-                        emptyAlertSent = emptyAlertSent
+                        volumeMl = volumeMl
                     )
 
-                prefs.edit()
-                    .putBoolean(lowAlertKey, newLow)
-                    .putBoolean(emptyAlertKey, newEmpty)
-                    .apply()
+                    // =====================================================
+                    // 🔔 ALERTES (Telegram + notif Android)
+                    // =====================================================
+                    val level =
+                        TankManager.getTankLevel(
+                            context = requireContext(),
+                            espId = espId,
+                            pumpNum = pumpNumber
+                        )
+
+                    val thresholdPercent =
+                        prefs.getInt(thresholdKey, 20)
+
+                    val lowAlertKey =
+                        "esp_${espId}_pump${pumpNumber}_low_alert_sent"
+
+                    val emptyAlertKey =
+                        "esp_${espId}_pump${pumpNumber}_empty_alert_sent"
+
+                    val lowAlertSent =
+                        prefs.getBoolean(lowAlertKey, false)
+
+                    val emptyAlertSent =
+                        prefs.getBoolean(emptyAlertKey, false)
+
+                    val (newLow, newEmpty) =
+                        TankAlertManager.checkAndNotify(
+                            context = requireContext(),
+                            espId = espId,
+                            pumpNum = pumpNumber,
+                            remainingMl = level.remainingMl,
+                            capacityMl = level.capacityMl,
+                            thresholdPercent = thresholdPercent,
+                            lowAlertSent = lowAlertSent,
+                            emptyAlertSent = emptyAlertSent
+                        )
+
+                    prefs.edit()
+                        .putBoolean(lowAlertKey, newLow)
+                        .putBoolean(emptyAlertKey, newEmpty)
+                        .apply()
+                }
             }
         }
     }
