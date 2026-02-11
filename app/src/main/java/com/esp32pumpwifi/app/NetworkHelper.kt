@@ -151,7 +151,8 @@ object NetworkHelper {
         context: Context,
         ip: String,
         pump: Int,
-        durationMs: Int
+        durationMs: Int,
+        onResult: (Boolean) -> Unit = {}
     ) {
         val message = "${pump}_${durationMs}"
         val encodedMessage = URLEncoder.encode(message, "UTF-8")
@@ -177,6 +178,7 @@ object NetworkHelper {
 
                 if (responseText.equals("BUSY", ignoreCase = true)) {
                     showPumpBusyDialog(context, pump)
+                    withContext(Dispatchers.Main) { onResult(false) }
                     return@launch
                 }
 
@@ -185,10 +187,12 @@ object NetworkHelper {
                     val pumpName = getPumpDisplayName(context, moduleId, pump)
                     showSuccessToast(context, "Dosage envoyé à $pumpName")
                 }
+                withContext(Dispatchers.Main) { onResult(true) }
 
             } catch (e: Exception) {
                 Log.e("ESP32_MANUAL_MS", "❌ Erreur envoi", e)
                 showNoReturnToast(context)
+                withContext(Dispatchers.Main) { onResult(false) }
             } finally {
                 try {
                     conn?.disconnect()
