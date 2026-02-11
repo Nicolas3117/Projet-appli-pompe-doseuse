@@ -131,6 +131,8 @@ object DoseValidationUtils {
 
         var nextAllowedStartMs: Long? = null
         var blockingPumpNum: Int? = null
+        var blockingStartMs: Long? = null
+        var blockingEndMs: Long? = null
         for (interval in existing) {
             val validBefore = newInterval.endMs + antiGapMs <= interval.startMs
             val validAfter = newInterval.startMs >= interval.endMs + antiGapMs
@@ -139,6 +141,8 @@ object DoseValidationUtils {
                 if (nextAllowedStartMs == null || candidateStart > nextAllowedStartMs) {
                     nextAllowedStartMs = candidateStart
                     blockingPumpNum = interval.pump
+                    blockingStartMs = interval.startMs
+                    blockingEndMs = interval.endMs
                 }
             }
         }
@@ -153,6 +157,8 @@ object DoseValidationUtils {
                 reason = DoseValidationReason.ANTI_INTERFERENCE_GAP,
                 conflictPumpNum = blockingPumpNum,
                 conflictPump = blockingPumpNum,
+                conflictStartMs = blockingStartMs,
+                conflictEndMs = blockingEndMs,
                 nextAllowedStartMs = nextAllowedStartMs
             )
         }

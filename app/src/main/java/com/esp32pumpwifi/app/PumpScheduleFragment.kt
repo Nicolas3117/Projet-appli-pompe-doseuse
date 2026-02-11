@@ -273,7 +273,7 @@ class PumpScheduleFragment : Fragment() {
                         timeLayout.error = "Une distribution est déjà en cours à ce moment. Prochaine heure possible : $next"
                     }
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
-                        val blockedPumpLabel = validation.conflictPumpNum?.let { getPumpName(it) } ?: "une autre pompe"
+                        val blockedPumpLabel = validation.conflictPumpNum?.let { getPumpName(it) } ?: "Pompe inconnue"
                         timeLayout.error = antiInterferenceGapErrorMessage(antiMin, blockedPumpLabel, validation.nextAllowedStartMs)
                     }
                     DoseValidationReason.OVERFLOW_MIDNIGHT -> {

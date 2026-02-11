@@ -47,6 +47,8 @@ class DoseValidationUtilsTest {
         assertFalse(result.isValid)
         assertEquals(DoseValidationReason.ANTI_INTERFERENCE_GAP, result.reason)
         assertEquals(2, result.conflictPumpNum)
+        assertEquals(TestTimeUtils.ms(1), result.conflictStartMs)
+        assertEquals(TestTimeUtils.ms(2), result.conflictEndMs)
         assertEquals(TestTimeUtils.ms(3), result.nextAllowedStartMs)
     }
 
@@ -133,7 +135,7 @@ class DoseValidationUtilsTest {
         val message = formatAntiInterferenceGapErrorMessage(10, "Pompe 2", "08:45")
 
         assertEquals(
-            "Respectez au moins 10 min après la fin de la distribution de la pompe Pompe 2. Prochaine heure possible : 08:45",
+            "Respectez au moins 10 min après la fin de la distribution de Pompe 2. Prochaine heure possible : 08:45",
             message
         )
     }

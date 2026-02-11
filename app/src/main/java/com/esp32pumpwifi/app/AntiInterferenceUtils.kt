@@ -37,7 +37,7 @@ fun formatAntiInterferenceGapErrorMessage(
     blockingPumpName: String,
     nextAllowedTime: String
 ): String {
-    return "Respectez au moins $antiMin min après la fin de la distribution de la pompe $blockingPumpName. Prochaine heure possible : $nextAllowedTime"
+    return "Respectez au moins $antiMin min après la fin de la distribution de $blockingPumpName. Prochaine heure possible : $nextAllowedTime"
 }
 
 private fun normalizeInDay(valueMs: Long): Long {

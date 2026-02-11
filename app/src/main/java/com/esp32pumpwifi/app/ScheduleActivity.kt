@@ -151,11 +151,13 @@ class ScheduleActivity : AppCompatActivity() {
             val pumpName = prefs.getString(
                 "esp_${moduleId}_pump${pumpNumber}_name",
                 "Pompe $pumpNumber"
-            ) ?: "Pompe $pumpNumber"
+            )?.trim().takeUnless { it.isNullOrEmpty() } ?: "Pompe $pumpNumber"
 
             tab.text = buildTabText(pumpName, "0 mL")
             pumpNames[pumpNumber] = pumpName
         }.attach()
+
+        refreshAllPumpTabsFromStorage()
 
         tabsViewModel.activeTotals.observe(this) { totals ->
             totals.forEach { (pump, total) ->
@@ -195,6 +197,7 @@ class ScheduleActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        refreshAllPumpTabsFromStorage()
         Log.i(
             TAG_EXIT_SYNC,
             "onResume instance=$instanceId returningFromHelper=$returningFromHelper didAutoCheckOnResume=$didAutoCheckOnResume isFinishing=$isFinishing lockedModuleId=${lockedModule?.id}"
@@ -418,6 +421,7 @@ class ScheduleActivity : AppCompatActivity() {
         adapter.updateSchedules(pump, mergeResult.merged)
         val totalTenth = mergeResult.merged.filter { it.enabled }.sumOf { it.quantityTenth }
         tabsViewModel.setActiveTotal(pump, totalTenth)
+        refreshAllPumpTabsFromStorage()
 
         Log.i(
             "SCHEDULE_ADD",
@@ -551,6 +555,33 @@ class ScheduleActivity : AppCompatActivity() {
 
     private fun buildTabText(pumpName: String, shortText: String): String =
         "$pumpName\n$shortText"
+
+    private fun getSavedPumpDisplayName(moduleId: Long, pumpNumber: Int): String {
+        val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        return prefs
+            .getString("esp_${moduleId}_pump${pumpNumber}_name", null)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: "Pompe $pumpNumber"
+    }
+
+    private fun refreshAllPumpTabsFromStorage() {
+        val module = lockedModule ?: return
+        val schedulesPrefs = getSharedPreferences("schedules", Context.MODE_PRIVATE)
+        for (pumpNumber in 1..4) {
+            val schedules = schedulesPrefs
+                .getString("esp_${module.id}_pump$pumpNumber", null)
+                ?.let { runCatching { PumpScheduleJson.fromJson(it).toList() }.getOrDefault(emptyList()) }
+                .orEmpty()
+
+            val totalTenth = schedules
+                .filter { it.enabled }
+                .sumOf { it.quantityTenth }
+
+            pumpNames[pumpNumber] = getSavedPumpDisplayName(module.id, pumpNumber)
+            tabsViewModel.setActiveTotal(pumpNumber, totalTenth)
+        }
+    }
 
     private fun updateTabTotal(pumpNumber: Int, totalTenth: Int) {
         val value =
@@ -836,6 +867,8 @@ class ScheduleActivity : AppCompatActivity() {
             }
 
             editor.apply()
+
+            refreshAllPumpTabsFromStorage()
 
             setUnsyncedState(false, null)
             setReadOnlyMode(false, null)

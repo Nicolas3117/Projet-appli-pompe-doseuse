@@ -447,11 +447,11 @@ class ScheduleHelperActivity : AppCompatActivity() {
                 val conflictEnd = result.conflictEndMs?.let { formatTimeMs(it.coerceAtMost(86_399_999L)) }
                 globalErrorMessage = when (result.reason) {
                     DoseValidationReason.OVERLAP_SAME_PUMP ->
-                        "Une distribution est déjà en cours à ce moment (${result.conflictPumpNum?.let { getPumpDisplayName(it) } ?: "une autre pompe"} de $conflictStart à $conflictEnd)."
+                        "Une distribution est déjà en cours à ce moment (${result.conflictPumpNum?.let { getPumpDisplayName(it) } ?: "Pompe inconnue"} de $conflictStart à $conflictEnd)."
 
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
                         val blockedPumpName =
-                            result.conflictPumpNum?.let { getPumpDisplayName(it) } ?: "une autre pompe"
+                            result.conflictPumpNum?.let { getPumpDisplayName(it) } ?: "Pompe inconnue"
                         antiInterferenceGapErrorMessage(antiOverlap, blockedPumpName, result.nextAllowedStartMs)
                     }
 
