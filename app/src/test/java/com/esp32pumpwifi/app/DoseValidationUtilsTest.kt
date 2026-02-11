@@ -103,6 +103,31 @@ class DoseValidationUtilsTest {
         assertEquals(220_000L, result.nextAllowedStartMs)
     }
 
+
+    @Test
+    fun samePump_withAnti_requiresGapAfterEnd() {
+        val existing = listOf(DoseInterval(pump = 1, startMs = TestTimeUtils.ms(10), endMs = TestTimeUtils.ms(10) + 90_000L))
+        val candidate = DoseInterval(pump = 1, startMs = TestTimeUtils.ms(11), endMs = TestTimeUtils.ms(11) + 30_000L)
+
+        val result = DoseValidationUtils.validateNewInterval(candidate, existing, antiMin = 5)
+
+        assertFalse(result.isValid)
+        assertEquals(DoseValidationReason.ANTI_INTERFERENCE_GAP, result.reason)
+        assertEquals(1, result.conflictPumpNum)
+        assertEquals(TestTimeUtils.ms(16), result.nextAllowedStartMs)
+    }
+
+    @Test
+    fun overlapSamePump_withAnti_setsNextAllowedAfterEndPlusAnti() {
+        val existing = listOf(DoseInterval(pump = 1, startMs = TestTimeUtils.ms(10), endMs = TestTimeUtils.ms(10) + 90_000L))
+        val candidate = DoseInterval(pump = 1, startMs = TestTimeUtils.ms(10) + 30_000L, endMs = TestTimeUtils.ms(10) + 45_000L)
+
+        val result = DoseValidationUtils.validateNewInterval(candidate, existing, antiMin = 5)
+
+        assertFalse(result.isValid)
+        assertEquals(DoseValidationReason.OVERLAP_SAME_PUMP, result.reason)
+        assertEquals(TestTimeUtils.ms(16) + 30_000L, result.nextAllowedStartMs)
+    }
     @Test
     fun antiInterference_errorMessageFormat_expected() {
         val message = formatAntiInterferenceGapErrorMessage(10, "Pompe 2", "08:45")

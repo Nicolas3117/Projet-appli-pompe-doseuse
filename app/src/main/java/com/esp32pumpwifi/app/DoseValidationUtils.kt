@@ -104,7 +104,8 @@ object DoseValidationUtils {
         }
         if (samePumpConflicts.isNotEmpty()) {
             val blocking = samePumpConflicts.first()
-            val nextAllowed = samePumpConflicts.maxOf { it.endMs }
+            val maxConflictEnd = samePumpConflicts.maxOf { it.endMs }
+            val nextAllowed = maxConflictEnd + antiGapMs
             Log.w(
                 TAG_ANTI_INTERFERENCE,
                 "ANTI_INTERFERENCE reason=overlap_same_pump moduleId=-1 pump=${newInterval.pump} blockedByPump=${blocking.pump} antiMin=$antiMin nextAllowed=$nextAllowed existingCount=${existing.size}"
@@ -115,7 +116,7 @@ object DoseValidationUtils {
                 conflictPumpNum = blocking.pump,
                 conflictPump = blocking.pump,
                 conflictStartMs = blocking.startMs,
-                conflictEndMs = blocking.endMs,
+                conflictEndMs = maxConflictEnd,
                 nextAllowedStartMs = nextAllowed
             )
         }
@@ -131,8 +132,6 @@ object DoseValidationUtils {
         var nextAllowedStartMs: Long? = null
         var blockingPumpNum: Int? = null
         for (interval in existing) {
-            if (interval.pump == newInterval.pump) continue
-
             val validBefore = newInterval.endMs + antiGapMs <= interval.startMs
             val validAfter = newInterval.startMs >= interval.endMs + antiGapMs
             if (!validBefore && !validAfter) {

@@ -4,6 +4,7 @@ import android.content.Context
 
 private const val PREFS_NAME = "prefs"
 private const val MS_PER_DAY = 86_400_000L
+private const val MS_PER_MINUTE = 60_000L
 
 /**
  * Returns the anti-interference value (minutes) configured at module level.
@@ -22,8 +23,13 @@ fun antiInterferenceGapErrorMessage(
     blockingPumpName: String,
     nextAllowedMs: Long?
 ): String {
-    val next = nextAllowedMs?.let { ScheduleAddMergeUtils.toTimeString(normalizeInDay(it)) } ?: "--:--"
+    val next = nextAllowedMs?.let { ScheduleAddMergeUtils.toTimeString(normalizeInDay(ceilToMinute(it))) } ?: "--:--"
     return formatAntiInterferenceGapErrorMessage(antiMin, blockingPumpName, next)
+}
+
+fun ceilToMinute(valueMs: Long): Long {
+    if (valueMs <= 0L) return 0L
+    return ((valueMs + MS_PER_MINUTE - 1L) / MS_PER_MINUTE) * MS_PER_MINUTE
 }
 
 fun formatAntiInterferenceGapErrorMessage(

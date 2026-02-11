@@ -266,7 +266,10 @@ class PumpScheduleFragment : Fragment() {
             if (!validation.isValid) {
                 when (validation.reason) {
                     DoseValidationReason.OVERLAP_SAME_PUMP -> {
-                        val next = validation.nextAllowedStartMs?.let { ScheduleAddMergeUtils.toTimeString(it) } ?: "--:--"
+                        val next = validation.nextAllowedStartMs
+                            ?.let { ceilToMinute(it) }
+                            ?.let { ScheduleAddMergeUtils.toTimeString(it) }
+                            ?: "--:--"
                         timeLayout.error = "Une distribution est déjà en cours à ce moment. Prochaine heure possible : $next"
                     }
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
@@ -290,7 +293,7 @@ class PumpScheduleFragment : Fragment() {
                 addBtn?.isEnabled = false
                 Log.w(
                     "MANUAL_VALIDATE",
-                    "invalid reason=${validation.reason} candidate=[${candidate.startMs},${candidate.endMs}) antiMin=$antiMin blockedByPump=${validation.conflictPumpNum} nextAllowed=${validation.nextAllowedStartMs} durationMs=$durationMs"
+                    "invalid reason=${validation.reason} candidate=[${candidate.startMs},${candidate.endMs}) antiMin=$antiMin blockedByPump=${validation.conflictPumpNum} conflictStart=${validation.conflictStartMs} conflictEnd=${validation.conflictEndMs} nextAllowed=${validation.nextAllowedStartMs} durationMs=$durationMs"
                 )
                 return@manual
             }

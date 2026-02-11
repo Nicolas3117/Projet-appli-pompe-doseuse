@@ -397,10 +397,18 @@ class ScheduleHelperActivity : AppCompatActivity() {
         val flowByPump = (1..4).associateWith { pump ->
             prefs.getFloat("esp_${expectedEspId}_pump${pump}_flow", 0f)
         }
+        Log.i(
+            "HELPER_FLOW",
+            "moduleId=$expectedEspId pump=$pumpNumber flowCurrentPump=$flowCurrentPump flowByPump=$flowByPump"
+        )
         val existingGlobalIntervals = DoseValidationUtils.buildIntervalsFromSchedules(allSchedules, flowByPump)
+        val aroundCurrentPump = existingGlobalIntervals
+            .filter { it.pump == pumpNumber }
+            .take(3)
+            .joinToString { "[${it.startMs},${it.endMs})" }
         Log.i(
             "HELPER_EXISTING",
-            "intervalsCount=${existingGlobalIntervals.size} moduleId=$expectedEspId pumps=${existingGlobalIntervals.map { it.pump }.distinct().sorted()}"
+            "intervalsCount=${existingGlobalIntervals.size} moduleId=$expectedEspId pump=$pumpNumber aroundPump=$aroundCurrentPump pumps=${existingGlobalIntervals.map { it.pump }.distinct().sorted()}"
         )
 
         val start0 = findGlidedStart0(
@@ -577,6 +585,12 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
                 val newInterval = DoseInterval(pump = pumpNumber, startMs = start, endMs = end)
                 val res = DoseValidationUtils.validateNewInterval(newInterval, existingGlobal + accepted, antiMin)
+                if (i == 0 && start0 == ws) {
+                    Log.i(
+                        "VALIDATE_CANDIDATE",
+                        "candidateStart=$start reason=${res.reason} conflictStart=${res.conflictStartMs} conflictEnd=${res.conflictEndMs} nextAllowed=${res.nextAllowedStartMs}"
+                    )
+                }
                 if (!res.isValid) return false
                 accepted.add(newInterval)
             }
