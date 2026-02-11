@@ -626,6 +626,11 @@ class ScheduleActivity : AppCompatActivity() {
                         active.ip,
                         message
                     ) {
+                        DailyDoseStore.saveProgramSnapshotsFromMessage(
+                            context = this@ScheduleActivity,
+                            moduleId = active.id,
+                            rawProgram576 = message
+                        )
                         if (cont.isActive) cont.resume(true)
                     }
                 }
