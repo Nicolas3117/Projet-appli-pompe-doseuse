@@ -10,7 +10,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.util.Log
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.addTextChangedListener
 import com.google.android.material.textfield.TextInputEditText
@@ -355,9 +354,10 @@ class ScheduleHelperActivity : AppCompatActivity() {
             "totalTenth=$totalTenth, doseCount=$doseCount, base=$splitBase, remainder=$splitRemainder, list=$volumePerDoseTenthList, sum=$splitSum"
         )
 
-        val maxDoseMl = volumePerDoseMlList.maxOrNull() ?: 0.0
-        val durationMs = DoseValidationUtils.computeDurationMs(maxDoseMl, flowCurrentPump)
-        if (durationMs == null) {
+        val durationMsPerDose = volumePerDoseMlList.map { doseMl ->
+            DoseValidationUtils.computeDurationMs(doseMl, flowCurrentPump)
+        }
+        if (durationMsPerDose.any { it == null }) {
             volumeLayout.error = "Débit non calibré : impossible de calculer la durée."
             Log.w(
                 TAG_ANTI_INTERFERENCE,
@@ -365,6 +365,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
             )
             return ValidationResult.invalid()
         }
+        val durationMsPerDoseSafe = durationMsPerDose.filterNotNull()
 
         val proposedTimesMs = buildScheduleTimesMs(start, end, doseCount, antiOverlap)
         if (proposedTimesMs.size != doseCount) {
@@ -383,7 +384,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
         val acceptedIntervals = mutableListOf<DoseInterval>()
         var globalErrorMessage: String? = null
 
-        for (startCandidate in proposedTimesMs) {
+        for ((index, startCandidate) in proposedTimesMs.withIndex()) {
+            val durationMs = durationMsPerDoseSafe.getOrElse(index) { return ValidationResult.invalid() }
             val candidate = DoseInterval(
                 pump = pumpNumber,
                 startMs = startCandidate,
@@ -430,24 +432,19 @@ class ScheduleHelperActivity : AppCompatActivity() {
         }
 
         val formattedTimes = proposedTimesMs.map { formatTimeMs(it) }
-        val durationSec = (maxDoseMl / flowCurrentPump.toDouble())
-        if (durationSec > MAX_DOSE_DURATION_SEC) {
+        val maxDurationMs = durationMsPerDoseSafe.maxOrNull() ?: 0L
+        if (maxDurationMs > MAX_DOSE_DURATION_SEC * 1000L) {
             val maxVolume = flowCurrentPump.toDouble() * MAX_DOSE_DURATION_SEC.toDouble()
-            AlertDialog.Builder(this)
-                .setTitle("Durée trop longue")
-                .setMessage(
-                    "Une distribution ne peut pas dépasser 600 secondes.\n" +
-                            "Avec le débit actuel (${String.format(Locale.getDefault(), "%.1f", flowCurrentPump)} mL/s), " +
-                            "la dose maximale est ${String.format(Locale.getDefault(), "%.1f", maxVolume)} mL."
-                )
-                .setPositiveButton("OK", null)
-                .show()
+            volumeLayout.error =
+                "Une distribution ne peut pas dépasser 600 secondes. " +
+                        "Avec le débit actuel (${String.format(Locale.getDefault(), "%.1f", flowCurrentPump)} mL/s), " +
+                        "la dose maximale est ${String.format(Locale.getDefault(), "%.1f", maxVolume)} mL."
             return ValidationResult.invalid()
         }
 
         Log.i(
             TAG_ANTI_INTERFERENCE,
-            "helper_valid window=[$start,$end] antiMin=$antiOverlap doseCount=$doseCount flow=$flowCurrentPump durationMs=$durationMs intervals=${acceptedIntervals.joinToString { "P${it.pump}[${it.startMs},${it.endMs})" }}"
+            "helper_valid window=[$start,$end] antiMin=$antiOverlap doseCount=$doseCount flow=$flowCurrentPump durationMsPerDose=$durationMsPerDoseSafe intervals=${acceptedIntervals.joinToString { "P${it.pump}[${it.startMs},${it.endMs})" }}"
         )
 
         return ValidationResult(
