@@ -274,10 +274,16 @@ class PumpScheduleFragment : Fragment() {
                         timeLayout.error = antiInterferenceGapErrorMessage(antiMin, blockedPumpLabel, validation.nextAllowedStartMs)
                     }
                     DoseValidationReason.OVERFLOW_MIDNIGHT -> {
-                        val maxStartMs = 86_400_000L - durationMs
+                        val lastAllowedEndMs = 86_400_000L - 1L
+                        val maxStartMsRaw = (lastAllowedEndMs - durationMs).coerceAtLeast(0L)
+                        val maxStartMs = (maxStartMsRaw / 60_000L) * 60_000L
                         val maxStartText = ScheduleAddMergeUtils.toTimeString(maxStartMs)
                         timeLayout.error =
                             "La distribution dépasse minuit (00:00).\nHeure maximale possible : $maxStartText."
+                        Log.w(
+                            "MANUAL_VALIDATE",
+                            "overflow_midnight pump=$pumpNumber durationMs=$durationMs lastAllowedEndMs=$lastAllowedEndMs maxStartMsRaw=$maxStartMsRaw maxStartMsRounded=$maxStartMs"
+                        )
                     }
                     else -> timeLayout.error = "Format invalide"
                 }
