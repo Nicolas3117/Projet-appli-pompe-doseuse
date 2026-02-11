@@ -318,7 +318,9 @@ class ScheduleHelperActivity : AppCompatActivity() {
         if (antiOverlap > 0 && doseCount > 1) {
             val maxDosesPossible = ScheduleAntiInterferenceUtils.computeMaxDoses(windowMs, antiOverlap)
             val requiredMinAnti = ScheduleAntiInterferenceUtils.minAntiMinutesRequired(windowMs, doseCount)
-            val actualSpacingMinutes = (windowMs.toDouble() / (doseCount - 1).toDouble()) / MINUTES_IN_MS
+
+            // ✅ Aligné avec le pattern généré (buildScheduleTimesMs utilise step = windowMs / doseCount)
+            val actualSpacingMinutes = (windowMs.toDouble() / doseCount.toDouble()) / MINUTES_IN_MS
             val actualSpacingText = String.format(Locale.getDefault(), "%.1f", actualSpacingMinutes)
 
             if (doseCount > maxDosesPossible) {
@@ -386,12 +388,20 @@ class ScheduleHelperActivity : AppCompatActivity() {
         }
 
         val offsetsMs = LongArray(doseCount) { index -> baseTimesMs[index] - baseTimesMs[0] }
+        Log.i(
+            "HELPER_WINDOW",
+            "startMs=$start endMs=$end doseCount=$doseCount antiMin=$antiOverlap durationByDoseMs=$durationMsPerDoseSafe offsetsMs=${offsetsMs.joinToString(",")}"
+        )
 
         val allSchedules = loadSchedulesByPump()
         val flowByPump = (1..4).associateWith { pump ->
             prefs.getFloat("esp_${expectedEspId}_pump${pump}_flow", 0f)
         }
         val existingGlobalIntervals = DoseValidationUtils.buildIntervalsFromSchedules(allSchedules, flowByPump)
+        Log.i(
+            "HELPER_EXISTING",
+            "intervalsCount=${existingGlobalIntervals.size} moduleId=$expectedEspId pumps=${existingGlobalIntervals.map { it.pump }.distinct().sorted()}"
+        )
 
         val start0 = findGlidedStart0(
             windowStartMs = start,
@@ -518,7 +528,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
         if (doseCount == 1) return listOf(startMs)
 
         val durationMs = endMs - startMs
-        val stepMs = durationMs / (doseCount - 1).toLong()
+        val stepMs = durationMs / doseCount.toLong()
+        if (stepMs <= 0L) return emptyList()
         if (antiOverlapMinutes > 0) {
             val minStepMsRequired = antiOverlapMinutes.toLong() * MS_PER_MINUTE
             if (stepMs < minStepMsRequired) {
