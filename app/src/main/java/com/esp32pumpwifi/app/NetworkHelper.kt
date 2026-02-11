@@ -70,16 +70,24 @@ object NetworkHelper {
 
     // ✅ Récupère un nom lisible (si custom) sans casser
     private fun getPumpDisplayName(context: Context, pump: Int): String {
+        val moduleId = Esp32Manager.getActive(context)?.id // Long
+        return getPumpDisplayName(context, moduleId, pump)
+    }
+
+    // ✅ FIX: moduleId est Long? (EspModule.id)
+    private fun getPumpDisplayName(context: Context, moduleId: Long?, pump: Int): String {
+        val fallback = "Pompe $pump"
+        if (moduleId == null) return fallback
+
         return try {
-            val active = Esp32Manager.getActive(context)
-            if (active != null) {
-                val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
-                prefs.getString("esp_${active.id}_pump${pump}_name", "Pompe $pump") ?: "Pompe $pump"
-            } else {
-                "Pompe $pump"
-            }
+            val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+            val key = "esp_${moduleId}_pump${pump}_name"
+            prefs.getString(key, fallback)
+                ?.trim()
+                .takeUnless { it.isNullOrBlank() }
+                ?: fallback
         } catch (_: Exception) {
-            "Pompe $pump"
+            fallback
         }
     }
 
@@ -120,7 +128,9 @@ object NetworkHelper {
                 }
 
                 withContext(Dispatchers.Main) {
-                    showSuccessToast(context, "Commande envoyée à la pompe $pump")
+                    val moduleId = Esp32Manager.getActive(context)?.id // Long
+                    val pumpName = getPumpDisplayName(context, moduleId, pump)
+                    showSuccessToast(context, "Dosage envoyé à $pumpName")
                 }
 
             } catch (e: Exception) {
@@ -171,7 +181,9 @@ object NetworkHelper {
                 }
 
                 withContext(Dispatchers.Main) {
-                    showSuccessToast(context, "Commande envoyée à la pompe $pump")
+                    val moduleId = Esp32Manager.getActive(context)?.id // Long
+                    val pumpName = getPumpDisplayName(context, moduleId, pump)
+                    showSuccessToast(context, "Dosage envoyé à $pumpName")
                 }
 
             } catch (e: Exception) {
