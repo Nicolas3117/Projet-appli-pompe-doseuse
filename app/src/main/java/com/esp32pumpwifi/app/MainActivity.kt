@@ -3,6 +3,7 @@ package com.esp32pumpwifi.app
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
@@ -57,6 +58,7 @@ class MainActivity : AppCompatActivity() {
     private var lastStaProbeMs = 0L
 
     private companion object {
+        private const val TAG_DAILY_DEBUG = "MainDailyDebug"
         private const val AP_IP = "192.168.4.1"
         private const val CONNECTION_POLL_MS = 2000L
         private const val STA_PROBE_INTERVAL_MS = 10_000L
@@ -226,6 +228,7 @@ class MainActivity : AppCompatActivity() {
         rtcFetchJob = null
 
         val activeModule = Esp32Manager.getActive(this)
+        Log.i(TAG_DAILY_DEBUG, "onResume activeModuleId=${activeModule?.id} isFinishing=$isFinishing isDestroyed=$isDestroyed")
 
         if (activeModule == null) {
             tvActiveModule.text = "Sélectionné : aucun module"
@@ -252,7 +255,9 @@ class MainActivity : AppCompatActivity() {
         uiRefreshJob =
             lifecycleScope.launch {
                 while (true) {
-                    Esp32Manager.getActive(this@MainActivity)?.let {
+                    val active = Esp32Manager.getActive(this@MainActivity)
+                    Log.i(TAG_DAILY_DEBUG, "uiRefresh tick activeModuleId=${active?.id} isFinishing=${this@MainActivity.isFinishing} isDestroyed=${this@MainActivity.isDestroyed}")
+                    active?.let {
                         TankScheduleHelper.recalculateFromLastTime(this@MainActivity, it.id)
                         updateTankSummary(it)
                         updateDailySummary(it)
@@ -538,12 +543,29 @@ class MainActivity : AppCompatActivity() {
     private fun updateDailySummary(activeModule: EspModule) {
         dailySummaryContainer.visibility = View.VISIBLE
         lifecycleScope.launch(Dispatchers.IO) {
-            DailyDoseStore.buildAutoDoseEventsForToday(this@MainActivity, activeModule.id)
             val dayStartMs = DailyDoseStore.todayRange().dayStartMs
+            val doneCountBeforeBuild = (1..4).sumOf { pumpNum ->
+                DailyDoseStore.countForDay(this@MainActivity, activeModule.id, pumpNum, dayStartMs)
+            }
+            DailyDoseStore.buildAutoDoseEventsForToday(this@MainActivity, activeModule.id)
+            val doneCountAfterBuild = (1..4).sumOf { pumpNum ->
+                DailyDoseStore.countForDay(this@MainActivity, activeModule.id, pumpNum, dayStartMs)
+            }
+            val insertedByBuild = doneCountAfterBuild - doneCountBeforeBuild
             val doneByPump = (1..4).associateWith { pumpNum ->
                 DailyDone(
                     count = DailyDoseStore.countForDay(this@MainActivity, activeModule.id, pumpNum, dayStartMs),
                     ml = DailyDoseStore.sumMlForDay(this@MainActivity, activeModule.id, pumpNum, dayStartMs)
+                )
+            }
+            val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
+            for (pumpNum in 1..4) {
+                val done = doneByPump[pumpNum] ?: DailyDone(0, 0f)
+                val flow = prefs.getFloat("esp_${activeModule.id}_pump${pumpNum}_flow", 0f)
+                val future = computeFuturePlan(activeModule.id, pumpNum, flow)
+                Log.i(
+                    TAG_DAILY_DEBUG,
+                    "updateDailySummary moduleId=${activeModule.id} pump=$pumpNum doneMl=${formatMl(done.ml)} doneCount=${done.count} futureMl=${formatMl(future.ml)} futureCount=${future.count} autoBuildInserted=${if (insertedByBuild > 0) ">0" else "0"}"
                 )
             }
             withContext(Dispatchers.Main) {
