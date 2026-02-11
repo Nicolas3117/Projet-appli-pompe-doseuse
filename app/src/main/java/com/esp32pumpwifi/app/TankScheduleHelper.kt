@@ -1,7 +1,6 @@
 package com.esp32pumpwifi.app
 
 import android.content.Context
-import android.util.Log
 import java.util.Calendar
 import kotlin.math.max
 
@@ -113,17 +112,6 @@ object TankScheduleHelper {
                     val endMillis = start.timeInMillis + durationMs
 
                     if (endMillis > lastProcessed && endMillis <= now) {
-
-                        DailyProgramTrackingStore.addScheduledDose(
-                            context = context,
-                            espId = espId,
-                            pumpNum = pumpNum,
-                            volumeMl = volumeMl
-                        )
-                        Log.i(
-                            "DailyTrack",
-                            "Scheduled dose counted: espId=$espId pump=$pumpNum +$volumeMl ml"
-                        )
 
                         // ➖ DÉCRÉMENT SEUL (SOURCE UNIQUE)
                         TankManager.decrement(
