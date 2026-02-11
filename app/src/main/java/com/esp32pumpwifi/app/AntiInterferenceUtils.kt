@@ -3,7 +3,6 @@ package com.esp32pumpwifi.app
 import android.content.Context
 
 private const val PREFS_NAME = "prefs"
-private const val MS_PER_DAY = 86_400_000L
 private const val MS_PER_MINUTE = 60_000L
 
 /**
@@ -23,8 +22,7 @@ fun antiInterferenceGapErrorMessage(
     blockingPumpName: String,
     nextAllowedMs: Long?
 ): String {
-    val next = nextAllowedMs?.let { ScheduleAddMergeUtils.toTimeString(normalizeInDay(ceilToMinute(it))) } ?: "--:--"
-    return formatAntiInterferenceGapErrorMessage(antiMin, blockingPumpName, next)
+    return DoseErrorMessageFormatter.antiInterferenceGap(antiMin, blockingPumpName, nextAllowedMs)
 }
 
 fun ceilToMinute(valueMs: Long): Long {
@@ -36,10 +34,5 @@ fun formatAntiInterferenceGapErrorMessage(
     antiMin: Int,
     blockingPumpName: String,
     nextAllowedTime: String
-): String {
-    return "Respectez au moins $antiMin min après la fin de la distribution de $blockingPumpName. Prochaine heure possible : $nextAllowedTime"
-}
-
-private fun normalizeInDay(valueMs: Long): Long {
-    return (valueMs % MS_PER_DAY + MS_PER_DAY) % MS_PER_DAY
-}
+): String =
+    "Anti-interférence chimique (${antiMin.coerceAtLeast(0)} min) : $blockingPumpName bloque ce créneau.\nProchaine heure possible : $nextAllowedTime."

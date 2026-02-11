@@ -321,12 +321,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
             // ✅ Aligné avec le pattern généré (buildScheduleTimesMs utilise step = windowMs / doseCount)
             val actualSpacingMinutes = (windowMs.toDouble() / doseCount.toDouble()) / MINUTES_IN_MS
-            val actualSpacingText = String.format(Locale.getDefault(), "%.1f", actualSpacingMinutes)
-
             if (doseCount > maxDosesPossible) {
-                antiOverlapLayout.error =
-                    "Avec $antiOverlap min d’anti-interférence, vous pouvez au maximum $maxDosesPossible doses sur cette plage. " +
-                            "Minimum requis : $requiredMinAnti min (actuel: $actualSpacingText min)."
+                antiOverlapLayout.error = DoseErrorMessageFormatter.helperMaxDoses(antiOverlap, maxDosesPossible)
                 Log.w(
                     TAG_ANTI_INTERFERENCE,
                     "invalid doseCount=$doseCount antiMin=$antiOverlap windowMs=$windowMs maxDoses=$maxDosesPossible requiredMinAnti=$requiredMinAnti actualSpacingMin=$actualSpacingMinutes reason=too_many_doses"
@@ -379,7 +375,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         val baseTimesMs = buildScheduleTimesMs(start, end, doseCount, antiOverlap)
         if (baseTimesMs.size != doseCount) {
-            antiOverlapLayout.error = "Intervalle insuffisant pour générer les doses demandées."
+            antiOverlapLayout.error = DoseErrorMessageFormatter.helperNoSpace(doseCount, antiOverlap)
             Log.w(
                 TAG_ANTI_INTERFERENCE,
                 "invalid_generation doseCount=$doseCount antiMin=$antiOverlap startMs=$start endMs=$end generated=${baseTimesMs.size}"
@@ -420,7 +416,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
             existingGlobal = existingGlobalIntervals,
             pumpNumber = pumpNumber
         ) ?: run {
-            antiOverlapLayout.error = "Intervalle insuffisant pour générer les doses demandées."
+            antiOverlapLayout.error = DoseErrorMessageFormatter.helperNoSpace(doseCount, antiOverlap)
             return ValidationResult.invalid()
         }
 
@@ -439,7 +435,8 @@ class ScheduleHelperActivity : AppCompatActivity() {
             val result = DoseValidationUtils.validateNewInterval(
                 newInterval = candidate,
                 existing = existingGlobalIntervals + acceptedIntervals,
-                antiMin = antiOverlap
+                antiMin = antiOverlap,
+                expectedEspId = expectedEspId
             )
 
             if (!result.isValid) {
@@ -452,7 +449,15 @@ class ScheduleHelperActivity : AppCompatActivity() {
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
                         val blockedPumpName =
                             result.conflictPumpNum?.let { getPumpDisplayName(it) } ?: "Pompe inconnue"
-                        antiInterferenceGapErrorMessage(antiOverlap, blockedPumpName, result.nextAllowedStartMs)
+                        Log.i(
+                            "VALIDATE_GAP",
+                            "blockingPumpName=$blockedPumpName nextAllowedStartMs=${result.nextAllowedStartMs}"
+                        )
+                        DoseErrorMessageFormatter.antiInterferenceGap(
+                            antiMin = antiOverlap,
+                            blockingPumpName = blockedPumpName,
+                            nextAllowedStartMs = result.nextAllowedStartMs
+                        )
                     }
 
                     DoseValidationReason.OVERFLOW_MIDNIGHT -> {
@@ -584,7 +589,12 @@ class ScheduleHelperActivity : AppCompatActivity() {
                 if (end > dayEndStrict) return false
 
                 val newInterval = DoseInterval(pump = pumpNumber, startMs = start, endMs = end)
-                val res = DoseValidationUtils.validateNewInterval(newInterval, existingGlobal + accepted, antiMin)
+                val res = DoseValidationUtils.validateNewInterval(
+                    newInterval,
+                    existingGlobal + accepted,
+                    antiMin,
+                    expectedEspId
+                )
                 if (i == 0 && start0 == ws) {
                     Log.i(
                         "VALIDATE_CANDIDATE",

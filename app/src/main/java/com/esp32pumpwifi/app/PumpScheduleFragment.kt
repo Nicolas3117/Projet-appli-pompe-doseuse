@@ -261,7 +261,7 @@ class PumpScheduleFragment : Fragment() {
                 prefs.getFloat("esp_${espId}_pump${pump}_flow", 0f)
             }
             val existing = DoseValidationUtils.buildIntervalsFromSchedules(allSchedules, flowByPump)
-            val validation = DoseValidationUtils.validateNewInterval(candidate, existing, antiMin)
+            val validation = DoseValidationUtils.validateNewInterval(candidate, existing, antiMin, espId)
 
             if (!validation.isValid) {
                 when (validation.reason) {
@@ -274,7 +274,15 @@ class PumpScheduleFragment : Fragment() {
                     }
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
                         val blockedPumpLabel = validation.conflictPumpNum?.let { getPumpName(it) } ?: "Pompe inconnue"
-                        timeLayout.error = antiInterferenceGapErrorMessage(antiMin, blockedPumpLabel, validation.nextAllowedStartMs)
+                        Log.i(
+                            "VALIDATE_GAP",
+                            "blockingPumpName=$blockedPumpLabel nextAllowedStartMs=${validation.nextAllowedStartMs}"
+                        )
+                        timeLayout.error = DoseErrorMessageFormatter.antiInterferenceGap(
+                            antiMin = antiMin,
+                            blockingPumpName = blockedPumpLabel,
+                            nextAllowedStartMs = validation.nextAllowedStartMs
+                        )
                     }
                     DoseValidationReason.OVERFLOW_MIDNIGHT -> {
                         val lastAllowedEndMs = 86_400_000L - 1L
