@@ -1,6 +1,7 @@
 package com.esp32pumpwifi.app
 
 import android.content.Context
+import android.util.Log
 
 private const val PREFS = "prefs"
 private const val MAX_LINES_PER_PUMP = 12
@@ -51,10 +52,20 @@ object ProgramStoreSynced {
         pump: Int,
         lines: List<String>
     ) {
+        val tsBegin = System.currentTimeMillis()
+        val threadName = Thread.currentThread().name
+        Log.i(
+            "DailyCardDebug",
+            "program_write_begin ts=$tsBegin moduleId=$espId pump=$pump thread=$threadName"
+        )
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(key(context, espId, pump), lines.joinToString(";"))
-            .apply()
+            .commit()
+        Log.i(
+            "DailyCardDebug",
+            "program_write_end ts=${System.currentTimeMillis()} moduleId=$espId pump=$pump thread=$threadName"
+        )
     }
 
     // ---------------------------------------------------------------------

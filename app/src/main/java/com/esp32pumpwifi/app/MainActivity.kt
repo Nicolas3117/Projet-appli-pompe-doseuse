@@ -202,6 +202,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i("DailyCardDebug", "lifecycle event=onCreate ts=${System.currentTimeMillis()}")
         setContentView(R.layout.activity_main)
 
         val scrollView = findViewById<ScrollView>(R.id.pump_scroll)
@@ -302,10 +303,21 @@ class MainActivity : AppCompatActivity() {
         manualDoseButton.setOnClickListener {
             startActivity(Intent(this, ManualDoseTabsActivity::class.java))
         }
+
+        if (!isProgramUpdatedReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                this,
+                programUpdatedReceiver,
+                IntentFilter(DashboardRefreshNotifier.ACTION_PROGRAM_UPDATED),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            isProgramUpdatedReceiverRegistered = true
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        Log.i("DailyCardDebug", "lifecycle event=onResume ts=${System.currentTimeMillis()}")
 
         tvRtcTime.text = "RTC : --:--"
         lastRtcIp = null
@@ -354,19 +366,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        if (!isProgramUpdatedReceiverRegistered) {
-            ContextCompat.registerReceiver(
-                this,
-                programUpdatedReceiver,
-                IntentFilter(DashboardRefreshNotifier.ACTION_PROGRAM_UPDATED),
-                ContextCompat.RECEIVER_NOT_EXPORTED
-            )
-            isProgramUpdatedReceiverRegistered = true
-        }
+        Log.i("DailyCardDebug", "lifecycle event=onStart ts=${System.currentTimeMillis()}")
     }
 
     override fun onPause() {
         super.onPause()
+        Log.i("DailyCardDebug", "lifecycle event=onPause ts=${System.currentTimeMillis()}")
         stopConnectionWatcher()
         rtcFetchJob?.cancel()
         rtcFetchJob = null
@@ -375,11 +380,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        super.onStop()
+        Log.i("DailyCardDebug", "lifecycle event=onStop ts=${System.currentTimeMillis()}")
+    }
+
+    override fun onDestroy() {
+        Log.i("DailyCardDebug", "lifecycle event=onDestroy ts=${System.currentTimeMillis()}")
         if (isProgramUpdatedReceiverRegistered) {
             unregisterReceiver(programUpdatedReceiver)
             isProgramUpdatedReceiverRegistered = false
         }
-        super.onStop()
+        super.onDestroy()
     }
 
     // ================== WATCHER ==================
@@ -627,6 +638,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshDashboard(activeModule: EspModule, reason: String) {
         Log.i(TAG_DAILY_DEBUG, "refreshDashboard reason=$reason activeModuleId=${activeModule.id}")
+        Log.i("DailyCardDebug", "refreshDashboard_called reason=$reason ts=${System.currentTimeMillis()} activeModuleId=${activeModule.id}")
         TankScheduleHelper.recalculateFromLastTime(this, activeModule.id)
         updateTankSummary(activeModule)
         updateDailySummary(activeModule)
