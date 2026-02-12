@@ -1,6 +1,9 @@
 package com.esp32pumpwifi.app
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -13,6 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -53,6 +57,28 @@ class MainActivity : AppCompatActivity() {
     private var hasShownNotFoundPopup = false
     private var lastRtcIp: String? = null
     private var rtcFetchJob: Job? = null
+    private var isProgramUpdatedReceiverRegistered = false
+
+    private val programUpdatedReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action != DashboardRefreshNotifier.ACTION_PROGRAM_UPDATED) return
+
+                val moduleIdFromEvent = intent.getLongExtra(DashboardRefreshNotifier.EXTRA_MODULE_ID, -1L)
+                val activeModule = Esp32Manager.getActive(this@MainActivity)
+                val activeModuleId = activeModule?.id
+                val accepted = moduleIdFromEvent != -1L && moduleIdFromEvent == activeModuleId
+
+                Log.i(
+                    "DailyCardDebug",
+                    "program_updated_received ts=${System.currentTimeMillis()} moduleIdFromEvent=$moduleIdFromEvent activeModuleId=$activeModuleId decision=${if (accepted) "accepted" else "ignored"}"
+                )
+
+                if (accepted && activeModule != null) {
+                    refreshDashboard(activeModule, "program_updated_event")
+                }
+            }
+        }
 
     // pour tenter un retour STA automatique sans appuyer sur "+"
     private var lastStaProbeMs = 0L
@@ -326,6 +352,19 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
+    override fun onStart() {
+        super.onStart()
+        if (!isProgramUpdatedReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                this,
+                programUpdatedReceiver,
+                IntentFilter(DashboardRefreshNotifier.ACTION_PROGRAM_UPDATED),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            isProgramUpdatedReceiverRegistered = true
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         stopConnectionWatcher()
@@ -333,6 +372,14 @@ class MainActivity : AppCompatActivity() {
         rtcFetchJob = null
         uiRefreshJob?.cancel()
         uiRefreshJob = null
+    }
+
+    override fun onStop() {
+        if (isProgramUpdatedReceiverRegistered) {
+            unregisterReceiver(programUpdatedReceiver)
+            isProgramUpdatedReceiverRegistered = false
+        }
+        super.onStop()
     }
 
     // ================== WATCHER ==================
@@ -576,6 +623,13 @@ class MainActivity : AppCompatActivity() {
     private fun updateTankSummary(activeModule: EspModule) {
         tankSummaryContainer.visibility = View.VISIBLE
         for (pumpNum in 1..4) updateOneTank(activeModule.id, pumpNum)
+    }
+
+    private fun refreshDashboard(activeModule: EspModule, reason: String) {
+        Log.i(TAG_DAILY_DEBUG, "refreshDashboard reason=$reason activeModuleId=${activeModule.id}")
+        TankScheduleHelper.recalculateFromLastTime(this, activeModule.id)
+        updateTankSummary(activeModule)
+        updateDailySummary(activeModule)
     }
 
     private fun updateOneTank(espId: Long, pumpNum: Int) {
