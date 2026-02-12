@@ -212,14 +212,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            Log.i(
-                TAG_TIME_BUG,
-                "helper_submit pump=$pumpNumber moduleId=$moduleId startMs=${validation.startMs} endMs=${validation.endMs} antiMin=${validation.antiOverlapMinutes} doseCount=${validation.doseCount}"
-            )
-            Log.i(
-                TAG_TIME_BUG,
-                "helper_submit proposedTimesMs=${validation.proposedTimesMs} formattedTimes=${validation.formattedTimes}"
-            )
 
             val resultIntent = Intent().apply {
                 putExtra(EXTRA_PUMP_NUMBER, pumpNumber)
@@ -744,7 +736,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
         private const val MS_PER_MINUTE = 60_000L
         private const val MINUTES_IN_MS = 60_000.0
         private const val TAG_ANTI_INTERFERENCE = "ANTI_INTERFERENCE"
-        private const val TAG_TIME_BUG = "TIME_BUG"
         private const val TAG_HELPER_VOLUME_SPLIT = "HELPER_VOLUME_SPLIT"
         private const val MS_PER_HOUR = 3_600_000L
         private const val STATE_START_MS = "state_start_ms"
