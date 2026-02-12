@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.security.MessageDigest
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.min
@@ -96,9 +97,8 @@ object DailyDoseStore {
 
     fun todayRange(zone: ZoneId = ZoneId.systemDefault()): DayRange {
         val today = LocalDate.now(zone)
-        val dayStartMs = today.atStartOfDay(zone).toInstant().toEpochMilli()
-        val dayEndMs = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-        return DayRange(dayStartMs, dayEndMs)
+        val range = DayBoundaryUtils.dayRange(today, zone)
+        return DayRange(range.dayStartMs, range.dayEndMsExclusive)
     }
 
     fun computeProgramHash(rawProgram: String): String {
@@ -210,8 +210,10 @@ object DailyDoseStore {
 
     fun buildAutoDoseEventsForToday(context: Context, moduleId: Long) {
         val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+        val zone = ZoneId.systemDefault()
         val nowMs = System.currentTimeMillis()
-        val (dayStartMs, dayEndMs) = todayRange()
+        val (dayStartMs, dayEndMs) = todayRange(zone)
+        val day = Instant.ofEpochMilli(dayStartMs).atZone(zone).toLocalDate()
         val cappedNowMs = min(nowMs, dayEndMs)
 
         for (pump in 1..4) {
@@ -227,7 +229,7 @@ object DailyDoseStore {
                 val doses = parsePumpProgramDoses(snapshot.rawEncodedProgram, flow)
 
                 for ((offsetMs, volumeMl) in doses) {
-                    val doseStartMs = dayStartMs + offsetMs
+                    val doseStartMs = DayBoundaryUtils.instantAtOffset(day, offsetMs, zone).toEpochMilli()
                     if (doseStartMs > nowMs) continue
                     if (snapshot.sentAtMs > doseStartMs) continue
                     if (doseStartMs >= intervalEnd) continue
@@ -252,8 +254,11 @@ object DailyDoseStore {
     }
 
     fun saveManualDoseEvent(context: Context, moduleId: Long, pumpNum: Int, volumeMl: Float, tsMs: Long = System.currentTimeMillis()) {
-        val (dayStartMs, _) = todayRange()
-        val offsetMs = (tsMs - dayStartMs).coerceIn(0L, 86_399_999L)
+        val zone = ZoneId.systemDefault()
+        val day = Instant.ofEpochMilli(tsMs).atZone(zone).toLocalDate()
+        val range = DayBoundaryUtils.dayRange(day, zone)
+        val dayStartMs = range.dayStartMs
+        val offsetMs = (tsMs - dayStartMs).coerceAtLeast(0L)
         val eventKey = "M:${moduleId}:${pumpNum}:${tsMs}:${formatVolume(volumeMl)}"
         insertDoseEventIgnore(
             context,
