@@ -82,10 +82,6 @@ class ScheduleActivity : AppCompatActivity() {
         }
 
         val expectedModuleId = intent.getStringExtra(EXTRA_MODULE_ID)
-        Log.i(
-            TAG_EXIT_SYNC,
-            "onCreate instance=$instanceId saved=${savedInstanceState != null} moduleIdExtra=$expectedModuleId didAutoCheckOnResume=$didAutoCheckOnResume returningFromHelper=$returningFromHelper"
-        )
 
         // ✅ anti mélange multi-modules AVANT tout
         if (expectedModuleId != null && activeModule.id.toString() != expectedModuleId) {
@@ -122,20 +118,12 @@ class ScheduleActivity : AppCompatActivity() {
             }
 
             val pumpNumber = viewPager.currentItem + 1
-            Log.i(
-                "SCHEDULE_ADD",
-                "helper_click pump=$pumpNumber moduleId=${locked.id} isReadOnly=$isReadOnly isUnsynced=$isUnsynced"
-            )
 
             val intent = Intent(this, ScheduleHelperActivity::class.java).apply {
                 putExtra(ScheduleHelperActivity.EXTRA_PUMP_NUMBER, pumpNumber)
                 putExtra(ScheduleHelperActivity.EXTRA_MODULE_ID, locked.id.toString())
             }
             returningFromHelper = true
-            Log.i(
-                TAG_EXIT_SYNC,
-                "launch_helper instance=$instanceId returningFromHelper set true requestCode=$REQUEST_SCHEDULE_HELPER"
-            )
             startActivityForResult(intent, REQUEST_SCHEDULE_HELPER)
         }
 
@@ -198,10 +186,6 @@ class ScheduleActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshAllPumpTabsFromStorage()
-        Log.i(
-            TAG_EXIT_SYNC,
-            "onResume instance=$instanceId returningFromHelper=$returningFromHelper didAutoCheckOnResume=$didAutoCheckOnResume isFinishing=$isFinishing lockedModuleId=${lockedModule?.id}"
-        )
 
         // ✅ Option B :
         // - Au retour du helper, il est NORMAL que local != ESP tant que l'utilisateur n'a pas cliqué "Envoyer".
@@ -209,48 +193,28 @@ class ScheduleActivity : AppCompatActivity() {
         // - La comparaison reste faite uniquement sur "Quitter/Back" (runFinalExitCheck) ou "Envoyer".
         // ✅ Auto-check normal à l’ouverture (import programme depuis l’ESP)
         if (returningFromHelper) {
-            Log.i(
-                TAG_EXIT_SYNC,
-                "onResume instance=$instanceId action=skip_auto_check reason=return_helper didAutoCheckOnResume=$didAutoCheckOnResume"
-            )
             returningFromHelper = false
-            Log.i(TAG_EXIT_SYNC, "onResume instance=$instanceId returningFromHelper reset false after helper return")
             return
         }
 
         if (didAutoCheckOnResume) {
-            Log.i(TAG_EXIT_SYNC, "onResume instance=$instanceId action=skip_auto_check reason=already_done")
             return
         }
         didAutoCheckOnResume = true
-        Log.i(TAG_EXIT_SYNC, "onResume instance=$instanceId action=auto_check_on_open reason=first_open")
         autoCheckProgramOnOpen()
     }
 
     override fun onPause() {
         super.onPause()
-        Log.i(
-            TAG_EXIT_SYNC,
-            "onPause instance=$instanceId didAutoCheckOnResume_before=$didAutoCheckOnResume isFinishing=$isFinishing returningFromHelper=$returningFromHelper"
-        )
-        Log.i(TAG_EXIT_SYNC, "onPause instance=$instanceId didAutoCheckOnResume_after=$didAutoCheckOnResume")
     }
 
     override fun onStop() {
         super.onStop()
-        Log.i(
-            TAG_EXIT_SYNC,
-            "onStop instance=$instanceId didAutoCheckOnResume=$didAutoCheckOnResume returningFromHelper=$returningFromHelper isFinishing=$isFinishing"
-        )
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(STATE_DID_AUTO_CHECK_ON_RESUME, didAutoCheckOnResume)
         outState.putBoolean(STATE_RETURNING_FROM_HELPER, returningFromHelper)
-        Log.i(
-            TAG_EXIT_SYNC,
-            "onSaveInstanceState instance=$instanceId didAutoCheckOnResume=$didAutoCheckOnResume returningFromHelper=$returningFromHelper"
-        )
         super.onSaveInstanceState(outState)
     }
 
@@ -263,14 +227,6 @@ class ScheduleActivity : AppCompatActivity() {
         val pumpExtra = data?.getIntExtra(ScheduleHelperActivity.EXTRA_PUMP_NUMBER, -1) ?: -1
         val moduleIdExtra = data?.getStringExtra(ScheduleHelperActivity.EXTRA_MODULE_ID)
 
-        Log.i(
-            "SCHEDULE_ADD",
-            "helper_result requestCode=$requestCode resultCode=$resultCode extras=[$extraKeys] pumpExtra=$pumpExtra moduleIdExtra=$moduleIdExtra"
-        )
-        Log.i(
-            TAG_EXIT_SYNC,
-            "result_from_helper instance=$instanceId requestCode=$requestCode resultCode=$resultCode returningFromHelper(before)=$returningFromHelper"
-        )
 
         if (requestCode != REQUEST_SCHEDULE_HELPER) return
 
@@ -284,7 +240,6 @@ class ScheduleActivity : AppCompatActivity() {
 
         if (moduleIdExtra != active.id.toString()) {
             Toast.makeText(this, "Ajout ignoré : module différent.", Toast.LENGTH_LONG).show()
-            Log.w("SCHEDULE_ADD", "module_mismatch expected=${active.id} got=$moduleIdExtra")
             return
         }
 
@@ -296,15 +251,7 @@ class ScheduleActivity : AppCompatActivity() {
 
         val scheduleMs =
             data.getLongArrayExtra(ScheduleHelperActivity.EXTRA_SCHEDULE_MS)?.toList().orEmpty()
-        Log.i(
-            TAG_EXIT_SYNC,
-            "result_from_helper instance=$instanceId scheduleMs_size=${scheduleMs.size} returningFromHelper(after)=$returningFromHelper"
-        )
 
-        Log.i(
-            TAG_TIME_BUG,
-            "activity_result keys=[$extraKeys] pump=$pump moduleId=$moduleIdExtra scheduleMsRaw=$scheduleMs"
-        )
 
         if (scheduleMs.isEmpty()) {
             Toast.makeText(this, "Aucune dose à ajouter (données vides).", Toast.LENGTH_LONG).show()
@@ -313,17 +260,11 @@ class ScheduleActivity : AppCompatActivity() {
 
         val invalidMs = scheduleMs.filterNot { ScheduleAddMergeUtils.isValidMsOfDay(it) }
         if (invalidMs.isNotEmpty()) {
-            Log.w(TAG_TIME_BUG, "activity_result invalid_ms=$invalidMs")
             Toast.makeText(this, "Heures invalides reçues (hors 24h), ajout annulé.", Toast.LENGTH_LONG).show()
             return
         }
 
         val newTimes = scheduleMs.map { ScheduleAddMergeUtils.toTimeString(it) }
-        Log.i(
-            TAG_TIME_BUG,
-            "activity_result convertedTimes=${scheduleMs.zip(newTimes).joinToString { "${it.first}->${it.second}" }}"
-        )
-        Log.i(TAG_TIME_BUG, "activity_result newTimes=$newTimes")
         val flow = getSharedPreferences("prefs", Context.MODE_PRIVATE)
             .getFloat("esp_${active.id}_pump${pump}_flow", 0f)
         val volumePerDoseTenthList =
@@ -349,10 +290,6 @@ class ScheduleActivity : AppCompatActivity() {
             .orEmpty()
 
         val beforeProgramCount = ProgramStore.count(this, active.id, pump)
-        Log.i(
-            "SCHEDULE_ADD",
-            "before_merge pump=$pump existingSchedules=${existing.size} programCount=$beforeProgramCount"
-        )
 
         val newSchedules = newTimes.mapIndexed { index, time ->
             PumpSchedule(
@@ -379,13 +316,8 @@ class ScheduleActivity : AppCompatActivity() {
 
         val first = mergeResult.merged.firstOrNull()?.time ?: "none"
         val last = mergeResult.merged.lastOrNull()?.time ?: "none"
-        Log.i(
-            "SCHEDULE_ADD",
-            "after_merge pump=$pump mergedSize=${mergeResult.merged.size} first=$first last=$last added=${mergeResult.addedCount} duplicates=${mergeResult.skippedDuplicateCount}"
-        )
         val mergedTimes = mergeResult.merged.map { it.time }
         val mergedSummary = if (mergedTimes.size <= 12) mergedTimes.toString() else "size=${mergedTimes.size}"
-        Log.i(TAG_TIME_BUG, "mergedTimes first=$first last=$last list=$mergedSummary")
 
         while (ProgramStore.count(this, active.id, pump) > 0) {
             ProgramStore.removeLine(this, active.id, pump, 0)
@@ -423,10 +355,6 @@ class ScheduleActivity : AppCompatActivity() {
         tabsViewModel.setActiveTotal(pump, totalTenth)
         refreshAllPumpTabsFromStorage()
 
-        Log.i(
-            "SCHEDULE_ADD",
-            "after_ui pump=$pump adapterUpdateCalled=true totalTenth=$totalTenth"
-        )
 
         if (mergeResult.addedCount <= 0) {
             Toast.makeText(this, "Aucune nouvelle dose (doublons).", Toast.LENGTH_LONG).show()
@@ -494,22 +422,18 @@ class ScheduleActivity : AppCompatActivity() {
 
     private suspend fun runFinalExitCheck(): Boolean {
         if (isUnsynced) {
-            Log.w(TAG_EXIT_SYNC, "exit_check blocked isUnsynced=true")
             showUnsyncedDialog()
             return false
         }
 
         val active = lockedModule ?: run {
-            Log.w(TAG_EXIT_SYNC, "exit_check blocked reason=locked_module_null")
             setUnsyncedState(true, "Synchronisation impossible")
             showUnsyncedDialog()
             return false
         }
 
-        Log.i(TAG_EXIT_SYNC, "exit_check fetch_esp_program start moduleId=${active.id}")
         val espProgram = withTimeoutOrNull(4000L) { fetchProgramFromEsp(active.ip) }
         if (espProgram == null) {
-            Log.w(TAG_EXIT_SYNC, "exit_check blocked reason=esp_fetch_failed")
             setUnsyncedState(true, "Synchronisation impossible")
             showUnsyncedDialog()
             return false
@@ -517,7 +441,6 @@ class ScheduleActivity : AppCompatActivity() {
 
         val localProgram = ProgramStore.buildMessageMs(this, active.id)
         val matches = espProgram == localProgram
-        Log.i(TAG_EXIT_SYNC, "exit_check compare moduleId=${active.id} matches=$matches")
         if (matches) return true
 
         return suspendCancellableCoroutine { cont ->
@@ -526,12 +449,10 @@ class ScheduleActivity : AppCompatActivity() {
                 .setMessage("La programmation locale est différente de celle de la pompe.")
                 .setNegativeButton("Rester") { dialog, _ ->
                     dialog.dismiss()
-                    Log.i(TAG_EXIT_SYNC, "exit_check dialog_action=stay")
                     if (cont.isActive) cont.resume(false)
                 }
                 .setPositiveButton("Sauvegarder-Envoyer et quitter") { dialog, _ ->
                     dialog.dismiss()
-                    Log.i(TAG_EXIT_SYNC, "exit_check dialog_action=save_send_and_exit")
                     lifecycleScope.launch {
                         val ok = sendIfPossible()
                         if (!ok) {
@@ -540,13 +461,11 @@ class ScheduleActivity : AppCompatActivity() {
                                 "Envoi impossible, fermeture annulée.",
                                 Toast.LENGTH_LONG
                             ).show()
-                            Log.w(TAG_EXIT_SYNC, "exit_check send_failed stay_on_screen")
                         }
                         if (cont.isActive) cont.resume(ok)
                     }
                 }
                 .setOnCancelListener {
-                    Log.i(TAG_EXIT_SYNC, "exit_check dialog_cancelled")
                     if (cont.isActive) cont.resume(false)
                 }
                 .show()
@@ -596,7 +515,6 @@ class ScheduleActivity : AppCompatActivity() {
 
     private suspend fun sendIfPossible(): Boolean {
         val active = lockedModule ?: run {
-            Log.w(TAG_EXIT_SYNC, "send_if_possible blocked reason=locked_module_null")
             setUnsyncedState(true, "Synchronisation impossible")
             Toast.makeText(
                 this@ScheduleActivity,
@@ -606,9 +524,7 @@ class ScheduleActivity : AppCompatActivity() {
             showUnsyncedDialog()
             return false
         }
-        Log.i(TAG_EXIT_SYNC, "send_if_possible start moduleId=${active.id}")
         val ok = sendSchedulesToESP32(active)
-        Log.i(TAG_EXIT_SYNC, "send_if_possible result=$ok moduleId=${active.id}")
         return ok
     }
 
@@ -741,11 +657,9 @@ class ScheduleActivity : AppCompatActivity() {
      */
     private fun autoCheckProgramOnOpen() {
         lifecycleScope.launch {
-            Log.i(TAG_EXIT_SYNC, "AUTO_CHECK_START instance=$instanceId")
             val active = lockedModule ?: run {
                 setUnsyncedState(true, "Synchronisation impossible")
                 showUnsyncedDialog()
-                Log.w(TAG_EXIT_SYNC, "AUTO_CHECK_END instance=$instanceId result=locked_module_null")
                 return@launch
             }
 
@@ -759,7 +673,6 @@ class ScheduleActivity : AppCompatActivity() {
             if (program576 == null) {
                 setUnsyncedState(true, "Synchronisation impossible")
                 showUnsyncedDialog()
-                Log.w(TAG_EXIT_SYNC, "AUTO_CHECK_END instance=$instanceId result=program576_null")
                 return@launch
             }
 
@@ -768,7 +681,6 @@ class ScheduleActivity : AppCompatActivity() {
             if (!okSynced) {
                 setUnsyncedState(true, "Synchronisation impossible")
                 showUnsyncedDialog()
-                Log.w(TAG_EXIT_SYNC, "AUTO_CHECK_END instance=$instanceId result=store_sync_failed")
                 return@launch
             }
 
@@ -882,10 +794,6 @@ class ScheduleActivity : AppCompatActivity() {
 
             setUnsyncedState(false, null)
             setReadOnlyMode(false, null)
-            Log.i(
-                TAG_EXIT_SYNC,
-                "AUTO_CHECK_END instance=$instanceId moduleId=${active.id} imported=$importedCounts removeLineCalls=$removeLineCalls"
-            )
         }
     }
 
@@ -919,8 +827,6 @@ class ScheduleActivity : AppCompatActivity() {
         const val EXTRA_INITIAL_PROGRAM_576 = "EXTRA_INITIAL_PROGRAM_576"
         const val EXTRA_MODULE_ID = "EXTRA_MODULE_ID"
         private const val REQUEST_SCHEDULE_HELPER = 2001
-        private const val TAG_EXIT_SYNC = "EXIT_SYNC"
-        private const val TAG_TIME_BUG = "TIME_BUG"
         private const val MIN_PUMP_DURATION_MS = 50
         private const val MAX_PUMP_DURATION_MS = 600_000
         private const val STATE_DID_AUTO_CHECK_ON_RESUME = "STATE_DID_AUTO_CHECK_ON_RESUME"
