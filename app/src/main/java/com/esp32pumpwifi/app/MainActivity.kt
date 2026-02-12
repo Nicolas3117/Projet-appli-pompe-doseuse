@@ -1,12 +1,8 @@
 package com.esp32pumpwifi.app
 
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.Bundle
 import android.provider.Settings
-import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
@@ -16,7 +12,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -57,34 +52,10 @@ class MainActivity : AppCompatActivity() {
     private var hasShownNotFoundPopup = false
     private var lastRtcIp: String? = null
     private var rtcFetchJob: Job? = null
-    private var isProgramUpdatedReceiverRegistered = false
-
-    private val programUpdatedReceiver =
-        object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action != DashboardRefreshNotifier.ACTION_PROGRAM_UPDATED) return
-
-                val moduleIdFromEvent = intent.getLongExtra(DashboardRefreshNotifier.EXTRA_MODULE_ID, -1L)
-                val activeModule = Esp32Manager.getActive(this@MainActivity)
-                val activeModuleId = activeModule?.id
-                val accepted = moduleIdFromEvent != -1L && moduleIdFromEvent == activeModuleId
-
-                Log.i(
-                    "DailyCardDebug",
-                    "program_updated_received ts=${System.currentTimeMillis()} moduleIdFromEvent=$moduleIdFromEvent activeModuleId=$activeModuleId decision=${if (accepted) "accepted" else "ignored"}"
-                )
-
-                if (accepted && activeModule != null) {
-                    refreshDashboard(activeModule, "program_updated_event")
-                }
-            }
-        }
-
     // pour tenter un retour STA automatique sans appuyer sur "+"
     private var lastStaProbeMs = 0L
 
     private companion object {
-        private const val TAG_DAILY_DEBUG = "MainDailyDebug"
         private const val AP_IP = "192.168.4.1"
         private const val CONNECTION_POLL_MS = 2000L
         private const val STA_PROBE_INTERVAL_MS = 10_000L
@@ -108,21 +79,12 @@ class MainActivity : AppCompatActivity() {
      * Calcule le "reste à faire aujourd'hui" (strictement futur) à partir de ProgramStoreSynced.
      */
     private fun computeFuturePlan(espId: Long, pumpNum: Int, flow: Float): FuturePlan {
-        val source = "ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)"
-        Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum source=$source flow=$flow")
         if (flow <= 0f) {
-            Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum earlyReturn=flow<=0")
             return FuturePlan(0, 0f)
         }
 
         val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
-        Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum rawLineCount=${encodedLines.size}")
-        encodedLines.take(5).forEachIndexed { index, raw ->
-            val preview = raw.trim().take(12)
-            Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum raw[$index]=$preview")
-        }
         if (encodedLines.isEmpty()) {
-            Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum earlyReturn=encodedLinesEmpty")
             return FuturePlan(0, 0f)
         }
 
@@ -135,61 +97,47 @@ class MainActivity : AppCompatActivity() {
         for (line in encodedLines) {
             val t = line.trim()
             if (t.length != LINE_LEN) {
-                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=invalidLength")
                 continue
             }
 
             if (t.firstOrNull() != '1') {
-                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=enabled=false")
                 continue
             }
 
             if (!LINE_12_DIGITS_REGEX.matches(t)) {
-                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=nonDigitCharacters")
                 continue
             }
 
             if (!isValidEnabledProgramLine(t)) {
-                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=isValidEnabledProgramLine=false")
                 continue
             }
 
             val hh = t.substring(2, 4).toIntOrNull()
             if (hh == null) {
-                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=hhParsingFail")
                 continue
             }
 
             val mm = t.substring(4, 6).toIntOrNull()
             if (mm == null) {
-                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=mmParsingFail")
                 continue
             }
 
             val durationMs = t.substring(6, 12).toIntOrNull()
             if (durationMs == null) {
-                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=durationParsingFail")
                 continue
             }
 
             if (hh !in 0..23 || mm !in 0..59) {
-                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=timeOutOfBounds hh=$hh mm=$mm")
                 continue
             }
             if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) {
-                Log.d(
-                    "FutureDebug",
-                    "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=durationOutOfBounds durationMs=$durationMs bounds=$MIN_DURATION_MS..$MAX_DURATION_MS"
-                )
                 continue
             }
 
             val minutes = hh * 60 + mm
-            Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum candidateValid hhmm=%02d:%02d minutes=%d durationMs=%d".format(hh, mm, minutes, durationMs))
 
             // Strictement dans le futur (après maintenant)
             if (minutes <= nowMinutes) {
-                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=notStrictFuture minutes=$minutes nowMinutes=$nowMinutes")
                 continue
             }
 
@@ -202,7 +150,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.i("DailyCardDebug", "lifecycle event=onCreate ts=${System.currentTimeMillis()}")
         setContentView(R.layout.activity_main)
 
         val scrollView = findViewById<ScrollView>(R.id.pump_scroll)
@@ -304,20 +251,10 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ManualDoseTabsActivity::class.java))
         }
 
-        if (!isProgramUpdatedReceiverRegistered) {
-            ContextCompat.registerReceiver(
-                this,
-                programUpdatedReceiver,
-                IntentFilter(DashboardRefreshNotifier.ACTION_PROGRAM_UPDATED),
-                ContextCompat.RECEIVER_NOT_EXPORTED
-            )
-            isProgramUpdatedReceiverRegistered = true
-        }
     }
 
     override fun onResume() {
         super.onResume()
-        Log.i("DailyCardDebug", "lifecycle event=onResume ts=${System.currentTimeMillis()}")
 
         tvRtcTime.text = "RTC : --:--"
         lastRtcIp = null
@@ -325,7 +262,6 @@ class MainActivity : AppCompatActivity() {
         rtcFetchJob = null
 
         val activeModule = Esp32Manager.getActive(this)
-        Log.i(TAG_DAILY_DEBUG, "onResume activeModuleId=${activeModule?.id} isFinishing=$isFinishing isDestroyed=$isDestroyed")
 
         if (activeModule == null) {
             tvActiveModule.text = "Sélectionné : aucun module"
@@ -353,7 +289,6 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 while (true) {
                     val active = Esp32Manager.getActive(this@MainActivity)
-                    Log.i(TAG_DAILY_DEBUG, "uiRefresh tick activeModuleId=${active?.id} isFinishing=${this@MainActivity.isFinishing} isDestroyed=${this@MainActivity.isDestroyed}")
                     active?.let {
                         TankScheduleHelper.recalculateFromLastTime(this@MainActivity, it.id)
                         updateTankSummary(it)
@@ -364,33 +299,13 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    override fun onStart() {
-        super.onStart()
-        Log.i("DailyCardDebug", "lifecycle event=onStart ts=${System.currentTimeMillis()}")
-    }
-
     override fun onPause() {
         super.onPause()
-        Log.i("DailyCardDebug", "lifecycle event=onPause ts=${System.currentTimeMillis()}")
         stopConnectionWatcher()
         rtcFetchJob?.cancel()
         rtcFetchJob = null
         uiRefreshJob?.cancel()
         uiRefreshJob = null
-    }
-
-    override fun onStop() {
-        super.onStop()
-        Log.i("DailyCardDebug", "lifecycle event=onStop ts=${System.currentTimeMillis()}")
-    }
-
-    override fun onDestroy() {
-        Log.i("DailyCardDebug", "lifecycle event=onDestroy ts=${System.currentTimeMillis()}")
-        if (isProgramUpdatedReceiverRegistered) {
-            unregisterReceiver(programUpdatedReceiver)
-            isProgramUpdatedReceiverRegistered = false
-        }
-        super.onDestroy()
     }
 
     // ================== WATCHER ==================
@@ -636,14 +551,6 @@ class MainActivity : AppCompatActivity() {
         for (pumpNum in 1..4) updateOneTank(activeModule.id, pumpNum)
     }
 
-    private fun refreshDashboard(activeModule: EspModule, reason: String) {
-        Log.i(TAG_DAILY_DEBUG, "refreshDashboard reason=$reason activeModuleId=${activeModule.id}")
-        Log.i("DailyCardDebug", "refreshDashboard_called reason=$reason ts=${System.currentTimeMillis()} activeModuleId=${activeModule.id}")
-        TankScheduleHelper.recalculateFromLastTime(this, activeModule.id)
-        updateTankSummary(activeModule)
-        updateDailySummary(activeModule)
-    }
-
     private fun updateOneTank(espId: Long, pumpNum: Int) {
         val nameId = resources.getIdentifier("tv_tank_name_$pumpNum", "id", packageName)
         val progressId = resources.getIdentifier("pb_tank_$pumpNum", "id", packageName)
@@ -669,28 +576,11 @@ class MainActivity : AppCompatActivity() {
         dailySummaryContainer.visibility = View.VISIBLE
         lifecycleScope.launch(Dispatchers.IO) {
             val dayStartMs = DailyDoseStore.todayRange().dayStartMs
-            val doneCountBeforeBuild = (1..4).sumOf { pumpNum ->
-                DailyDoseStore.countForDay(this@MainActivity, activeModule.id, pumpNum, dayStartMs)
-            }
             DailyDoseStore.buildAutoDoseEventsForToday(this@MainActivity, activeModule.id)
-            val doneCountAfterBuild = (1..4).sumOf { pumpNum ->
-                DailyDoseStore.countForDay(this@MainActivity, activeModule.id, pumpNum, dayStartMs)
-            }
-            val insertedByBuild = doneCountAfterBuild - doneCountBeforeBuild
             val doneByPump = (1..4).associateWith { pumpNum ->
                 DailyDone(
                     count = DailyDoseStore.countForDay(this@MainActivity, activeModule.id, pumpNum, dayStartMs),
                     ml = DailyDoseStore.sumMlForDay(this@MainActivity, activeModule.id, pumpNum, dayStartMs)
-                )
-            }
-            val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
-            for (pumpNum in 1..4) {
-                val done = doneByPump[pumpNum] ?: DailyDone(0, 0f)
-                val flow = prefs.getFloat("esp_${activeModule.id}_pump${pumpNum}_flow", 0f)
-                val future = computeFuturePlan(activeModule.id, pumpNum, flow)
-                Log.i(
-                    TAG_DAILY_DEBUG,
-                    "updateDailySummary moduleId=${activeModule.id} pump=$pumpNum doneMl=${formatMl(done.ml)} doneCount=${done.count} futureMl=${formatMl(future.ml)} futureCount=${future.count} autoBuildInserted=${if (insertedByBuild > 0) ">0" else "0"}"
                 )
             }
             withContext(Dispatchers.Main) {
@@ -751,16 +641,8 @@ class MainActivity : AppCompatActivity() {
 
     // ✅ prochaine dose basée sur ProgramStoreSynced (synced)
     private fun getNextDoseText(espId: Long, pumpNum: Int): String {
-        val source = "ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)"
         val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
-        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum source=$source")
-        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum rawLineCount=${encodedLines.size}")
-        encodedLines.take(5).forEachIndexed { index, raw ->
-            val preview = raw.trim().take(12)
-            Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum raw[$index]=$preview")
-        }
         if (encodedLines.isEmpty()) {
-            Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum earlyReturn=encodedLinesEmpty")
             return "Aucune dose prévue"
         }
 
@@ -772,54 +654,38 @@ class MainActivity : AppCompatActivity() {
                 .mapNotNull { line ->
                     val t = line.trim()
                     if (t.length != LINE_LEN) {
-                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=invalidLength")
                         return@mapNotNull null
                     }
                     if (t.firstOrNull() != '1') {
-                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=enabled=false")
                         return@mapNotNull null
                     }
                     if (!LINE_12_DIGITS_REGEX.matches(t)) {
-                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=nonDigitCharacters")
                         return@mapNotNull null
                     }
                     if (!isValidEnabledProgramLine(t)) {
-                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=isValidEnabledProgramLine=false")
                         return@mapNotNull null
                     }
 
                     val hh = t.substring(2, 4).toIntOrNull()
                     if (hh == null) {
-                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=hhParsingFail")
                         return@mapNotNull null
                     }
                     val mm = t.substring(4, 6).toIntOrNull()
                     if (mm == null) {
-                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=mmParsingFail")
                         return@mapNotNull null
                     }
                     val durationMs = t.substring(6, 12).toIntOrNull()
                     if (durationMs == null) {
-                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=durationParsingFail")
                         return@mapNotNull null
                     }
                     if (hh !in 0..23 || mm !in 0..59) {
-                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=timeOutOfBounds hh=$hh mm=$mm")
                         return@mapNotNull null
                     }
                     if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) {
-                        Log.d(
-                            "NextDoseDebug",
-                            "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=durationOutOfBounds durationMs=$durationMs bounds=$MIN_DURATION_MS..$MAX_DURATION_MS"
-                        )
                         return@mapNotNull null
                     }
 
                     val minutes = hh * 60 + mm
-                    Log.d(
-                        "NextDoseDebug",
-                        "moduleId=$espId pumpNum=$pumpNum entry hhmm=%02d:%02d minutes=%d durationMs=%d enabled=true".format(hh, mm, minutes, durationMs)
-                    )
 
                     Entry(minutes = minutes, hh = hh, mm = mm, durationMs = durationMs)
                 }
@@ -827,19 +693,13 @@ class MainActivity : AppCompatActivity() {
                 .toList()
 
         if (entries.isEmpty()) {
-            Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum earlyReturn=entriesEmpty")
             return "Aucune dose prévue"
         }
 
         val nowLocal = Instant.ofEpochMilli(System.currentTimeMillis()).atZone(ZoneId.systemDefault()).toLocalTime()
         val nowMinutes = nowLocal.hour * 60 + nowLocal.minute
-        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum nowMinutes=$nowMinutes")
 
         val next = entries.firstOrNull { it.minutes > nowMinutes } ?: entries.first()
-        Log.d(
-            "NextDoseDebug",
-            "moduleId=$espId pumpNum=$pumpNum chosenNext hhmm=%02d:%02d minutes=%d durationMs=%d".format(next.hh, next.mm, next.minutes, next.durationMs)
-        )
         val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", next.hh, next.mm)
 
         val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
