@@ -631,6 +631,11 @@ class ScheduleActivity : AppCompatActivity() {
                             moduleId = active.id,
                             rawProgram576 = message
                         )
+                        DashboardRefreshNotifier.notifyProgramUpdated(this@ScheduleActivity, active.id)
+                        Log.i(
+                            "DailyCardDebug",
+                            "program_updated_emitted ts=${System.currentTimeMillis()} moduleId=${active.id} source=sendSchedulesToESP32"
+                        )
                         if (cont.isActive) cont.resume(true)
                     }
                 }

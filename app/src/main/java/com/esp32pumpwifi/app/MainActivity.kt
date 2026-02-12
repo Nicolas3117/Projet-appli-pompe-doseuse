@@ -82,10 +82,23 @@ class MainActivity : AppCompatActivity() {
      * Calcule le "reste à faire aujourd'hui" (strictement futur) à partir de ProgramStoreSynced.
      */
     private fun computeFuturePlan(espId: Long, pumpNum: Int, flow: Float): FuturePlan {
-        if (flow <= 0f) return FuturePlan(0, 0f)
+        val source = "ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)"
+        Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum source=$source flow=$flow")
+        if (flow <= 0f) {
+            Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum earlyReturn=flow<=0")
+            return FuturePlan(0, 0f)
+        }
 
         val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
-        if (encodedLines.isEmpty()) return FuturePlan(0, 0f)
+        Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum rawLineCount=${encodedLines.size}")
+        encodedLines.take(5).forEachIndexed { index, raw ->
+            val preview = raw.trim().take(12)
+            Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum raw[$index]=$preview")
+        }
+        if (encodedLines.isEmpty()) {
+            Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum earlyReturn=encodedLinesEmpty")
+            return FuturePlan(0, 0f)
+        }
 
         val nowLocal = Instant.ofEpochMilli(System.currentTimeMillis()).atZone(ZoneId.systemDefault()).toLocalTime()
         val nowMinutes = nowLocal.hour * 60 + nowLocal.minute
@@ -95,18 +108,64 @@ class MainActivity : AppCompatActivity() {
 
         for (line in encodedLines) {
             val t = line.trim()
-            if (!isValidEnabledProgramLine(t)) continue
+            if (t.length != LINE_LEN) {
+                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=invalidLength")
+                continue
+            }
 
-            val hh = t.substring(2, 4).toIntOrNull() ?: continue
-            val mm = t.substring(4, 6).toIntOrNull() ?: continue
-            val durationMs = t.substring(6, 12).toIntOrNull() ?: continue
-            if (hh !in 0..23 || mm !in 0..59) continue
-            if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) continue
+            if (t.firstOrNull() != '1') {
+                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=enabled=false")
+                continue
+            }
+
+            if (!LINE_12_DIGITS_REGEX.matches(t)) {
+                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=nonDigitCharacters")
+                continue
+            }
+
+            if (!isValidEnabledProgramLine(t)) {
+                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=isValidEnabledProgramLine=false")
+                continue
+            }
+
+            val hh = t.substring(2, 4).toIntOrNull()
+            if (hh == null) {
+                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=hhParsingFail")
+                continue
+            }
+
+            val mm = t.substring(4, 6).toIntOrNull()
+            if (mm == null) {
+                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=mmParsingFail")
+                continue
+            }
+
+            val durationMs = t.substring(6, 12).toIntOrNull()
+            if (durationMs == null) {
+                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=durationParsingFail")
+                continue
+            }
+
+            if (hh !in 0..23 || mm !in 0..59) {
+                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=timeOutOfBounds hh=$hh mm=$mm")
+                continue
+            }
+            if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) {
+                Log.d(
+                    "FutureDebug",
+                    "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=durationOutOfBounds durationMs=$durationMs bounds=$MIN_DURATION_MS..$MAX_DURATION_MS"
+                )
+                continue
+            }
 
             val minutes = hh * 60 + mm
+            Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum candidateValid hhmm=%02d:%02d minutes=%d durationMs=%d".format(hh, mm, minutes, durationMs))
 
             // Strictement dans le futur (après maintenant)
-            if (minutes <= nowMinutes) continue
+            if (minutes <= nowMinutes) {
+                Log.d("FutureDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=notStrictFuture minutes=$minutes nowMinutes=$nowMinutes")
+                continue
+            }
 
             futureCount++
             futureMl += (durationMs / 1000f) * flow
@@ -626,8 +685,18 @@ class MainActivity : AppCompatActivity() {
 
     // ✅ prochaine dose basée sur ProgramStoreSynced (synced)
     private fun getNextDoseText(espId: Long, pumpNum: Int): String {
+        val source = "ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)"
         val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
-        if (encodedLines.isEmpty()) return "Aucune dose prévue"
+        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum source=$source")
+        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum rawLineCount=${encodedLines.size}")
+        encodedLines.take(5).forEachIndexed { index, raw ->
+            val preview = raw.trim().take(12)
+            Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum raw[$index]=$preview")
+        }
+        if (encodedLines.isEmpty()) {
+            Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum earlyReturn=encodedLinesEmpty")
+            return "Aucune dose prévue"
+        }
 
         data class Entry(val minutes: Int, val hh: Int, val mm: Int, val durationMs: Int)
 
@@ -636,25 +705,75 @@ class MainActivity : AppCompatActivity() {
                 .asSequence()
                 .mapNotNull { line ->
                     val t = line.trim()
-                    if (!isValidEnabledProgramLine(t)) return@mapNotNull null
+                    if (t.length != LINE_LEN) {
+                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=invalidLength")
+                        return@mapNotNull null
+                    }
+                    if (t.firstOrNull() != '1') {
+                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=enabled=false")
+                        return@mapNotNull null
+                    }
+                    if (!LINE_12_DIGITS_REGEX.matches(t)) {
+                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=nonDigitCharacters")
+                        return@mapNotNull null
+                    }
+                    if (!isValidEnabledProgramLine(t)) {
+                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=isValidEnabledProgramLine=false")
+                        return@mapNotNull null
+                    }
 
-                    val hh = t.substring(2, 4).toIntOrNull() ?: return@mapNotNull null
-                    val mm = t.substring(4, 6).toIntOrNull() ?: return@mapNotNull null
-                    val durationMs = t.substring(6, 12).toIntOrNull() ?: return@mapNotNull null
-                    if (hh !in 0..23 || mm !in 0..59) return@mapNotNull null
-                    if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) return@mapNotNull null
+                    val hh = t.substring(2, 4).toIntOrNull()
+                    if (hh == null) {
+                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=hhParsingFail")
+                        return@mapNotNull null
+                    }
+                    val mm = t.substring(4, 6).toIntOrNull()
+                    if (mm == null) {
+                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=mmParsingFail")
+                        return@mapNotNull null
+                    }
+                    val durationMs = t.substring(6, 12).toIntOrNull()
+                    if (durationMs == null) {
+                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=durationParsingFail")
+                        return@mapNotNull null
+                    }
+                    if (hh !in 0..23 || mm !in 0..59) {
+                        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=timeOutOfBounds hh=$hh mm=$mm")
+                        return@mapNotNull null
+                    }
+                    if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) {
+                        Log.d(
+                            "NextDoseDebug",
+                            "moduleId=$espId pumpNum=$pumpNum reject line='$t' reason=durationOutOfBounds durationMs=$durationMs bounds=$MIN_DURATION_MS..$MAX_DURATION_MS"
+                        )
+                        return@mapNotNull null
+                    }
 
-                    Entry(minutes = hh * 60 + mm, hh = hh, mm = mm, durationMs = durationMs)
+                    val minutes = hh * 60 + mm
+                    Log.d(
+                        "NextDoseDebug",
+                        "moduleId=$espId pumpNum=$pumpNum entry hhmm=%02d:%02d minutes=%d durationMs=%d enabled=true".format(hh, mm, minutes, durationMs)
+                    )
+
+                    Entry(minutes = minutes, hh = hh, mm = mm, durationMs = durationMs)
                 }
                 .sortedBy { it.minutes }
                 .toList()
 
-        if (entries.isEmpty()) return "Aucune dose prévue"
+        if (entries.isEmpty()) {
+            Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum earlyReturn=entriesEmpty")
+            return "Aucune dose prévue"
+        }
 
         val nowLocal = Instant.ofEpochMilli(System.currentTimeMillis()).atZone(ZoneId.systemDefault()).toLocalTime()
         val nowMinutes = nowLocal.hour * 60 + nowLocal.minute
+        Log.d("NextDoseDebug", "moduleId=$espId pumpNum=$pumpNum nowMinutes=$nowMinutes")
 
         val next = entries.firstOrNull { it.minutes > nowMinutes } ?: entries.first()
+        Log.d(
+            "NextDoseDebug",
+            "moduleId=$espId pumpNum=$pumpNum chosenNext hhmm=%02d:%02d minutes=%d durationMs=%d".format(next.hh, next.mm, next.minutes, next.durationMs)
+        )
         val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", next.hh, next.mm)
 
         val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
