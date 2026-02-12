@@ -1,6 +1,5 @@
 package com.esp32pumpwifi.app
 
-import android.util.Log
 import java.util.Locale
 
 object ScheduleAddMergeUtils {
@@ -9,7 +8,6 @@ object ScheduleAddMergeUtils {
     private const val DAY_MS = 24L * 60L * 60L * 1000L
     private const val HOUR_MS = 3_600_000L
     private const val MINUTE_MS = 60_000L
-    private const val TAG_TIME_BUG = "TIME_BUG"
 
     data class MergeResult(
         val merged: List<PumpSchedule>,
@@ -21,9 +19,6 @@ object ScheduleAddMergeUtils {
     fun isValidMsOfDay(ms: Long): Boolean = ms in 0 until DAY_MS
 
     fun toTimeString(ms: Long): String {
-        if (!isValidMsOfDay(ms)) {
-            Log.w(TAG_TIME_BUG, "invalid_ms_in_toTimeString ms=$ms expectedRange=[0,${DAY_MS - 1}]")
-        }
         val normalized = ((ms % DAY_MS) + DAY_MS) % DAY_MS
         val hours = ((normalized / HOUR_MS) % 24).toInt()
         val minutes = ((normalized % HOUR_MS) / MINUTE_MS).toInt()
