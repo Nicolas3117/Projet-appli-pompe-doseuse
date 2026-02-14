@@ -101,10 +101,10 @@ class ScheduleActivity : AppCompatActivity() {
 
         btnScheduleHelper.setOnClickListener {
             // 🔒 garde-fou STRICT
-            if (isReadOnly || isUnsynced) {
+            if (isReadOnly) {
                 Toast.makeText(
                     this,
-                    "Synchronisation impossible — modification désactivée",
+                    "Mode lecture seule — modification désactivée",
                     Toast.LENGTH_LONG
                 ).show()
                 return@setOnClickListener
@@ -368,7 +368,7 @@ class ScheduleActivity : AppCompatActivity() {
 
     override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
         val sendItem = menu?.findItem(R.id.action_send)
-        if (isReadOnly || isUnsynced) {
+        if (isReadOnly) {
             sendItem?.isEnabled = false
             sendItem?.isVisible = false
         } else {
@@ -400,10 +400,10 @@ class ScheduleActivity : AppCompatActivity() {
         isReadOnly = readOnly
         toolbar.subtitle = subtitle
 
-        adapter.setReadOnly(readOnly || isUnsynced)
+        adapter.setReadOnly(readOnly)
 
         // ✅ DÉSACTIVATION VISUELLE DU HELPER
-        btnScheduleHelper.isEnabled = !(readOnly || isUnsynced)
+        btnScheduleHelper.isEnabled = !readOnly
         btnScheduleHelper.alpha = if (btnScheduleHelper.isEnabled) 1f else 0.4f
 
         invalidateOptionsMenu()
@@ -805,7 +805,7 @@ class ScheduleActivity : AppCompatActivity() {
             .setTitle("⚠️ Synchronisation impossible")
             .setMessage(
                 "Un problème est survenu et la programmation n’a pas pu être synchronisée avec la pompe.\n" +
-                        "Tant que la synchronisation n’est pas faite, aucune modification ne sera possible pour éviter toute incohérence."
+                        "Vous pouvez rester sur cet écran, ajuster la programmation puis retenter l’envoi."
             )
             .setPositiveButton("Rester (recommandé)") { dialog, _ -> dialog.dismiss() }
             .setNegativeButton("Quitter (mode dégradé)") { dialog, _ ->
