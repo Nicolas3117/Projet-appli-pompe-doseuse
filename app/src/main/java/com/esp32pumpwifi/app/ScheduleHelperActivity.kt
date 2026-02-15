@@ -123,7 +123,7 @@ class ScheduleHelperActivity : AppCompatActivity() {
             applied = true
         }
 
-        val endOfDayMs = toMs(23, 59)
+        val endOfDayMs = toMs(23, 58)
         if (endMs == null || endInput.text?.toString()?.trim().isNullOrEmpty()) {
             endMs = endOfDayMs
             endInput.setText(formatTimeMs(endOfDayMs))
