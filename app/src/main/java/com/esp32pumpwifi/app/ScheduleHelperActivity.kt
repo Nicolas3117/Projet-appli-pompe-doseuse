@@ -212,7 +212,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-
             val resultIntent = Intent().apply {
                 putExtra(EXTRA_PUMP_NUMBER, pumpNumber)
                 putExtra(EXTRA_MODULE_ID, moduleId)
@@ -456,6 +455,11 @@ class ScheduleHelperActivity : AppCompatActivity() {
         }
 
         val proposedTimesMs = offsetsMs.map { start0 + it }
+        if (proposedTimesMs.any { ((it / MS_PER_MINUTE) % (24 * 60)) == (23 * 60 + 59).toLong() }) {
+            antiOverlapLayout.error = FORBIDDEN_2359_MESSAGE
+            return ValidationResult.invalid()
+        }
+
         val acceptedIntervals = mutableListOf<DoseInterval>()
         var globalErrorMessage: String? = null
 
@@ -732,6 +736,9 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         private const val MAX_SCHEDULES_PER_PUMP = 12
         private const val MAX_DOSE_DURATION_SEC = 600
+
+        private const val FORBIDDEN_2359_MESSAGE =
+            "Horaire non autorisé : 23:59. Choisis 23:58 ou 00:00."
 
         private const val MS_PER_MINUTE = 60_000L
         private const val MINUTES_IN_MS = 60_000.0

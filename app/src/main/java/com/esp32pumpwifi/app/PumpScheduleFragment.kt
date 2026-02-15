@@ -37,6 +37,7 @@ class PumpScheduleFragment : Fragment() {
     companion object {
         const val MAX_PUMP_DURATION_SEC = 600
         private const val MAX_SCHEDULES_PER_PUMP = 12
+        private const val FORBIDDEN_2359_MESSAGE = "Horaire non autorisé : 23:59. Choisis 23:58 ou 00:00."
 
         private const val ARG_PUMP_NUMBER = "pumpNumber"
         private const val ARG_ESP_ID = "espId" // Long
@@ -218,6 +219,11 @@ class PumpScheduleFragment : Fragment() {
 
             if (parsed == null) {
                 timeLayout.error = "Format invalide"
+                addBtn?.isEnabled = false
+                return@manual
+            }
+            if (parsed.first == 23 && parsed.second == 59) {
+                timeLayout.error = FORBIDDEN_2359_MESSAGE
                 addBtn?.isEnabled = false
                 return@manual
             }

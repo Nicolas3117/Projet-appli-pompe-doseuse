@@ -21,6 +21,7 @@ class PumpScheduleAdapter(
 
     companion object {
         const val MAX_PUMP_DURATION_SEC = 600
+        private const val FORBIDDEN_2359_MESSAGE = "Horaire non autorisé : 23:59. Choisis 23:58 ou 00:00."
     }
 
     /**
@@ -130,9 +131,14 @@ class PumpScheduleAdapter(
 
                     val newTime = etTime.text.toString().trim()
                     val newQtyTenth = QuantityInputUtils.parseQuantityTenth(etQty.text.toString())
+                    val parsed = ScheduleOverlapUtils.parseTimeOrNull(newTime)
 
-                    if (ScheduleOverlapUtils.parseTimeOrNull(newTime) == null || newQtyTenth == null) {
+                    if (parsed == null || newQtyTenth == null) {
                         Toast.makeText(context, "Format invalide", Toast.LENGTH_SHORT).show()
+                        return@setPositiveButton
+                    }
+                    if (parsed.first == 23 && parsed.second == 59) {
+                        Toast.makeText(context, FORBIDDEN_2359_MESSAGE, Toast.LENGTH_LONG).show()
                         return@setPositiveButton
                     }
 
