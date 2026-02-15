@@ -392,7 +392,7 @@ class MaterielsActivity : AppCompatActivity() {
                         .openConnection() as HttpURLConnection
 
                 conn.connectTimeout = 2000
-                conn.readTimeout = 2000
+                conn.readTimeout = 3000
 
                 val response =
                     conn.inputStream.bufferedReader().readText()

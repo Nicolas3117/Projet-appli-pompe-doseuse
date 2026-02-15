@@ -22,6 +22,7 @@ import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -57,12 +58,21 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         private const val AP_IP = "192.168.4.1"
-        private const val CONNECTION_POLL_MS = 2000L
-        private const val STA_PROBE_INTERVAL_MS = 10_000L
+
+        // ✅ Respiration réseau : 2s -> 5s
+        private const val CONNECTION_POLL_MS = 5000L
+
+        private const val STA_PROBE_INTERVAL_MS = 15_000L
         private const val UI_REFRESH_MS = 15_000L
 
         private const val ID_ENDPOINT = "/id"
+
+        // ⚠️ On ne change pas le reste du réseau (read_ms, etc.)
         private const val HTTP_TIMEOUT_MS = 2000
+
+        // ✅ Respiration réseau : timeouts spécifiques au watcher connexion (/id et /time)
+        private const val HTTP_CONNECT_TIMEOUT_MS = 2000
+        private const val HTTP_READ_TIMEOUT_MS = 4000
 
         // Program line: "1HHMMDDDDDD" (12 digits)
         private const val LINE_LEN = 12
@@ -79,16 +89,14 @@ class MainActivity : AppCompatActivity() {
      * Calcule le "reste à faire aujourd'hui" (strictement futur) à partir de ProgramStoreSynced.
      */
     private fun computeFuturePlan(espId: Long, pumpNum: Int, flow: Float): FuturePlan {
-        if (flow <= 0f) {
-            return FuturePlan(0, 0f)
-        }
+        if (flow <= 0f) return FuturePlan(0, 0f)
 
         val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
-        if (encodedLines.isEmpty()) {
-            return FuturePlan(0, 0f)
-        }
+        if (encodedLines.isEmpty()) return FuturePlan(0, 0f)
 
-        val nowLocal = Instant.ofEpochMilli(System.currentTimeMillis()).atZone(ZoneId.systemDefault()).toLocalTime()
+        val nowLocal =
+            Instant.ofEpochMilli(System.currentTimeMillis()).atZone(ZoneId.systemDefault())
+                .toLocalTime()
         val nowMinutes = nowLocal.hour * 60 + nowLocal.minute
 
         var futureCount = 0
@@ -96,50 +104,22 @@ class MainActivity : AppCompatActivity() {
 
         for (line in encodedLines) {
             val t = line.trim()
-            if (t.length != LINE_LEN) {
-                continue
-            }
+            if (t.length != LINE_LEN) continue
+            if (t.firstOrNull() != '1') continue
+            if (!LINE_12_DIGITS_REGEX.matches(t)) continue
+            if (!isValidEnabledProgramLine(t)) continue
 
-            if (t.firstOrNull() != '1') {
-                continue
-            }
+            val hh = t.substring(2, 4).toIntOrNull() ?: continue
+            val mm = t.substring(4, 6).toIntOrNull() ?: continue
+            val durationMs = t.substring(6, 12).toIntOrNull() ?: continue
 
-            if (!LINE_12_DIGITS_REGEX.matches(t)) {
-                continue
-            }
-
-            if (!isValidEnabledProgramLine(t)) {
-                continue
-            }
-
-            val hh = t.substring(2, 4).toIntOrNull()
-            if (hh == null) {
-                continue
-            }
-
-            val mm = t.substring(4, 6).toIntOrNull()
-            if (mm == null) {
-                continue
-            }
-
-            val durationMs = t.substring(6, 12).toIntOrNull()
-            if (durationMs == null) {
-                continue
-            }
-
-            if (hh !in 0..23 || mm !in 0..59) {
-                continue
-            }
-            if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) {
-                continue
-            }
+            if (hh !in 0..23 || mm !in 0..59) continue
+            if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) continue
 
             val minutes = hh * 60 + mm
 
             // Strictement dans le futur (après maintenant)
-            if (minutes <= nowMinutes) {
-                continue
-            }
+            if (minutes <= nowMinutes) continue
 
             futureCount++
             futureMl += (durationMs / 1000f) * flow
@@ -169,7 +149,10 @@ class MainActivity : AppCompatActivity() {
             val navBarsBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
 
             val keyboardBottom =
-                if (imeBottom == 0) max(systemBarsBottom, navBarsBottom) else max(imeBottom, systemBarsBottom)
+                if (imeBottom == 0) max(systemBarsBottom, navBarsBottom) else max(
+                    imeBottom,
+                    systemBarsBottom
+                )
 
             view.updatePadding(bottom = baseBottom + keyboardBottom + extraBottomPadding)
             insets
@@ -250,7 +233,6 @@ class MainActivity : AppCompatActivity() {
         manualDoseButton.setOnClickListener {
             startActivity(Intent(this, ManualDoseTabsActivity::class.java))
         }
-
     }
 
     override fun onResume() {
@@ -287,7 +269,7 @@ class MainActivity : AppCompatActivity() {
         uiRefreshJob?.cancel()
         uiRefreshJob =
             lifecycleScope.launch {
-                while (true) {
+                while (isActive) { // ✅ arrêt propre sur cancel
                     val active = Esp32Manager.getActive(this@MainActivity)
                     active?.let {
                         TankScheduleHelper.recalculateFromLastTime(this@MainActivity, it.id)
@@ -314,7 +296,7 @@ class MainActivity : AppCompatActivity() {
 
         connectionJob =
             lifecycleScope.launch {
-                while (true) {
+                while (isActive) { // ✅ arrêt propre sur cancel
 
                     val active = Esp32Manager.getActive(this@MainActivity)
                     if (active == null) {
@@ -340,7 +322,7 @@ class MainActivity : AppCompatActivity() {
                             requestRtcTimeIfNeeded(active)
                         } else {
                             consecutiveFailures++
-                            if (consecutiveFailures >= 2) {
+                            if (consecutiveFailures >= 3) {
                                 updateConnectionUi(false)
                                 setManualButtonsEnabled(false)
                                 if (result.fallbackAttempted && !result.fallbackSucceeded) {
@@ -370,7 +352,7 @@ class MainActivity : AppCompatActivity() {
         val fallbackSucceeded: Boolean
     )
 
-    // ================== RÉSEAU ==================
+    // ================== RÉSEAU (connexion uniquement) ==================
     private suspend fun testConnectionWithFallbackAndStaReturn(module: EspModule): ConnectionCheckResult =
         withContext(Dispatchers.IO) {
 
@@ -412,14 +394,15 @@ class MainActivity : AppCompatActivity() {
             ConnectionCheckResult(false, true, false)
         }
 
+    // ✅ Respiration réseau : timeouts spécifiques à /id (connexion)
     private fun fetchPumpNameForIp(ip: String): String? {
         var conn: HttpURLConnection? = null
         return try {
             val url = URL("http://$ip$ID_ENDPOINT")
             conn =
                 (url.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = HTTP_TIMEOUT_MS
-                    readTimeout = HTTP_TIMEOUT_MS
+                    connectTimeout = HTTP_CONNECT_TIMEOUT_MS
+                    readTimeout = HTTP_READ_TIMEOUT_MS
                     useCaches = false
                     setRequestProperty("Connection", "close")
                 }
@@ -444,10 +427,10 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 val time = fetchRtcTimeForIp(ip) ?: "--:--"
                 tvRtcTime.text = "RTC : $time"
-
             }
     }
 
+    // ✅ Respiration réseau : timeouts spécifiques à /time (connexion/affichage RTC)
     private suspend fun fetchRtcTimeForIp(ip: String): String? =
         withContext(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
@@ -455,8 +438,8 @@ class MainActivity : AppCompatActivity() {
                 val url = URL("http://$ip/time")
                 conn =
                     (url.openConnection() as HttpURLConnection).apply {
-                        connectTimeout = HTTP_TIMEOUT_MS
-                        readTimeout = HTTP_TIMEOUT_MS
+                        connectTimeout = HTTP_CONNECT_TIMEOUT_MS
+                        readTimeout = HTTP_READ_TIMEOUT_MS
                         useCaches = false
                         setRequestProperty("Connection", "close")
                     }
@@ -602,6 +585,7 @@ class MainActivity : AppCompatActivity() {
         return t.firstOrNull() == '1'
     }
 
+    // ⚠️ On ne touche pas aux timeouts ici (read_ms) : ce n’est pas “respiration connexion”
     private suspend fun fetchProgramFromEsp(ip: String): String? = withContext(Dispatchers.IO) {
         var conn: HttpURLConnection? = null
         return@withContext try {
@@ -642,9 +626,7 @@ class MainActivity : AppCompatActivity() {
     // ✅ prochaine dose basée sur ProgramStoreSynced (synced)
     private fun getNextDoseText(espId: Long, pumpNum: Int): String {
         val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
-        if (encodedLines.isEmpty()) {
-            return "Aucune dose prévue"
-        }
+        if (encodedLines.isEmpty()) return "Aucune dose prévue"
 
         data class Entry(val minutes: Int, val hh: Int, val mm: Int, val durationMs: Int)
 
@@ -653,50 +635,28 @@ class MainActivity : AppCompatActivity() {
                 .asSequence()
                 .mapNotNull { line ->
                     val t = line.trim()
-                    if (t.length != LINE_LEN) {
-                        return@mapNotNull null
-                    }
-                    if (t.firstOrNull() != '1') {
-                        return@mapNotNull null
-                    }
-                    if (!LINE_12_DIGITS_REGEX.matches(t)) {
-                        return@mapNotNull null
-                    }
-                    if (!isValidEnabledProgramLine(t)) {
-                        return@mapNotNull null
-                    }
+                    if (t.length != LINE_LEN) return@mapNotNull null
+                    if (t.firstOrNull() != '1') return@mapNotNull null
+                    if (!LINE_12_DIGITS_REGEX.matches(t)) return@mapNotNull null
+                    if (!isValidEnabledProgramLine(t)) return@mapNotNull null
 
-                    val hh = t.substring(2, 4).toIntOrNull()
-                    if (hh == null) {
-                        return@mapNotNull null
-                    }
-                    val mm = t.substring(4, 6).toIntOrNull()
-                    if (mm == null) {
-                        return@mapNotNull null
-                    }
-                    val durationMs = t.substring(6, 12).toIntOrNull()
-                    if (durationMs == null) {
-                        return@mapNotNull null
-                    }
-                    if (hh !in 0..23 || mm !in 0..59) {
-                        return@mapNotNull null
-                    }
-                    if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) {
-                        return@mapNotNull null
-                    }
+                    val hh = t.substring(2, 4).toIntOrNull() ?: return@mapNotNull null
+                    val mm = t.substring(4, 6).toIntOrNull() ?: return@mapNotNull null
+                    val durationMs = t.substring(6, 12).toIntOrNull() ?: return@mapNotNull null
+                    if (hh !in 0..23 || mm !in 0..59) return@mapNotNull null
+                    if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) return@mapNotNull null
 
                     val minutes = hh * 60 + mm
-
                     Entry(minutes = minutes, hh = hh, mm = mm, durationMs = durationMs)
                 }
                 .sortedBy { it.minutes }
                 .toList()
 
-        if (entries.isEmpty()) {
-            return "Aucune dose prévue"
-        }
+        if (entries.isEmpty()) return "Aucune dose prévue"
 
-        val nowLocal = Instant.ofEpochMilli(System.currentTimeMillis()).atZone(ZoneId.systemDefault()).toLocalTime()
+        val nowLocal =
+            Instant.ofEpochMilli(System.currentTimeMillis()).atZone(ZoneId.systemDefault())
+                .toLocalTime()
         val nowMinutes = nowLocal.hour * 60 + nowLocal.minute
 
         val next = entries.firstOrNull { it.minutes > nowMinutes } ?: entries.first()
@@ -738,7 +698,8 @@ class MainActivity : AppCompatActivity() {
         val plannedDoseCountToday = doneDoseCountToday + future.count
         val plannedMlToday = doneMlToday + future.ml
 
-        val progressValue = if (plannedMlToday <= 0f || doneMlToday <= 0f) 0 else (doneMlToday / plannedMlToday * 100f).roundToInt()
+        val progressValue =
+            if (plannedMlToday <= 0f || doneMlToday <= 0f) 0 else (doneMlToday / plannedMlToday * 100f).roundToInt()
         val doseText = "Dose : $doneDoseCountToday/$plannedDoseCountToday"
 
         val insideText =
@@ -783,5 +744,4 @@ class MainActivity : AppCompatActivity() {
             insideLabel.translationX = (targetX.coerceIn(minX, maxX)) - insideLabel.left
         }
     }
-
 }
