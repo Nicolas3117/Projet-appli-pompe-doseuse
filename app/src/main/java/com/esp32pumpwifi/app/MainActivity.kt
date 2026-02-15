@@ -83,6 +83,7 @@ class MainActivity : AppCompatActivity() {
 
     // ================== FUTUR PLAN (Option A) ==================
     private data class FuturePlan(val count: Int, val ml: Float)
+    private data class PlannedTotalToday(val count: Int, val ml: Float)
     private data class DailyDone(val count: Int, val ml: Float)
 
     /**
@@ -126,6 +127,39 @@ class MainActivity : AppCompatActivity() {
         }
 
         return FuturePlan(futureCount, futureMl)
+    }
+
+    /**
+     * Calcule le total planifié de la journée (00:00..24:00), sans filtre "now".
+     */
+    private fun computePlannedTotalToday(espId: Long, pumpNum: Int, flow: Float): PlannedTotalToday {
+        if (flow <= 0f) return PlannedTotalToday(0, 0f)
+
+        val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
+        if (encodedLines.isEmpty()) return PlannedTotalToday(0, 0f)
+
+        var totalCount = 0
+        var totalMl = 0f
+
+        for (line in encodedLines) {
+            val t = line.trim()
+            if (t.length != LINE_LEN) continue
+            if (t.firstOrNull() != '1') continue
+            if (!LINE_12_DIGITS_REGEX.matches(t)) continue
+            if (!isValidEnabledProgramLine(t)) continue
+
+            val hh = t.substring(2, 4).toIntOrNull() ?: continue
+            val mm = t.substring(4, 6).toIntOrNull() ?: continue
+            val durationMs = t.substring(6, 12).toIntOrNull() ?: continue
+
+            if (hh !in 0..23 || mm !in 0..59) continue
+            if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) continue
+
+            totalCount++
+            totalMl += (durationMs / 1000f) * flow
+        }
+
+        return PlannedTotalToday(totalCount, totalMl)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -692,11 +726,9 @@ class MainActivity : AppCompatActivity() {
         // Flow (calibration)
         val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
 
-        // Future (selon programmation actuelle synced)
-        val future = computeFuturePlan(espId, pumpNum, flow)
-
-        val plannedDoseCountToday = doneDoseCountToday + future.count
-        val plannedMlToday = doneMlToday + future.ml
+        val plannedTodayFixed = computePlannedTotalToday(espId, pumpNum, flow)
+        val plannedDoseCountToday = plannedTodayFixed.count
+        val plannedMlToday = plannedTodayFixed.ml
 
         val progressValue =
             if (plannedMlToday <= 0f || doneMlToday <= 0f) 0 else (doneMlToday / plannedMlToday * 100f).roundToInt()
