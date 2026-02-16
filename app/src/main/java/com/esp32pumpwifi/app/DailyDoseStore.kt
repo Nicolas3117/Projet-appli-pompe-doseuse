@@ -80,6 +80,7 @@ object DailyDoseStore {
     private const val LINE_LEN = 12
     private const val MIN_DURATION_MS = 50
     private const val MAX_DURATION_MS = 600_000
+    private const val PLACEHOLDER = "000000000000"
 
     @Volatile
     private var helper: DailyDoseDbHelper? = null
@@ -121,7 +122,13 @@ object DailyDoseStore {
         return db(context).insert("program_snapshots", null, values)
     }
 
-    fun getSnapshotsForDay(context: Context, moduleId: Long, pumpNum: Int, dayStartMs: Long, dayEndMs: Long): List<ProgramSnapshotEntity> {
+    fun getSnapshotsForDay(
+        context: Context,
+        moduleId: Long,
+        pumpNum: Int,
+        dayStartMs: Long,
+        dayEndMs: Long
+    ): List<ProgramSnapshotEntity> {
         val query = """
             SELECT id,moduleId,pumpNum,sentAtMs,programHash,rawEncodedProgram,ok
             FROM program_snapshots
@@ -148,6 +155,41 @@ object DailyDoseStore {
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * ✅ Ajout: récupère le dernier snapshot OK avant le début de journée.
+     * Ça évite de "perdre" la dose de 00:00 si le premier snapshot du jour arrive à 00:05.
+     */
+    fun getLastSnapshotBefore(
+        context: Context,
+        moduleId: Long,
+        pumpNum: Int,
+        beforeMs: Long
+    ): ProgramSnapshotEntity? {
+        val query = """
+            SELECT id,moduleId,pumpNum,sentAtMs,programHash,rawEncodedProgram,ok
+            FROM program_snapshots
+            WHERE moduleId=? AND pumpNum=? AND sentAtMs<? AND ok=1
+            ORDER BY sentAtMs DESC
+            LIMIT 1
+        """.trimIndent()
+
+        return db(context).rawQuery(
+            query,
+            arrayOf(moduleId.toString(), pumpNum.toString(), beforeMs.toString())
+        ).use { c ->
+            if (!c.moveToFirst()) return@use null
+            ProgramSnapshotEntity(
+                id = c.getLong(0),
+                moduleId = c.getLong(1),
+                pumpNum = c.getInt(2),
+                sentAtMs = c.getLong(3),
+                programHash = c.getString(4),
+                rawEncodedProgram = c.getString(5),
+                ok = c.getInt(6) == 1
+            )
         }
     }
 
@@ -185,7 +227,12 @@ object DailyDoseStore {
         }
     }
 
-    fun saveProgramSnapshotsFromMessage(context: Context, moduleId: Long, rawProgram576: String, sentAtMs: Long = System.currentTimeMillis()) {
+    fun saveProgramSnapshotsFromMessage(
+        context: Context,
+        moduleId: Long,
+        rawProgram576: String,
+        sentAtMs: Long = System.currentTimeMillis()
+    ) {
         if (rawProgram576.length != 576) return
         val chunks = rawProgram576.chunked(LINE_LEN)
         if (chunks.size != 48) return
@@ -208,18 +255,63 @@ object DailyDoseStore {
         }
     }
 
-    fun buildAutoDoseEventsForToday(context: Context, moduleId: Long) {
+    /**
+     * ✅ Build pour une journée donnée (minuit safe)
+     * Fix inclus :
+     * - utilise un snapshot "veille" (dernier snapshot < dayStart) pour compter la dose 00:00
+     * - fallback ProgramStoreSynced si aucun snapshot (ni veille ni aujourd’hui)
+     * - normalise à 12 lignes (144 chars) même si ProgramStoreSynced ne renvoie pas 12 lignes
+     */
+    fun buildAutoDoseEventsForDay(context: Context, moduleId: Long, dayStartMs: Long, dayEndMs: Long) {
         val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
         val nowMs = System.currentTimeMillis()
-        val (dayStartMs, dayEndMs) = todayRange()
         val cappedNowMs = min(nowMs, dayEndMs)
 
         for (pump in 1..4) {
             val flow = prefs.getFloat("esp_${moduleId}_pump${pump}_flow", 0f)
             if (flow <= 0f) continue
 
-            val snapshots = getSnapshotsForDay(context, moduleId, pump, dayStartMs, cappedNowMs)
-            if (snapshots.isEmpty()) continue
+            val todaySnapshots = getSnapshotsForDay(context, moduleId, pump, dayStartMs, cappedNowMs)
+            val prevSnapshot = getLastSnapshotBefore(context, moduleId, pump, dayStartMs)
+
+            var snapshots: List<ProgramSnapshotEntity> = when {
+                prevSnapshot != null -> listOf(prevSnapshot) + todaySnapshots
+                todaySnapshots.isNotEmpty() -> todaySnapshots
+                else -> emptyList()
+            }
+
+            // ✅ Fallback: si aucun snapshot (ni veille, ni aujourd’hui), on reconstruit depuis le programme courant
+            if (snapshots.isEmpty()) {
+                val encodedLines = ProgramStoreSynced.loadEncodedLines(context, moduleId, pump)
+
+                // On force 12 lignes valides (ou placeholder) => 144 chars
+                val normalized = encodedLines
+                    .asSequence()
+                    .map { it.trim() }
+                    .filter { it.length == LINE_LEN && it.all(Char::isDigit) }
+                    .take(12)
+                    .toMutableList()
+
+                while (normalized.size < 12) normalized.add(PLACEHOLDER)
+
+                val rawPumpProgram = normalized.joinToString(separator = "")
+
+                if (rawPumpProgram.length == 144) {
+                    val pumpHash = computeProgramHash(rawPumpProgram)
+                    snapshots = listOf(
+                        ProgramSnapshotEntity(
+                            moduleId = moduleId,
+                            pumpNum = pump,
+                            sentAtMs = dayStartMs, // virtuel début de journée
+                            programHash = pumpHash,
+                            rawEncodedProgram = rawPumpProgram,
+                            ok = true
+                        )
+                    )
+                } else {
+                    continue
+                }
+            }
 
             for (i in snapshots.indices) {
                 val snapshot = snapshots[i]
@@ -232,7 +324,9 @@ object DailyDoseStore {
                     if (snapshot.sentAtMs > doseStartMs) continue
                     if (doseStartMs >= intervalEnd) continue
 
-                    val eventKey = "A:${moduleId}:${pump}:${dayStartMs}:${offsetMs}:${formatVolume(volumeMl)}:${snapshot.programHash}"
+                    val eventKey =
+                        "A:${moduleId}:${pump}:${dayStartMs}:${offsetMs}:${formatVolume(volumeMl)}:${snapshot.programHash}"
+
                     insertDoseEventIgnore(
                         context,
                         DoseEventEntity(
@@ -251,7 +345,21 @@ object DailyDoseStore {
         }
     }
 
-    fun saveManualDoseEvent(context: Context, moduleId: Long, pumpNum: Int, volumeMl: Float, tsMs: Long = System.currentTimeMillis()) {
+    /**
+     * Wrapper "aujourd'hui" conservé pour compat.
+     */
+    fun buildAutoDoseEventsForToday(context: Context, moduleId: Long) {
+        val (dayStartMs, dayEndMs) = todayRange()
+        buildAutoDoseEventsForDay(context, moduleId, dayStartMs, dayEndMs)
+    }
+
+    fun saveManualDoseEvent(
+        context: Context,
+        moduleId: Long,
+        pumpNum: Int,
+        volumeMl: Float,
+        tsMs: Long = System.currentTimeMillis()
+    ) {
         val (dayStartMs, _) = todayRange()
         val offsetMs = (tsMs - dayStartMs).coerceIn(0L, 86_399_999L)
         val eventKey = "M:${moduleId}:${pumpNum}:${tsMs}:${formatVolume(volumeMl)}"
@@ -289,7 +397,7 @@ object DailyDoseStore {
     private fun isValidEnabledProgramLine(line: String): Boolean {
         if (line.length != LINE_LEN) return false
         if (!line.all(Char::isDigit)) return false
-        if (line == "000000000000") return false
+        if (line == PLACEHOLDER) return false
         return line[0] == '1'
     }
 

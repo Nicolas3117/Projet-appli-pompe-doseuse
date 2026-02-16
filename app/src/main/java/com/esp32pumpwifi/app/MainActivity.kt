@@ -618,17 +618,26 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    // ✅ FIX: calcule la DayRange UNE SEULE FOIS et l’utilise pour build + lectures (minuit safe)
     private fun updateDailySummary(activeModule: EspModule) {
         dailySummaryContainer.visibility = View.VISIBLE
         lifecycleScope.launch(Dispatchers.IO) {
-            val dayStartMs = DailyDoseStore.todayRange().dayStartMs
-            DailyDoseStore.buildAutoDoseEventsForToday(this@MainActivity, activeModule.id)
+            val range = DailyDoseStore.todayRange()
+
+            DailyDoseStore.buildAutoDoseEventsForDay(
+                context = this@MainActivity,
+                moduleId = activeModule.id,
+                dayStartMs = range.dayStartMs,
+                dayEndMs = range.dayEndMs
+            )
+
             val doneByPump = (1..4).associateWith { pumpNum ->
                 DailyDone(
-                    count = DailyDoseStore.countForDay(this@MainActivity, activeModule.id, pumpNum, dayStartMs),
-                    ml = DailyDoseStore.sumMlForDay(this@MainActivity, activeModule.id, pumpNum, dayStartMs)
+                    count = DailyDoseStore.countForDay(this@MainActivity, activeModule.id, pumpNum, range.dayStartMs),
+                    ml = DailyDoseStore.sumMlForDay(this@MainActivity, activeModule.id, pumpNum, range.dayStartMs)
                 )
             }
+
             withContext(Dispatchers.Main) {
                 for (pumpNum in 1..4) {
                     val done = doneByPump[pumpNum] ?: DailyDone(0, 0f)
