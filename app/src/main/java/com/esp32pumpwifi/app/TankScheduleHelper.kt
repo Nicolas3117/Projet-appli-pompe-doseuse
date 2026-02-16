@@ -78,30 +78,32 @@ object TankScheduleHelper {
                         )
                     )
 
-            for (line in sortedLines) {
+            // ✅ FIX CRITIQUE : un seul curseur de jours par pompe (pas par ligne)
+            val dayCursor =
+                Calendar.getInstance().apply {
+                    timeInMillis = max(lastProcessed, now - 30L * 86400000L)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
 
-                // (garde-fous)
-                if (line == PLACEHOLDER) continue
-                if (line.isEmpty() || line[0] != '1') continue
-                if (line.length < 12) continue
+            while (dayCursor.timeInMillis <= now) {
 
-                val hh = line.substring(2, 4).toIntOrNull() ?: continue
-                val mm = line.substring(4, 6).toIntOrNull() ?: continue
-                val durationMs = line.substring(6, 12).toIntOrNull() ?: continue
-                if (durationMs <= 0) continue
+                // Pour CE jour, on traite toutes les lignes dans l’ordre chronologique
+                for (line in sortedLines) {
 
-                val volumeMl = (durationMs / 1000f) * flow
+                    // (garde-fous)
+                    if (line == PLACEHOLDER) continue
+                    if (line.isEmpty() || line[0] != '1') continue
+                    if (line.length < 12) continue
 
-                var dayCursor =
-                    Calendar.getInstance().apply {
-                        timeInMillis = max(lastProcessed, now - 30L * 86400000L)
-                        set(Calendar.HOUR_OF_DAY, 0)
-                        set(Calendar.MINUTE, 0)
-                        set(Calendar.SECOND, 0)
-                        set(Calendar.MILLISECOND, 0)
-                    }
+                    val hh = line.substring(2, 4).toIntOrNull() ?: continue
+                    val mm = line.substring(4, 6).toIntOrNull() ?: continue
+                    val durationMs = line.substring(6, 12).toIntOrNull() ?: continue
+                    if (durationMs <= 0) continue
 
-                while (dayCursor.timeInMillis <= now) {
+                    val volumeMl = (durationMs / 1000f) * flow
 
                     val start =
                         (dayCursor.clone() as Calendar).apply {
@@ -124,9 +126,9 @@ object TankScheduleHelper {
                         lastProcessed = endMillis
                         prefs.edit().putLong(lastKey, lastProcessed).apply()
                     }
-
-                    dayCursor.add(Calendar.DAY_OF_YEAR, 1)
                 }
+
+                dayCursor.add(Calendar.DAY_OF_YEAR, 1)
             }
 
             // =====================================================
