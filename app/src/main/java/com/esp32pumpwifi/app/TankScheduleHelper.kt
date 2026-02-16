@@ -94,7 +94,7 @@ object TankScheduleHelper {
 
                 var dayCursor =
                     Calendar.getInstance().apply {
-                        timeInMillis = max(lastProcessed, now - 7L * 86400000L)
+                        timeInMillis = max(lastProcessed, now - 30L * 86400000L)
                         set(Calendar.HOUR_OF_DAY, 0)
                         set(Calendar.MINUTE, 0)
                         set(Calendar.SECOND, 0)

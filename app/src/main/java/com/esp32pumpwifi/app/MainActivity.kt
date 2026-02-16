@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
 
     private var uiRefreshJob: Job? = null
     private var hasShownNotFoundPopup = false
+    private var hasShownOver30DaysPopup = false
     private var lastRtcIp: String? = null
     private var rtcFetchJob: Job? = null
     // pour tenter un retour STA automatique sans appuyer sur "+"
@@ -58,6 +59,7 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         private const val AP_IP = "192.168.4.1"
+        private const val DAY_MS = 86400000L
 
         // ✅ Respiration réseau : 2s -> 5s
         private const val CONNECTION_POLL_MS = 5000L
@@ -276,6 +278,22 @@ class MainActivity : AppCompatActivity() {
         lastRtcIp = null
         rtcFetchJob?.cancel()
         rtcFetchJob = null
+
+        val now = System.currentTimeMillis()
+        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
+        val lastAppOpen = prefs.getLong("last_app_open_ms", 0L)
+
+        if (
+            lastAppOpen != 0L &&
+            now - lastAppOpen > 30L * DAY_MS &&
+            !hasShownOver30DaysPopup
+        ) {
+            maybeShowOver30DaysPopup()
+        }
+
+        prefs.edit()
+            .putLong("last_app_open_ms", now)
+            .apply()
 
         val activeModule = Esp32Manager.getActive(this)
 
@@ -538,6 +556,17 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
             }
             .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    private fun maybeShowOver30DaysPopup() {
+        if (hasShownOver30DaysPopup) return
+        hasShownOver30DaysPopup = true
+
+        AlertDialog.Builder(this)
+            .setTitle("Application non ouverte longtemps")
+            .setMessage("Attention : suite à l’application fermée pendant plus de 30 jours, veuillez refaire les niveaux des réservoirs.")
+            .setPositiveButton("OK", null)
             .show()
     }
 
