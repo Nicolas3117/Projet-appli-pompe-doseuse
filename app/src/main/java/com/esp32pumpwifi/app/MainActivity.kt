@@ -133,6 +133,7 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Calcule le total planifié de la journée (00:00..24:00), sans filtre "now".
+     * (Conservé pour compat, mais on n'utilise plus ce total pour l'affichage du "jour en cours")
      */
     private fun computePlannedTotalToday(espId: Long, pumpNum: Int, flow: Float): PlannedTotalToday {
         if (flow <= 0f) return PlannedTotalToday(0, 0f)
@@ -764,9 +765,11 @@ class MainActivity : AppCompatActivity() {
         // Flow (calibration)
         val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
 
-        val plannedTodayFixed = computePlannedTotalToday(espId, pumpNum, flow)
-        val plannedDoseCountToday = plannedTodayFixed.count
-        val plannedMlToday = plannedTodayFixed.ml
+        // ✅ Fix: total "jour en cours" = déjà fait + reste à faire (strictement futur)
+        // -> si on ajoute des doses dans le passé, elles seront pour demain, donc n'augmentent pas le total du jour.
+        val future = computeFuturePlan(espId, pumpNum, flow)
+        val plannedDoseCountToday = doneDoseCountToday + future.count
+        val plannedMlToday = doneMlToday + future.ml
 
         val progressValue =
             if (plannedMlToday <= 0f || doneMlToday <= 0f) 0 else (doneMlToday / plannedMlToday * 100f).roundToInt()
