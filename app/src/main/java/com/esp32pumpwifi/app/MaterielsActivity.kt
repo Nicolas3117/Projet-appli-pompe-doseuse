@@ -171,10 +171,6 @@ class MaterielsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
 
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
-            .putLong("last_app_open_ms", System.currentTimeMillis())
-            .apply()
-
         loadList()
         loadTelegramForActiveModule()
         updateWifiButtonState()

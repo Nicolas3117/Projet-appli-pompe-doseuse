@@ -52,9 +52,9 @@ class AppInactivityWorker(
 
         val message =
             if (days in 25..29) {
-                "Attention : appli non ouverte depuis $days jours. Veuillez l’ouvrir pour actualiser le suivi."
+                "Attention : appli non ouverte depuis $days jours. Ouvrez l’application puis allez dans « Contrôle des pompes » de chaque module pour vérifier et actualiser le suivi des réservoirs."
             } else {
-                "Attention : appli non ouverte depuis plus de 30 jours. Veuillez refaire les niveaux des réservoirs."
+                "Attention : appli non ouverte depuis plus de 30 jours. Ouvrez « Contrôle des pompes » de vos modules et refaites les niveaux des réservoirs."
             }
 
         showNotification(context, message)
