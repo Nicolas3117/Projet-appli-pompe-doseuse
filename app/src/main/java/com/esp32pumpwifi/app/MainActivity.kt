@@ -31,7 +31,6 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -46,8 +45,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var refillTanksButton: Button
 
     private var connectionJob: Job? = null
-    private val isCheckingConnection = AtomicBoolean(false)
-    private var consecutiveFailures = 0
 
     private var uiRefreshJob: Job? = null
     private var hasShownNotFoundPopup = false
@@ -61,8 +58,7 @@ class MainActivity : AppCompatActivity() {
         private const val AP_IP = "192.168.4.1"
         private const val DAY_MS = 86400000L
 
-        // ✅ Respiration réseau : 2s -> 5s
-        private const val CONNECTION_POLL_MS = 5000L
+        private const val CONNECTION_RETRY_DELAY_MS = 400L
 
         private const val STA_PROBE_INTERVAL_MS = 15_000L
         private const val UI_REFRESH_MS = 15_000L
@@ -81,6 +77,8 @@ class MainActivity : AppCompatActivity() {
         private const val MIN_DURATION_MS = 50
         private const val MAX_DURATION_MS = 600_000
         private val LINE_12_DIGITS_REGEX = Regex("^\\d{12}$")
+
+        private const val PREFS_NAME = "prefs"
     }
 
     // ================== FUTUR PLAN (Option A) ==================
@@ -232,6 +230,9 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
+        // ✅ FIX: si la pompe devient HS pendant que tu es ailleurs,
+        // on refait un check /id (3 tentatives) juste avant d'aller sur la programmation.
+        // ⚠️ On ne touche PAS à la vérification du programme (read_ms) : elle reste telle quelle.
         findViewById<Button>(R.id.btn_schedule).setOnClickListener {
             val active = Esp32Manager.getActive(this)
             if (active == null) {
@@ -240,6 +241,31 @@ class MainActivity : AppCompatActivity() {
             }
 
             lifecycleScope.launch {
+                // 1) Vérif connexion (3 tentatives + fallback AP) -> met à jour l'UI + popup si HS
+                val check = testConnectionWithImmediateRetry(active)
+                if (!isActive) return@launch
+
+                if (!check.connected) {
+                    updateConnectionUi(false)
+                    setManualButtonsEnabled(false)
+
+                    if (check.fallbackAttempted && !check.fallbackSucceeded) {
+                        // popup immédiate car "hors connexion" validé
+                        maybeShowEsp32NotFoundPopup()
+                    } else {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Pompe doseuse hors connexion",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    return@launch
+                } else {
+                    updateConnectionUi(true)
+                    setManualButtonsEnabled(true)
+                }
+
+                // 2) Ensuite seulement: ton contrôle programme EXISTANT (inchangé)
                 val initialProgram = fetchProgramFromEsp(active.ip)
                 if (initialProgram == null) {
                     Toast.makeText(
@@ -281,7 +307,7 @@ class MainActivity : AppCompatActivity() {
         rtcFetchJob = null
 
         val now = System.currentTimeMillis()
-        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val lastAppOpen = prefs.getLong("last_app_open_ms", 0L)
 
         if (
@@ -317,7 +343,7 @@ class MainActivity : AppCompatActivity() {
 
         updateConnectionUi(null)
         setManualButtonsEnabled(false)
-        startConnectionWatcher()
+        startConnectionWatcher(activeModule)
 
         uiRefreshJob?.cancel()
         uiRefreshJob =
@@ -343,51 +369,27 @@ class MainActivity : AppCompatActivity() {
         uiRefreshJob = null
     }
 
-    // ================== WATCHER ==================
-    private fun startConnectionWatcher() {
-        if (connectionJob?.isActive == true) return
-
+    // ================== WATCHER (one-shot) ==================
+    private fun startConnectionWatcher(module: EspModule) {
+        connectionJob?.cancel()
         connectionJob =
             lifecycleScope.launch {
-                while (isActive) { // ✅ arrêt propre sur cancel
+                val result = testConnectionWithImmediateRetry(module)
+                if (!isActive) return@launch
 
-                    val active = Esp32Manager.getActive(this@MainActivity)
-                    if (active == null) {
-                        updateConnectionUi(false)
-                        setManualButtonsEnabled(false)
-                        delay(CONNECTION_POLL_MS)
-                        continue
+                if (result.connected) {
+                    updateConnectionUi(true)
+                    setManualButtonsEnabled(true)
+                    hasShownNotFoundPopup = false
+                    requestRtcTimeIfNeeded(module)
+                } else {
+                    updateConnectionUi(false)
+                    setManualButtonsEnabled(false)
+
+                    // ✅ popup immédiate dès que "hors connexion" est validé
+                    if (result.fallbackAttempted && !result.fallbackSucceeded) {
+                        maybeShowEsp32NotFoundPopup()
                     }
-
-                    if (!isCheckingConnection.compareAndSet(false, true)) {
-                        delay(CONNECTION_POLL_MS)
-                        continue
-                    }
-
-                    try {
-                        val result = testConnectionWithFallbackAndStaReturn(active)
-
-                        if (result.connected) {
-                            consecutiveFailures = 0
-                            updateConnectionUi(true)
-                            setManualButtonsEnabled(true)
-                            hasShownNotFoundPopup = false
-                            requestRtcTimeIfNeeded(active)
-                        } else {
-                            consecutiveFailures++
-                            if (consecutiveFailures >= 3) {
-                                updateConnectionUi(false)
-                                setManualButtonsEnabled(false)
-                                if (result.fallbackAttempted && !result.fallbackSucceeded) {
-                                    maybeShowEsp32NotFoundPopup()
-                                }
-                            }
-                        }
-                    } finally {
-                        isCheckingConnection.set(false)
-                    }
-
-                    delay(CONNECTION_POLL_MS)
                 }
             }
     }
@@ -395,8 +397,20 @@ class MainActivity : AppCompatActivity() {
     private fun stopConnectionWatcher() {
         connectionJob?.cancel()
         connectionJob = null
-        consecutiveFailures = 0
         lastStaProbeMs = 0L
+    }
+
+    // ✅ Anti faux-négatif : 3 tentatives (2 pauses de 400ms), puis verdict.
+    private suspend fun testConnectionWithImmediateRetry(module: EspModule): ConnectionCheckResult {
+        val attempt1 = testConnectionWithFallbackAndStaReturn(module)
+        if (attempt1.connected) return attempt1
+
+        delay(CONNECTION_RETRY_DELAY_MS)
+        val attempt2 = testConnectionWithFallbackAndStaReturn(module)
+        if (attempt2.connected) return attempt2
+
+        delay(CONNECTION_RETRY_DELAY_MS)
+        return testConnectionWithFallbackAndStaReturn(module)
     }
 
     private data class ConnectionCheckResult(
@@ -525,14 +539,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveLastStaIp(moduleId: Long, ip: String) {
-        getSharedPreferences("prefs", MODE_PRIVATE)
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .edit()
             .putString("esp_${moduleId}_last_sta_ip", ip)
             .apply()
     }
 
     private fun loadLastStaIp(moduleId: Long): String? =
-        getSharedPreferences("prefs", MODE_PRIVATE)
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .getString("esp_${moduleId}_last_sta_ip", null)
 
     // ================== UI ==================
@@ -544,8 +558,9 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Pompe doseuse non trouvée")
             .setMessage(
                 "La pompe n’est pas joignable.\n\n" +
-                        "Connecte-toi au Wi-Fi pompe-XXXX (mode AP) et appuie sur Rafraîchir, ou\n\n" +
-                        "Reviens sur le Wi-Fi de ta box, puis appuie sur Rafraîchir."
+                        "1️⃣ Vérifie que ta box Internet fonctionne correctement.\n\n" +
+                        "2️⃣ Si la pompe est en mode point d’accès, connecte-toi au Wi-Fi pompe-XXXX, puis appuie sur Rafraîchir.\n\n" +
+                        "3️⃣ Sinon, reconnecte ton téléphone au Wi-Fi de ta box, puis appuie sur Rafraîchir."
             )
             .setPositiveButton("Rafraîchir") { _, _ ->
                 startActivity(
@@ -735,7 +750,7 @@ class MainActivity : AppCompatActivity() {
         val next = entries.firstOrNull { it.minutes > nowMinutes } ?: entries.first()
         val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", next.hh, next.mm)
 
-        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f) // mL/s
         val doseMl = if (flow > 0f) (next.durationMs / 1000f) * flow else 0f
         val doseText = formatMl(doseMl)
@@ -755,7 +770,7 @@ class MainActivity : AppCompatActivity() {
 
         if (nameId == 0 || progressId == 0 || minId == 0 || maxId == 0 || doseId == 0 || insideId == 0 || nextDoseId == 0) return
 
-        val prefs = getSharedPreferences("prefs", MODE_PRIVATE)
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val name =
             prefs.getString("esp_${espId}_pump${pumpNum}_name", "Pompe $pumpNum") ?: "Pompe $pumpNum"
 
@@ -766,7 +781,6 @@ class MainActivity : AppCompatActivity() {
         val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
 
         // ✅ Fix: total "jour en cours" = déjà fait + reste à faire (strictement futur)
-        // -> si on ajoute des doses dans le passé, elles seront pour demain, donc n'augmentent pas le total du jour.
         val future = computeFuturePlan(espId, pumpNum, flow)
         val plannedDoseCountToday = doneDoseCountToday + future.count
         val plannedMlToday = doneMlToday + future.ml
