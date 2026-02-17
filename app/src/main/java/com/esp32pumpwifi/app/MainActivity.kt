@@ -49,6 +49,10 @@ class MainActivity : AppCompatActivity() {
     private var uiRefreshJob: Job? = null
     private var hasShownNotFoundPopup = false
     private var hasShownOver30DaysPopup = false
+
+    // ✅ NEW: popup gratifiant J+25..29 (une seule fois par session)
+    private var hasShown25to29Popup = false
+
     private var lastRtcIp: String? = null
     private var rtcFetchJob: Job? = null
     // pour tenter un retour STA automatique sans appuyer sur "+"
@@ -230,9 +234,6 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        // ✅ FIX: si la pompe devient HS pendant que tu es ailleurs,
-        // on refait un check /id (3 tentatives) juste avant d'aller sur la programmation.
-        // ⚠️ On ne touche PAS à la vérification du programme (read_ms) : elle reste telle quelle.
         findViewById<Button>(R.id.btn_schedule).setOnClickListener {
             val active = Esp32Manager.getActive(this)
             if (active == null) {
@@ -241,7 +242,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             lifecycleScope.launch {
-                // 1) Vérif connexion (3 tentatives + fallback AP) -> met à jour l'UI + popup si HS
                 val check = testConnectionWithImmediateRetry(active)
                 if (!isActive) return@launch
 
@@ -250,7 +250,6 @@ class MainActivity : AppCompatActivity() {
                     setManualButtonsEnabled(false)
 
                     if (check.fallbackAttempted && !check.fallbackSucceeded) {
-                        // popup immédiate car "hors connexion" validé
                         maybeShowEsp32NotFoundPopup()
                     } else {
                         Toast.makeText(
@@ -265,7 +264,6 @@ class MainActivity : AppCompatActivity() {
                     setManualButtonsEnabled(true)
                 }
 
-                // 2) Ensuite seulement: ton contrôle programme EXISTANT (inchangé)
                 val initialProgram = fetchProgramFromEsp(active.ip)
                 if (initialProgram == null) {
                     Toast.makeText(
@@ -310,14 +308,26 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val lastAppOpen = prefs.getLong("last_app_open_ms", 0L)
 
-        if (
-            lastAppOpen != 0L &&
-            now - lastAppOpen > 30L * DAY_MS &&
-            !hasShownOver30DaysPopup
-        ) {
-            maybeShowOver30DaysPopup()
+        // ✅ NEW: popups inactivité (à l’ouverture de "Contrôle des pompes")
+        if (lastAppOpen != 0L) {
+            val days = ((now - lastAppOpen) / DAY_MS).toInt()
+
+            if (days in 25..29 && !hasShown25to29Popup) {
+                hasShown25to29Popup = true
+                AlertDialog.Builder(this)
+                    .setTitle("Actualisation effectuée")
+                    .setMessage(
+                        "Suivi des réservoirs actualisé.\n\n" +
+                                "Si plusieurs modules sont installés, pensez à ouvrir chacun d’eux."
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+            } else if (days >= 30 && !hasShownOver30DaysPopup) {
+                maybeShowOver30DaysPopup()
+            }
         }
 
+        // IMPORTANT: update après les popups
         prefs.edit()
             .putLong("last_app_open_ms", now)
             .apply()
@@ -348,7 +358,7 @@ class MainActivity : AppCompatActivity() {
         uiRefreshJob?.cancel()
         uiRefreshJob =
             lifecycleScope.launch {
-                while (isActive) { // ✅ arrêt propre sur cancel
+                while (isActive) {
                     val active = Esp32Manager.getActive(this@MainActivity)
                     active?.let {
                         TankScheduleHelper.recalculateFromLastTime(this@MainActivity, it.id)
@@ -386,7 +396,6 @@ class MainActivity : AppCompatActivity() {
                     updateConnectionUi(false)
                     setManualButtonsEnabled(false)
 
-                    // ✅ popup immédiate dès que "hors connexion" est validé
                     if (result.fallbackAttempted && !result.fallbackSucceeded) {
                         maybeShowEsp32NotFoundPopup()
                     }
@@ -400,7 +409,6 @@ class MainActivity : AppCompatActivity() {
         lastStaProbeMs = 0L
     }
 
-    // ✅ Anti faux-négatif : 3 tentatives (2 pauses de 400ms), puis verdict.
     private suspend fun testConnectionWithImmediateRetry(module: EspModule): ConnectionCheckResult {
         val attempt1 = testConnectionWithFallbackAndStaReturn(module)
         if (attempt1.connected) return attempt1
@@ -419,7 +427,6 @@ class MainActivity : AppCompatActivity() {
         val fallbackSucceeded: Boolean
     )
 
-    // ================== RÉSEAU (connexion uniquement) ==================
     private suspend fun testConnectionWithFallbackAndStaReturn(module: EspModule): ConnectionCheckResult =
         withContext(Dispatchers.IO) {
 
@@ -461,7 +468,6 @@ class MainActivity : AppCompatActivity() {
             ConnectionCheckResult(false, true, false)
         }
 
-    // ✅ Respiration réseau : timeouts spécifiques à /id (connexion)
     private fun fetchPumpNameForIp(ip: String): String? {
         var conn: HttpURLConnection? = null
         return try {
@@ -497,7 +503,6 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
-    // ✅ Respiration réseau : timeouts spécifiques à /time (connexion/affichage RTC)
     private suspend fun fetchRtcTimeForIp(ip: String): String? =
         withContext(Dispatchers.IO) {
             var conn: HttpURLConnection? = null
@@ -634,7 +639,6 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    // ✅ FIX: calcule la DayRange UNE SEULE FOIS et l’utilise pour build + lectures (minuit safe)
     private fun updateDailySummary(activeModule: EspModule) {
         dailySummaryContainer.visibility = View.VISIBLE
         lifecycleScope.launch(Dispatchers.IO) {
@@ -673,7 +677,6 @@ class MainActivity : AppCompatActivity() {
         return t.firstOrNull() == '1'
     }
 
-    // ⚠️ On ne touche pas aux timeouts ici (read_ms) : ce n’est pas “respiration connexion”
     private suspend fun fetchProgramFromEsp(ip: String): String? = withContext(Dispatchers.IO) {
         var conn: HttpURLConnection? = null
         return@withContext try {
@@ -711,7 +714,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ✅ prochaine dose basée sur ProgramStoreSynced (synced)
     private fun getNextDoseText(espId: Long, pumpNum: Int): String {
         val encodedLines = ProgramStoreSynced.loadEncodedLines(this, espId, pumpNum)
         if (encodedLines.isEmpty()) return "Aucune dose prévue"
@@ -751,14 +753,13 @@ class MainActivity : AppCompatActivity() {
         val formattedTime = String.format(Locale.getDefault(), "%02d:%02d", next.hh, next.mm)
 
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f) // mL/s
+        val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
         val doseMl = if (flow > 0f) (next.durationMs / 1000f) * flow else 0f
         val doseText = formatMl(doseMl)
 
         return "Prochaine dose : $doseText\u202FmL à $formattedTime"
     }
 
-    // ================== ✅ UPDATE DAILY (Option A "béton") ==================
     private fun updateOneDaily(espId: Long, pumpNum: Int, done: DailyDone) {
         val nameId = resources.getIdentifier("tv_daily_name_$pumpNum", "id", packageName)
         val progressId = resources.getIdentifier("pb_daily_$pumpNum", "id", packageName)
@@ -777,10 +778,8 @@ class MainActivity : AppCompatActivity() {
         val doneDoseCountToday = done.count
         val doneMlToday = done.ml
 
-        // Flow (calibration)
         val flow = prefs.getFloat("esp_${espId}_pump${pumpNum}_flow", 0f)
 
-        // ✅ Fix: total "jour en cours" = déjà fait + reste à faire (strictement futur)
         val future = computeFuturePlan(espId, pumpNum, flow)
         val plannedDoseCountToday = doneDoseCountToday + future.count
         val plannedMlToday = doneMlToday + future.ml
