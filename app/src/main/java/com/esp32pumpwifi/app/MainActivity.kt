@@ -50,7 +50,7 @@ class MainActivity : AppCompatActivity() {
     private var hasShownNotFoundPopup = false
     private var hasShownOver30DaysPopup = false
 
-    // ✅ NEW: popup gratifiant J+25..29 (une seule fois par session)
+    // ✅ popup gratifiant J+25..29 (une seule fois par session)
     private var hasShown25to29Popup = false
 
     private var lastRtcIp: String? = null
@@ -306,34 +306,10 @@ class MainActivity : AppCompatActivity() {
 
         val now = System.currentTimeMillis()
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val lastAppOpen = prefs.getLong("last_app_open_ms", 0L)
-
-        // ✅ NEW: popups inactivité (à l’ouverture de "Contrôle des pompes")
-        if (lastAppOpen != 0L) {
-            val days = ((now - lastAppOpen) / DAY_MS).toInt()
-
-            if (days in 25..29 && !hasShown25to29Popup) {
-                hasShown25to29Popup = true
-                AlertDialog.Builder(this)
-                    .setTitle("Actualisation effectuée")
-                    .setMessage(
-                        "Suivi des réservoirs actualisé.\n\n" +
-                                "Si plusieurs modules sont installés, pensez à ouvrir chacun d’eux."
-                    )
-                    .setPositiveButton("OK", null)
-                    .show()
-            } else if (days >= 30 && !hasShownOver30DaysPopup) {
-                maybeShowOver30DaysPopup()
-            }
-        }
-
-        // IMPORTANT: update après les popups
-        prefs.edit()
-            .putLong("last_app_open_ms", now)
-            .apply()
 
         val activeModule = Esp32Manager.getActive(this)
 
+        // ✅ si aucun module : comme avant
         if (activeModule == null) {
             tvActiveModule.text = "Sélectionné : aucun module"
             updateConnectionUi(null)
@@ -345,6 +321,37 @@ class MainActivity : AppCompatActivity() {
         }
 
         tvActiveModule.text = "Sélectionné : ${activeModule.displayName}"
+
+        // ✅ Popups d'inactivité : base "par module" (sinon tu ne les verras plus)
+        val moduleKey = "esp_${activeModule.id}_last_open_ms"
+        val lastOpenForModule =
+            prefs.getLong(moduleKey, 0L).takeIf { it != 0L }
+                ?: prefs.getLong("last_app_open_ms", 0L) // fallback "ancienne version" si besoin
+
+        if (lastOpenForModule != 0L) {
+            val days = ((now - lastOpenForModule) / DAY_MS).toInt()
+
+            if (days in 25..29 && !hasShown25to29Popup) {
+                hasShown25to29Popup = true
+                AlertDialog.Builder(this)
+                    .setTitle("Actualisation effectuée")
+                    .setMessage(
+                        """
+                        Suivi des réservoirs actualisé.
+                        """.trimIndent()
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+            } else if (days >= 30 && !hasShownOver30DaysPopup) {
+                maybeShowOver30DaysPopup()
+            }
+        }
+
+        // ✅ IMPORTANT : update APRÈS le calcul/popup
+        prefs.edit()
+            .putLong("last_app_open_ms", now) // conservé (compat / autres logiques)
+            .putLong(moduleKey, now)          // clé par module (source pour inactivité par module)
+            .apply()
 
         TankScheduleHelper.recalculateFromLastTime(this, activeModule.id)
 
@@ -586,7 +593,10 @@ class MainActivity : AppCompatActivity() {
 
         AlertDialog.Builder(this)
             .setTitle("Application non ouverte longtemps")
-            .setMessage("Attention : suite à l’application fermée pendant plus de 30 jours, veuillez refaire les niveaux des réservoirs.")
+            .setMessage(
+                "Attention : Suite à l’inactivité sur ce module pendant plus de 30 jours,\n" +
+                        "veuillez refaire les niveaux des réservoirs.\n"
+            )
             .setPositiveButton("OK", null)
             .show()
     }
@@ -653,8 +663,18 @@ class MainActivity : AppCompatActivity() {
 
             val doneByPump = (1..4).associateWith { pumpNum ->
                 DailyDone(
-                    count = DailyDoseStore.countForDay(this@MainActivity, activeModule.id, pumpNum, range.dayStartMs),
-                    ml = DailyDoseStore.sumMlForDay(this@MainActivity, activeModule.id, pumpNum, range.dayStartMs)
+                    count = DailyDoseStore.countForDay(
+                        this@MainActivity,
+                        activeModule.id,
+                        pumpNum,
+                        range.dayStartMs
+                    ),
+                    ml = DailyDoseStore.sumMlForDay(
+                        this@MainActivity,
+                        activeModule.id,
+                        pumpNum,
+                        range.dayStartMs
+                    )
                 )
             }
 

@@ -126,22 +126,6 @@ class MaterielsActivity : AppCompatActivity() {
         }
 
         // ▶️ Accéder aux pompes
-        btnOpenPumps.setOnLongClickListener {
-            // 1) Simule 26 jours d’inactivité + reset anti-spam
-            getSharedPreferences("prefs", MODE_PRIVATE).edit()
-                .putLong("last_app_open_ms", System.currentTimeMillis() - 30L * 24L * 60L * 60L * 1000L)
-                .remove("inactivity_last_sent_day")
-                .apply()
-
-            // 2) Lance le worker immédiatement
-            val req = androidx.work.OneTimeWorkRequestBuilder<AppInactivityWorker>().build()
-            androidx.work.WorkManager.getInstance(this).enqueue(req)
-
-            Toast.makeText(this, "Test J+26 lancé", Toast.LENGTH_SHORT).show()
-            true
-        }
-
-
         btnOpenPumps.setOnClickListener {
             val activeModule = Esp32Manager.getActive(this)
             if (activeModule == null) {
