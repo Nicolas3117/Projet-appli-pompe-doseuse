@@ -5,7 +5,10 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Log
 import android.view.View
-import android.widget.*
+import android.widget.Button
+import android.widget.EditText
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import java.util.Locale
@@ -327,13 +330,18 @@ class CalibrationActivity : AppCompatActivity() {
                     return@setPositiveButton
                 }
 
+                // ✅ Option 1 (source unique):
+                // 1) On enregistre la capacité (si l'utilisateur l'a modifiée)
                 prefs.edit()
                     .putInt("esp_${espId}_pump${pumpNum}_tank_capacity", capacity)
-                    .putFloat("esp_${espId}_pump${pumpNum}_tank_remaining", capacity.toFloat())
-                    // ✅ RÉARMEMENT CORRECT DES ALERTES
-                    .putBoolean("esp_${espId}_pump${pumpNum}_low_alert_sent", false)
-                    .putBoolean("esp_${espId}_pump${pumpNum}_empty_alert_sent", false)
                     .apply()
+
+                // 2) Reset officiel (remaining + flags + last_processed_time)
+                TankManager.resetTank(
+                    context = this,
+                    espId = espId,
+                    pumpNum = pumpNum
+                )
 
                 loadTankUI(
                     prefs,
