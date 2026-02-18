@@ -3,6 +3,7 @@ package com.esp32pumpwifi.app
 import android.content.Context
 import android.util.Log
 import org.json.JSONObject
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -119,7 +120,7 @@ object TelegramSender {
 
             val bodyParams =
                 "chat_id=${URLEncoder.encode(config.chatId, StandardCharsets.UTF_8.toString())}" +
-                    "&text=$encodedMessage"
+                        "&text=$encodedMessage"
 
             conn.outputStream.use { output ->
                 output.write(bodyParams.toByteArray(StandardCharsets.UTF_8))
@@ -147,6 +148,10 @@ object TelegramSender {
                 Log.w(TAG, "Échec Telegram (HTTP=$code)")
                 false
             }
+        } catch (e: IOException) {
+            // ✅ Important : erreur réseau => on rethrow pour permettre retry/queue propre
+            Log.e(TAG, "Erreur réseau Telegram (${e.javaClass.simpleName})")
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Erreur Telegram (${e.javaClass.simpleName})")
             false

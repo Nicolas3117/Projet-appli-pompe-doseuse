@@ -89,7 +89,8 @@ class AppInactivityWorker(
             showNotification(context, moduleId, moduleMessage)
 
             if (TelegramSender.isConfigured(context, moduleId)) {
-                sendTelegramForModule(context, moduleId, moduleMessage, now)
+                // ✅ Envoi déterministe dans le cycle du worker + queue si échec
+                sendTelegramForModule(context, moduleId, moduleMessage, todayKey, now)
             }
 
             prefs.edit().putString(moduleLastSentDayKey, todayKey).apply()
@@ -102,10 +103,12 @@ class AppInactivityWorker(
         context: Context,
         moduleId: Long,
         message: String,
+        todayKey: String,
         timestamp: Long
     ) {
         val alert = TelegramAlert(
-            id = "INACTIVITY:$moduleId:$timestamp",
+            // ✅ Stable 1/jour/module (évite doublons si plusieurs runs/queue)
+            id = "INACTIVITY:$moduleId:$todayKey",
             espId = moduleId,
             pumpNum = -1,
             type = "INACTIVITY",
