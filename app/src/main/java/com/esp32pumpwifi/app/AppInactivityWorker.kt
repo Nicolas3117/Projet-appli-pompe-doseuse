@@ -12,6 +12,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import java.time.Instant
 import java.time.ZoneId
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class AppInactivityWorker(
     appContext: Context,
@@ -87,13 +89,40 @@ class AppInactivityWorker(
             showNotification(context, moduleId, moduleMessage)
 
             if (TelegramSender.isConfigured(context, moduleId)) {
-                TelegramSender.sendMessage(context, moduleId, moduleMessage)
+                sendTelegramForModule(context, moduleId, moduleMessage, now)
             }
 
             prefs.edit().putString(moduleLastSentDayKey, todayKey).apply()
         }
 
         return Result.success()
+    }
+
+    private suspend fun sendTelegramForModule(
+        context: Context,
+        moduleId: Long,
+        message: String,
+        timestamp: Long
+    ) {
+        val alert = TelegramAlert(
+            id = "INACTIVITY:$moduleId:$timestamp",
+            espId = moduleId,
+            pumpNum = -1,
+            type = "INACTIVITY",
+            message = message,
+            timestamp = timestamp
+        )
+
+        try {
+            val sent = withContext(Dispatchers.IO) {
+                TelegramSender.sendAlertBlocking(context, alert)
+            }
+            if (!sent) {
+                TelegramAlertQueue.enqueue(context, alert)
+            }
+        } catch (_: Exception) {
+            TelegramAlertQueue.enqueue(context, alert)
+        }
     }
 
     private fun showNotification(context: Context, moduleId: Long, message: String) {
