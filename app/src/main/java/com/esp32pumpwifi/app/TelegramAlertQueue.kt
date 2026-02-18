@@ -65,7 +65,14 @@ object TelegramAlertQueue {
         }
 
         CoroutineScope(Dispatchers.IO).launch {
-            val sentNow = TelegramSender.sendAlertBlocking(appContext, alert)
+            val sentNow = try {
+                TelegramSender.sendAlertBlocking(appContext, alert)
+            } catch (e: Exception) {
+                // ✅ Important: ne jamais perdre l’alerte si exception => on la met en queue
+                Log.w(TAG, "sendNow échoué, mise en queue id=${alert.id}", e)
+                false
+            }
+
             if (sentNow) {
                 removeById(appContext, alert.id)
                 // Même en cas de succès immédiat, on tente de vider un éventuel backlog.

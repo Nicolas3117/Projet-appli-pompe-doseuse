@@ -8,6 +8,7 @@ import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import java.nio.charset.StandardCharsets
 
 object TankNotification {
 
@@ -57,7 +58,7 @@ object TankNotification {
             .build()
 
         NotificationManagerCompat.from(context)
-            .notify((espId * 10 + pumpNum).toInt(), notification)
+            .notify(stableNotificationId(espId, pumpNum, "EMPTY"), notification)
     }
 
     // =====================================================
@@ -85,7 +86,16 @@ object TankNotification {
             .build()
 
         NotificationManagerCompat.from(context)
-            .notify((espId * 100 + pumpNum).toInt(), notification)
+            .notify(stableNotificationId(espId, pumpNum, "LOW"), notification)
+    }
+
+    private fun stableNotificationId(espId: Long, pumpNum: Int, type: String): Int {
+        val key = "$espId:$pumpNum:$type"
+        val hash = key.toByteArray(StandardCharsets.UTF_8)
+            .fold(0x811C9DC5.toInt()) { acc, byte ->
+                (acc xor (byte.toInt() and 0xFF)) * 16777619
+            }
+        return hash and 0x7FFFFFFF
     }
 
     // =====================================================

@@ -11,7 +11,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -23,7 +25,6 @@ class AppInactivityWorker(
     companion object {
         private const val PREFS_NAME = "prefs"
         private const val KEY_LAST_APP_OPEN_MS = "last_app_open_ms"
-        private const val DAY_MS = 86400000L
 
         private const val CHANNEL_ID = "app_inactivity_reminders"
         private const val CHANNEL_NAME = "Rappels d'ouverture"
@@ -66,7 +67,11 @@ class AppInactivityWorker(
 
             if (lastOpen == 0L) continue
 
-            val days = ((now - lastOpen) / DAY_MS).toInt()
+            val lastOpenDate = Instant.ofEpochMilli(lastOpen)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+            val todayDate = LocalDate.parse(todayKey)
+            val days = ChronoUnit.DAYS.between(lastOpenDate, todayDate).toInt()
 
             if (days < MIN_INACTIVITY_DAYS) continue
             if (days > MAX_INACTIVITY_DAYS) continue
