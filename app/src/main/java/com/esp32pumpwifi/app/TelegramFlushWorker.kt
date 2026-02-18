@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import java.io.IOException
 
 class TelegramFlushWorker(
     appContext: Context,
@@ -30,7 +31,13 @@ class TelegramFlushWorker(
                 continue
             }
 
-            val success = TelegramSender.sendAlertBlocking(applicationContext, alert)
+            val success = try {
+                TelegramSender.sendAlertBlocking(applicationContext, alert)
+            } catch (e: IOException) {
+                // Réseau indisponible/instable : on réessaiera plus tard.
+                return Result.retry()
+            }
+
             if (success) {
                 sentIds.add(alert.id)
             } else {
@@ -44,7 +51,7 @@ class TelegramFlushWorker(
         }
 
         if (failed) {
-            // Réseau instable ou erreur HTTP : on s'arrête et on réessaiera plus tard.
+            // Erreur HTTP / réponse Telegram ok=false : on s'arrête et on réessaiera plus tard.
             return Result.retry()
         }
 
