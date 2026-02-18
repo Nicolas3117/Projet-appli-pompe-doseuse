@@ -126,6 +126,35 @@ class MaterielsActivity : AppCompatActivity() {
         }
 
         // ▶️ Accéder aux pompes
+        btnOpenPumps.setOnLongClickListener {
+
+            val modules = Esp32Manager.getAll(this)
+            val module = modules.firstOrNull()
+
+            if (module == null) {
+                Toast.makeText(this, "Aucun module", Toast.LENGTH_SHORT).show()
+                return@setOnLongClickListener true
+            }
+
+            val moduleId = module.id
+
+            val message = """
+        🔧 TEST TELEGRAM
+        Module : ${module.displayName}
+        Timestamp : ${System.currentTimeMillis()}
+    """.trimIndent()
+
+            TelegramSender.sendMessage(this, moduleId, message)
+
+            Toast.makeText(
+                this,
+                "Alerte Telegram test envoyée (ou mise en queue)",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            true
+        }
+
         btnOpenPumps.setOnClickListener {
             val activeModule = Esp32Manager.getActive(this)
             if (activeModule == null) {

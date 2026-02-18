@@ -23,6 +23,7 @@ class TelegramFlushWorker(
 
         val sentIds = LinkedHashSet<String>()
         var failed = false
+        var networkFailure = false
 
         for (alert in snapshot) {
             if (!TelegramSender.isConfigured(applicationContext, alert.espId)) {
@@ -33,9 +34,10 @@ class TelegramFlushWorker(
 
             val success = try {
                 TelegramSender.sendAlertBlocking(applicationContext, alert)
-            } catch (e: IOException) {
+            } catch (_: IOException) {
                 // Réseau indisponible/instable : on réessaiera plus tard.
-                return Result.retry()
+                networkFailure = true
+                break
             }
 
             if (success) {
@@ -52,6 +54,10 @@ class TelegramFlushWorker(
 
         if (failed) {
             // Erreur HTTP / réponse Telegram ok=false : on s'arrête et on réessaiera plus tard.
+            return Result.retry()
+        }
+
+        if (networkFailure) {
             return Result.retry()
         }
 
