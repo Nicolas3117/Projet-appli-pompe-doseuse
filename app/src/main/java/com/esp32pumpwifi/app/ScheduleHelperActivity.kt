@@ -11,6 +11,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.core.widget.addTextChangedListener
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -150,6 +153,16 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         proposalsContainer = findViewById(R.id.layout_proposals)
         addButton = findViewById(R.id.button_add_doses)
+
+        val actionButtons = findViewById<LinearLayout>(R.id.layout_action_buttons)
+        val basePaddingBottom = actionButtons.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(actionButtons) { view, insets ->
+            val navigationBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            view.updatePadding(bottom = basePaddingBottom + maxOf(navigationBottom, imeBottom))
+            insets
+        }
+        ViewCompat.requestApplyInsets(actionButtons)
     }
 
     private fun preloadAntiInterferenceDefault() {
