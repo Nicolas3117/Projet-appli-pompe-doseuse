@@ -24,8 +24,12 @@ object CriticalAlarmScheduler {
     private const val INACTIVITY_WORK_NAME = "app_inactivity"
 
     fun ensureScheduled(context: Context) {
-        if (ExactAlarmPermissionHelper.canScheduleExactAlarms(context)) {
-            cancelBestEffortWork(context)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            cancelCriticalPeriodicWorks(context)
+            scheduleInactivityAlarmDaily(context)
+            scheduleTankAlarmEvery15Min(context)
+        } else if (ExactAlarmPermissionHelper.canScheduleExactAlarms(context)) {
+            cancelCriticalPeriodicWorks(context)
             scheduleInactivityAlarmDaily(context)
             scheduleTankAlarmEvery15Min(context)
         } else {
@@ -147,7 +151,7 @@ object CriticalAlarmScheduler {
             )
     }
 
-    private fun cancelBestEffortWork(context: Context) {
+    fun cancelCriticalPeriodicWorks(context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork(TANK_WORK_NAME)
         WorkManager.getInstance(context).cancelUniqueWork(INACTIVITY_WORK_NAME)
     }
