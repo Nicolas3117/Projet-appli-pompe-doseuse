@@ -41,6 +41,10 @@ object InactivityChecker {
         val modules = Esp32Manager.getAll(appContext)
         for (module in modules) {
             val moduleId = module.id
+
+            // ✅ NOUVEAU : pas de notif inactivité si aucune programmation active sur ce module
+            if (!hasAnyActiveProgram(appContext, moduleId)) continue
+
             val moduleLastOpenKey = "esp_${moduleId}_last_open_ms"
             val moduleLastSentDayKey = "esp_${moduleId}_inactivity_last_sent_day"
 
@@ -66,10 +70,10 @@ object InactivityChecker {
             val baseMessage =
                 if (days in 25..29) {
                     "Appli non ouverte depuis $days jours.\n" +
-                        "Ouvrez « Contrôle des pompes » du module concerné pour actualiser le suivi."
+                            "Ouvrez « Contrôle des pompes » du module concerné pour actualiser le suivi."
                 } else {
                     "Attention : appli non ouverte depuis plus de 30 jours.\n" +
-                        "Ouvrez « Contrôle des pompes » du module concerné et refaites les niveaux des réservoirs."
+                            "Ouvrez « Contrôle des pompes » du module concerné et refaites les niveaux des réservoirs."
                 }
 
             val moduleMessage = "« ${module.displayName} » : $baseMessage"
@@ -82,6 +86,21 @@ object InactivityChecker {
 
             prefs.edit().putString(moduleLastSentDayKey, todayKey).apply()
         }
+    }
+
+    private fun hasAnyActiveProgram(context: Context, moduleId: Long): Boolean {
+        for (pumpNum in 1..4) {
+            val lines = ProgramStoreSynced.loadEncodedLines(context, moduleId, pumpNum)
+            if (lines.any { isActiveProgramLine(it) }) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun isActiveProgramLine(line: String): Boolean {
+        val trimmed = line.trim()
+        return trimmed.length == 12 && trimmed.all { it.isDigit() } && trimmed.first() == '1'
     }
 
     private suspend fun sendTelegramForModule(
@@ -113,9 +132,12 @@ object InactivityChecker {
     }
 
     private fun showNotification(context: Context, moduleId: Long, message: String) {
+        // ✅ requestCode stable par module -> évite tout effet de bord entre modules
+        val requestCode = (moduleId % 10000).toInt()
+
         val pendingIntent = PendingIntent.getActivity(
             context,
-            0,
+            requestCode,
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             },
