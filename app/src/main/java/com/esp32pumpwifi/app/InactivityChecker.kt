@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 object InactivityChecker {
+
     private const val PREFS_NAME = "prefs"
     private const val KEY_LAST_APP_OPEN_MS = "last_app_open_ms"
 
@@ -42,7 +43,7 @@ object InactivityChecker {
         for (module in modules) {
             val moduleId = module.id
 
-            // ✅ NOUVEAU : pas de notif inactivité si aucune programmation active sur ce module
+            // Pas de notif inactivité si aucune programmation active sur ce module
             if (!hasAnyActiveProgram(appContext, moduleId)) continue
 
             val moduleLastOpenKey = "esp_${moduleId}_last_open_ms"
@@ -91,9 +92,7 @@ object InactivityChecker {
     private fun hasAnyActiveProgram(context: Context, moduleId: Long): Boolean {
         for (pumpNum in 1..4) {
             val lines = ProgramStoreSynced.loadEncodedLines(context, moduleId, pumpNum)
-            if (lines.any { isActiveProgramLine(it) }) {
-                return true
-            }
+            if (lines.any { isActiveProgramLine(it) }) return true
         }
         return false
     }
@@ -123,16 +122,14 @@ object InactivityChecker {
             val sent = withContext(Dispatchers.IO) {
                 TelegramSender.sendAlertBlocking(context, alert)
             }
-            if (!sent) {
-                TelegramAlertQueue.enqueue(context, alert)
-            }
+            if (!sent) TelegramAlertQueue.enqueue(context, alert)
         } catch (_: Exception) {
             TelegramAlertQueue.enqueue(context, alert)
         }
     }
 
     private fun showNotification(context: Context, moduleId: Long, message: String) {
-        // ✅ requestCode stable par module -> évite tout effet de bord entre modules
+        // requestCode stable par module -> évite tout effet de bord entre modules
         val requestCode = (moduleId % 10000).toInt()
 
         val pendingIntent = PendingIntent.getActivity(
