@@ -1,7 +1,6 @@
 package com.esp32pumpwifi.app
 
 import android.content.Context
-import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import java.io.IOException
@@ -10,10 +9,6 @@ class TelegramFlushWorker(
     appContext: Context,
     params: WorkerParameters
 ) : CoroutineWorker(appContext, params) {
-
-    companion object {
-        private const val TAG = "TELEGRAM_FLUSH"
-    }
 
     override suspend fun doWork(): Result {
         val snapshot = TelegramAlertQueue.snapshot(applicationContext)
@@ -27,7 +22,6 @@ class TelegramFlushWorker(
 
         for (alert in snapshot) {
             if (!TelegramSender.isConfigured(applicationContext, alert.espId)) {
-                Log.w(TAG, "Telegram non configuré pour espId=${alert.espId}, alerte supprimée")
                 sentIds.add(alert.id)
                 continue
             }

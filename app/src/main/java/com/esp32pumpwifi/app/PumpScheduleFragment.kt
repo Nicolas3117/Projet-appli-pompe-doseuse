@@ -2,7 +2,6 @@ package com.esp32pumpwifi.app
 
 import android.content.Context
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -238,15 +237,10 @@ class PumpScheduleFragment : Fragment() {
             val volumeMl = QuantityInputUtils.quantityMl(qtyTenth).toDouble()
             val durationMs = DoseValidationUtils.computeDurationMs(volumeMl, flow)
 
-            Log.i(
-                "MANUAL_VALIDATE",
-                "input pump=$pumpNumber startMs=$startMs qtyTenth=$qtyTenth volumeMl=$volumeMl flow=$flow antiMin=$antiMin"
-            )
 
             if (durationMs == null) {
                 quantityLayout.error = "Débit non calibré : impossible de calculer la durée."
                 addBtn?.isEnabled = false
-                Log.w("MANUAL_VALIDATE", "invalid reason=flow_missing pump=$pumpNumber flow=$flow")
                 return@manual
             }
 
@@ -274,10 +268,6 @@ class PumpScheduleFragment : Fragment() {
                     }
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
                         val blockedPumpLabel = validation.conflictPumpNum?.let { getPumpName(it) } ?: "Pompe inconnue"
-                        Log.i(
-                            "VALIDATE_GAP",
-                            "blockingPumpName=$blockedPumpLabel nextAllowedStartMs=${validation.nextAllowedStartMs}"
-                        )
                         timeLayout.error = DoseErrorMessageFormatter.antiInterferenceGap(
                             antiMin = antiMin,
                             blockingPumpName = blockedPumpLabel,
@@ -291,26 +281,14 @@ class PumpScheduleFragment : Fragment() {
                         val maxStartText = ScheduleAddMergeUtils.toTimeString(maxStartMs)
                         timeLayout.error =
                             "La distribution dépasse minuit (00:00).\nHeure maximale possible : $maxStartText."
-                        Log.w(
-                            "MANUAL_VALIDATE",
-                            "overflow_midnight pump=$pumpNumber durationMs=$durationMs lastAllowedEndMs=$lastAllowedEndMs maxStartMsRaw=$maxStartMsRaw maxStartMsRounded=$maxStartMs"
-                        )
                     }
                     else -> timeLayout.error = "Format invalide"
                 }
                 addBtn?.isEnabled = false
-                Log.w(
-                    "MANUAL_VALIDATE",
-                    "invalid reason=${validation.reason} candidate=[${candidate.startMs},${candidate.endMs}) antiMin=$antiMin blockedByPump=${validation.conflictPumpNum} conflictStart=${validation.conflictStartMs} conflictEnd=${validation.conflictEndMs} nextAllowed=${validation.nextAllowedStartMs} durationMs=$durationMs"
-                )
                 return@manual
             }
 
             addBtn?.isEnabled = true
-            Log.i(
-                "MANUAL_VALIDATE",
-                "valid pump=$pumpNumber interval=[${candidate.startMs},${candidate.endMs}) antiMin=$antiMin durationMs=$durationMs"
-            )
         }
 
         val dialog = AlertDialog.Builder(requireContext())
@@ -521,11 +499,6 @@ class PumpScheduleFragment : Fragment() {
                 continue
             }
 
-            android.util.Log.d(
-                "PROGRAM_SAVE",
-                "Saving schedule line: pump=$pumpNumber time=$hh:$mm " +
-                        "volumeMl=${QuantityInputUtils.formatQuantityMl(s.quantityTenth)} flow=$flow durationMs=$durationMs"
-            )
 
             val line = ProgramLine(
                 enabled = true,

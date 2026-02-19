@@ -5,7 +5,6 @@ import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -118,23 +117,15 @@ class ScheduleHelperActivity : AppCompatActivity() {
     }
 
     private fun initDefaultWindowIfEmpty() {
-        var applied = false
-
         if (startMs == null || startInput.text?.toString()?.trim().isNullOrEmpty()) {
             startMs = 0L
             startInput.setText(formatTimeMs(0L))
-            applied = true
         }
 
         val endOfDayMs = toMs(23, 59)
         if (endMs == null || endInput.text?.toString()?.trim().isNullOrEmpty()) {
             endMs = endOfDayMs
             endInput.setText(formatTimeMs(endOfDayMs))
-            applied = true
-        }
-
-        if (applied) {
-            Log.i("HELPER_DEFAULT_WINDOW", "HELPER_DEFAULT_WINDOW applied startMs=$startMs endMs=$endMs")
         }
     }
 
@@ -171,10 +162,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
         antiOverlapInput.isEnabled = false
         antiOverlapLayout.isEnabled = false
         antiOverlapLayout.helperText = getString(R.string.anti_interference_calibration_read_only)
-        Log.i(
-            TAG_ANTI_INTERFERENCE,
-            "ANTI_INTERFERENCE source=calibration value=$calibrationAntiMin pump=$pumpNumber moduleId=$expectedEspId"
-        )
     }
 
     private fun computeRemainingSlots() {
@@ -332,10 +319,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
             return ValidationResult.invalid()
         }
 
-        Log.i(
-            TAG_ANTI_INTERFERENCE,
-            "ANTI_INTERFERENCE reason=helper_anti_selected moduleId=$expectedEspId pump=$pumpNumber blockedByPump=-1 antiMin=$antiOverlap nextAllowed=-1 existingCount=0"
-        )
 
         // ✅ Limite 12 en tenant compte de l’existant
         if (remainingSlots <= 0) {
@@ -370,22 +353,10 @@ class ScheduleHelperActivity : AppCompatActivity() {
             val actualSpacingMinutes = (windowMs.toDouble() / doseCount.toDouble()) / MINUTES_IN_MS
             if (doseCount > maxDosesPossible) {
                 antiOverlapLayout.error = DoseErrorMessageFormatter.helperMaxDoses(antiOverlap, maxDosesPossible)
-                Log.w(
-                    TAG_ANTI_INTERFERENCE,
-                    "invalid doseCount=$doseCount antiMin=$antiOverlap windowMs=$windowMs maxDoses=$maxDosesPossible requiredMinAnti=$requiredMinAnti actualSpacingMin=$actualSpacingMinutes reason=too_many_doses"
-                )
                 return ValidationResult.invalid()
             }
 
-            Log.i(
-                TAG_ANTI_INTERFERENCE,
-                "valid antiMin=$antiOverlap doseCount=$doseCount windowMs=$windowMs maxDoses=$maxDosesPossible requiredMinAnti=$requiredMinAnti actualSpacingMin=$actualSpacingMinutes"
-            )
         } else {
-            Log.i(
-                TAG_ANTI_INTERFERENCE,
-                "no_constraint antiMin=$antiOverlap doseCount=$doseCount startMs=$start endMs=$end"
-            )
         }
 
         val prefs = getSharedPreferences("prefs", Context.MODE_PRIVATE)
@@ -398,20 +369,12 @@ class ScheduleHelperActivity : AppCompatActivity() {
         val splitBase = if (doseCount > 0) totalTenth / doseCount else 0
         val splitRemainder = if (doseCount > 0) totalTenth % doseCount else 0
         val splitSum = volumePerDoseTenthList.sum()
-        Log.i(
-            TAG_HELPER_VOLUME_SPLIT,
-            "totalTenth=$totalTenth, doseCount=$doseCount, base=$splitBase, remainder=$splitRemainder, list=$volumePerDoseTenthList, sum=$splitSum"
-        )
 
         val durationMsPerDose = volumePerDoseMlList.map { doseMl ->
             DoseValidationUtils.computeDurationMs(doseMl, flowCurrentPump)
         }
         if (durationMsPerDose.any { it == null }) {
             volumeLayout.error = "Débit non calibré : impossible de calculer la durée."
-            Log.w(
-                TAG_ANTI_INTERFERENCE,
-                "helper_invalid reason=flow_missing pump=$pumpNumber flow=$flowCurrentPump antiMin=$antiOverlap"
-            )
             return ValidationResult.invalid()
         }
 
@@ -423,37 +386,16 @@ class ScheduleHelperActivity : AppCompatActivity() {
         val baseTimesMs = buildScheduleTimesMs(start, end, doseCount, antiOverlap)
         if (baseTimesMs.size != doseCount) {
             antiOverlapLayout.error = DoseErrorMessageFormatter.helperNoSpace(doseCount, antiOverlap)
-            Log.w(
-                TAG_ANTI_INTERFERENCE,
-                "invalid_generation doseCount=$doseCount antiMin=$antiOverlap startMs=$start endMs=$end generated=${baseTimesMs.size}"
-            )
             return ValidationResult.invalid()
         }
 
         val offsetsMs = LongArray(doseCount) { index -> baseTimesMs[index] - baseTimesMs[0] }
-        Log.i(
-            "HELPER_WINDOW",
-            "startMs=$start endMs=$end doseCount=$doseCount antiMin=$antiOverlap durationByDoseMs=$durationMsPerDoseSafe offsetsMs=${offsetsMs.joinToString(",")}"
-        )
 
         val allSchedules = loadSchedulesByPump()
         val flowByPump = (1..4).associateWith { pump ->
             prefs.getFloat("esp_${expectedEspId}_pump${pump}_flow", 0f)
         }
-        Log.i(
-            "HELPER_FLOW",
-            "moduleId=$expectedEspId pump=$pumpNumber flowCurrentPump=$flowCurrentPump flowByPump=$flowByPump"
-        )
         val existingGlobalIntervals = DoseValidationUtils.buildIntervalsFromSchedules(allSchedules, flowByPump)
-        val aroundCurrentPump = existingGlobalIntervals
-            .filter { it.pump == pumpNumber }
-            .take(3)
-            .joinToString { "[${it.startMs},${it.endMs})" }
-        Log.i(
-            "HELPER_EXISTING",
-            "intervalsCount=${existingGlobalIntervals.size} moduleId=$expectedEspId pump=$pumpNumber aroundPump=$aroundCurrentPump pumps=${existingGlobalIntervals.map { it.pump }.distinct().sorted()}"
-        )
-
         val start0 = findGlidedStart0(
             windowStartMs = start,
             windowEndMs = end,
@@ -497,10 +439,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
                     DoseValidationReason.ANTI_INTERFERENCE_GAP -> {
                         val blockedPumpName =
                             result.conflictPumpNum?.let { getPumpDisplayName(it) } ?: "Pompe inconnue"
-                        Log.i(
-                            "VALIDATE_GAP",
-                            "blockingPumpName=$blockedPumpName nextAllowedStartMs=${result.nextAllowedStartMs}"
-                        )
                         DoseErrorMessageFormatter.antiInterferenceGap(
                             antiMin = antiOverlap,
                             blockingPumpName = blockedPumpName,
@@ -517,10 +455,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
                     else -> "Intervalle invalide."
                 }
-                Log.w(
-                    TAG_ANTI_INTERFERENCE,
-                    "ANTI_INTERFERENCE reason=${result.reason} moduleId=$expectedEspId pump=$pumpNumber blockedByPump=${result.conflictPumpNum} antiMin=$antiOverlap nextAllowed=${result.nextAllowedStartMs} existingCount=${existingGlobalIntervals.size}"
-                )
                 break
             }
 
@@ -543,12 +477,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
                         "la dose maximale est ${String.format(Locale.getDefault(), "%.1f", maxVolume)} mL."
             return ValidationResult.invalid()
         }
-
-        Log.i(
-            TAG_ANTI_INTERFERENCE,
-            "helper_valid window=[$start,$end] antiMin=$antiOverlap doseCount=$doseCount flow=$flowCurrentPump durationMsPerDose=$durationMsPerDoseSafe intervals=${acceptedIntervals.joinToString { "P${it.pump}[${it.startMs},${it.endMs})" }}"
-        )
-
         return ValidationResult(
             isValid = true,
             startMs = start,
@@ -594,10 +522,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
         if (antiOverlapMinutes > 0) {
             val minStepMsRequired = antiOverlapMinutes.toLong() * MS_PER_MINUTE
             if (stepMs < minStepMsRequired) {
-                Log.w(
-                    TAG_ANTI_INTERFERENCE,
-                    "build_invalid startMs=$startMs endMs=$endMs doseCount=$doseCount antiMin=$antiOverlapMinutes stepMs=$stepMs minStepMsRequired=$minStepMsRequired"
-                )
                 return emptyList()
             }
         }
@@ -620,7 +544,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
         val ws = (windowStartMs / MS_PER_MINUTE) * MS_PER_MINUTE
         val we = (windowEndMs / MS_PER_MINUTE) * MS_PER_MINUTE
         val doseCount = offsetsMs.size
-        Log.i("HELPER_GLIDE", "start anti=$antiMin window=[$ws,$we] count=$doseCount pump=$pumpNumber")
 
         fun isValidStart(start0: Long): Boolean {
             if (start0 < ws || doseCount == 0 || durationsMs.size != doseCount) return false
@@ -643,12 +566,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
                     antiMin,
                     expectedEspId
                 )
-                if (i == 0 && start0 == ws) {
-                    Log.i(
-                        "VALIDATE_CANDIDATE",
-                        "candidateStart=$start reason=${res.reason} conflictStart=${res.conflictStartMs} conflictEnd=${res.conflictEndMs} nextAllowed=${res.nextAllowedStartMs}"
-                    )
-                }
                 if (!res.isValid) return false
                 accepted.add(newInterval)
             }
@@ -671,7 +588,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
             candidate -= MS_PER_MINUTE
         }
 
-        Log.i("HELPER_GLIDE", start0?.let { "result start0=$it" } ?: "result NO_SPACE")
         return start0
     }
 
@@ -749,8 +665,6 @@ class ScheduleHelperActivity : AppCompatActivity() {
 
         private const val MS_PER_MINUTE = 60_000L
         private const val MINUTES_IN_MS = 60_000.0
-        private const val TAG_ANTI_INTERFERENCE = "ANTI_INTERFERENCE"
-        private const val TAG_HELPER_VOLUME_SPLIT = "HELPER_VOLUME_SPLIT"
         private const val MS_PER_HOUR = 3_600_000L
         private const val STATE_START_MS = "state_start_ms"
         private const val STATE_END_MS = "state_end_ms"

@@ -3,7 +3,6 @@ package com.esp32pumpwifi.app
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -62,7 +61,6 @@ class CalibrationActivity : AppCompatActivity() {
         val espId = activeModule.id
         val esp32Ip = activeModule.ip
 
-        Log.i("CALIBRATION", "ESP32 utilisé → IP = $esp32Ip")
 
         // ----------------------------------------------------------
         // 🔧 UI – ÉTALONNAGE

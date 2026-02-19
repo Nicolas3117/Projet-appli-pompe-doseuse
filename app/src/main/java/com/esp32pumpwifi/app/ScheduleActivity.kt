@@ -3,7 +3,6 @@ package com.esp32pumpwifi.app
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.ImageButton
@@ -222,9 +221,6 @@ class ScheduleActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
-        val extras = data?.extras
-        val extraKeys = extras?.keySet()?.joinToString(",") ?: "none"
-        val pumpExtra = data?.getIntExtra(ScheduleHelperActivity.EXTRA_PUMP_NUMBER, -1) ?: -1
         val moduleIdExtra = data?.getStringExtra(ScheduleHelperActivity.EXTRA_MODULE_ID)
 
 
@@ -345,10 +341,6 @@ class ScheduleActivity : AppCompatActivity() {
         }
 
         val rebuiltCount = ProgramStore.count(this, active.id, pump)
-        Log.i(
-            "PROGRAM_BUILD",
-            "after_helper_merge pump=$pump flow=$flow rebuiltCount=$rebuiltCount"
-        )
 
         adapter.updateSchedules(pump, mergeResult.merged)
         val totalTenth = mergeResult.merged.filter { it.enabled }.sumOf { it.quantityTenth }
@@ -585,10 +577,6 @@ class ScheduleActivity : AppCompatActivity() {
                 val durationMs = (schedule.quantityMl / flow * 1000f).roundToInt()
                     .coerceIn(MIN_PUMP_DURATION_MS, MAX_PUMP_DURATION_MS)
 
-                Log.i(
-                    "FLOW_NO_VOLUME_CHANGE",
-                    "send_calc pump=$pump time=${schedule.time} volumeTenth=${schedule.quantityTenth} flow=$flow durationMs=$durationMs"
-                )
 
                 ProgramStore.addLine(
                     this,

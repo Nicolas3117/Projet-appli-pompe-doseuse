@@ -2,7 +2,6 @@ package com.esp32pumpwifi.app
 
 import android.content.Context
 import android.net.wifi.WifiManager
-import android.util.Log
 
 object WifiUtils {
 
@@ -28,11 +27,9 @@ object WifiUtils {
                 gateway shr 24 and 0xff
             )
 
-            Log.d("WIFI", "Gateway détectée : $ip")
             ip
 
         } catch (e: Exception) {
-            Log.e("WIFI", "Impossible de lire la gateway", e)
             null
         }
     }

@@ -1,7 +1,6 @@
 package com.esp32pumpwifi.app
 
 import android.content.Context
-import android.util.Log
 
 private const val PREFS = "prefs"
 
@@ -155,7 +154,6 @@ object ProgramStore {
 
         saveEncodedLines(context, pump, list)
 
-        Log.e("PROGRAM_STORE", "➕ P$pump ADD → $encoded")
         return true
     }
 
@@ -176,7 +174,6 @@ object ProgramStore {
 
         saveEncodedLines(context, espId, pump, list)
 
-        Log.e("PROGRAM_STORE", "➕ P$pump ADD → $encoded (espId=$espId)")
         return true
     }
 
@@ -194,7 +191,6 @@ object ProgramStore {
         val removed = list.removeAt(index)
         saveEncodedLines(context, pump, list)
 
-        Log.e("PROGRAM_STORE", "❌ P$pump REMOVE → $removed")
         return true
     }
 
@@ -213,7 +209,6 @@ object ProgramStore {
         val removed = list.removeAt(index)
         saveEncodedLines(context, espId, pump, list)
 
-        Log.e("PROGRAM_STORE", "❌ P$pump REMOVE → $removed (espId=$espId)")
         return true
     }
 
@@ -416,7 +411,6 @@ object ProgramStore {
         val totalLines = PUMP_COUNT * MAX_LINES_PER_PUMP
         val sb = StringBuilder(totalLines * PLACEHOLDER.length)
 
-        Log.e("PROGRAM_BUILD", "================ BUILD /program_ms ================")
 
         for (pump in 1..PUMP_COUNT) {
 
@@ -434,26 +428,19 @@ object ProgramStore {
             // ✅ Puis on limite à 12
             val lines = sortedLines.take(MAX_LINES_PER_PUMP)
 
-            Log.e("PROGRAM_BUILD", "Pompe $pump : ${lines.size} ligne(s)")
 
             for (line in lines) {
                 val sanitized = sanitizeEncodedLineForEsp32Strict(line)
                 sb.append(sanitized)
-                Log.e("PROGRAM_BUILD", "  ✔ $sanitized")
             }
 
             repeat(MAX_LINES_PER_PUMP - lines.size) {
                 sb.append(PLACEHOLDER)
-                Log.e("PROGRAM_BUILD", "  ⬜ $PLACEHOLDER")
             }
         }
 
         val result = sb.toString()
 
-        Log.e("PROGRAM_BUILD", "------------------------------------------------")
-        Log.e("PROGRAM_BUILD", "LONGUEUR = ${result.length} (ATTENDU 576)")
-        Log.e("PROGRAM_BUILD", "MESSAGE = $result")
-        Log.e("PROGRAM_BUILD", "================================================")
 
         return result
     }
@@ -467,7 +454,6 @@ object ProgramStore {
         val totalLines = PUMP_COUNT * MAX_LINES_PER_PUMP
         val sb = StringBuilder(totalLines * PLACEHOLDER.length)
 
-        Log.e("PROGRAM_BUILD", "================ BUILD /program_ms (espId=$espId) ================")
 
         for (pump in 1..PUMP_COUNT) {
 
@@ -485,26 +471,19 @@ object ProgramStore {
             // ✅ Puis on limite à 12
             val lines = sortedLines.take(MAX_LINES_PER_PUMP)
 
-            Log.e("PROGRAM_BUILD", "Pompe $pump : ${lines.size} ligne(s) (espId=$espId)")
 
             for (line in lines) {
                 val sanitized = sanitizeEncodedLineForEsp32Strict(line)
                 sb.append(sanitized)
-                Log.e("PROGRAM_BUILD", "  ✔ $sanitized")
             }
 
             repeat(MAX_LINES_PER_PUMP - lines.size) {
                 sb.append(PLACEHOLDER)
-                Log.e("PROGRAM_BUILD", "  ⬜ $PLACEHOLDER")
             }
         }
 
         val result = sb.toString()
 
-        Log.e("PROGRAM_BUILD", "------------------------------------------------")
-        Log.e("PROGRAM_BUILD", "LONGUEUR = ${result.length} (ATTENDU 576)")
-        Log.e("PROGRAM_BUILD", "MESSAGE = $result")
-        Log.e("PROGRAM_BUILD", "================================================")
 
         return result
     }
@@ -520,7 +499,6 @@ object ProgramStore {
         }
         editor.apply()
 
-        Log.e("PROGRAM_STORE", "🧹 ALL PROGRAMS CLEARED")
     }
 
     // ---------------------------------------------------------------------

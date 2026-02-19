@@ -1,7 +1,6 @@
 package com.esp32pumpwifi.app
 
 import android.content.Context
-import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
@@ -17,7 +16,6 @@ import kotlinx.coroutines.launch
 
 object TelegramAlertQueue {
 
-    private const val TAG = "TELEGRAM_QUEUE"
     private const val PREFS_NAME = "telegram_alert_queue"
     private const val KEY_QUEUE_JSON = "queue_json"
     private const val MAX_QUEUE_SIZE = 200
@@ -31,7 +29,6 @@ object TelegramAlertQueue {
     fun enqueue(context: Context, alert: TelegramAlert) {
         val appContext = context.applicationContext
         if (!TelegramSender.isConfigured(appContext, alert.espId)) {
-            Log.w(TAG, "Telegram non configuré pour espId=${alert.espId}, alerte ignorée")
             return
         }
 
@@ -50,17 +47,12 @@ object TelegramAlertQueue {
             }
         }
 
-        if (!added) {
-            Log.d(TAG, "Alerte déjà en file: ${alert.id}")
-        }
-
         scheduleFlush(appContext)
     }
 
     fun trySendNowOrQueue(context: Context, alert: TelegramAlert) {
         val appContext = context.applicationContext
         if (!TelegramSender.isConfigured(appContext, alert.espId)) {
-            Log.w(TAG, "Telegram non configuré pour espId=${alert.espId}, alerte ignorée")
             return
         }
 
@@ -69,7 +61,6 @@ object TelegramAlertQueue {
                 TelegramSender.sendAlertBlocking(appContext, alert)
             } catch (e: Exception) {
                 // ✅ Important: ne jamais perdre l’alerte si exception => on la met en queue
-                Log.w(TAG, "sendNow échoué, mise en queue id=${alert.id}", e)
                 false
             }
 
@@ -134,7 +125,6 @@ object TelegramAlertQueue {
         return try {
             gson.fromJson<MutableList<TelegramAlert>>(json, listType) ?: mutableListOf()
         } catch (e: Exception) {
-            Log.e(TAG, "Impossible de lire la file Telegram, réinitialisation")
             prefs.edit().remove(KEY_QUEUE_JSON).apply()
             mutableListOf()
         }

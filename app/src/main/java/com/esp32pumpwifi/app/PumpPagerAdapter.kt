@@ -2,7 +2,6 @@ package com.esp32pumpwifi.app
 
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
@@ -41,10 +40,6 @@ class PumpPagerAdapter(
                     f.setReadOnly(readOnly)
                     val pending = pendingSchedules.remove(pumpNumber)
                     if (pending != null) {
-                        Log.i(
-                            "SCHED_TRACE",
-                            "Pager callback apply pending schedules pump=$pumpNumber size=${pending.size}"
-                        )
                         f.replaceSchedules(pending)
                     }
                 }
@@ -115,21 +110,10 @@ class PumpPagerAdapter(
         }
         if (fragment == null || !fragment.isAdded || fragment.view == null) {
             pendingSchedules[pumpNumber] = schedules
-            Log.i(
-                "SCHED_TRACE",
-                "updateSchedules pump=$pumpNumber fragmentFound=$fragmentFoundMethod " +
-                        "fragment=${fragment?.hashCode()} isAdded=${fragment?.isAdded} " +
-                        "viewReady=${fragment?.view != null} -> pendingSchedules set"
-            )
             return
         }
 
         val apply = Runnable {
-            Log.i(
-                "SCHED_TRACE",
-                "updateSchedules pump=$pumpNumber fragmentFound=$fragmentFoundMethod " +
-                        "fragment=${fragment.hashCode()} isAdded=${fragment.isAdded} viewReady=${fragment.view != null}"
-            )
             fragment.replaceSchedules(schedules)
         }
         if (Looper.myLooper() == Looper.getMainLooper()) {

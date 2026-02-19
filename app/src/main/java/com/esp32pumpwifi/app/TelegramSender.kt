@@ -1,7 +1,6 @@
 package com.esp32pumpwifi.app
 
 import android.content.Context
-import android.util.Log
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -11,7 +10,6 @@ import java.nio.charset.StandardCharsets
 
 object TelegramSender {
 
-    private const val TAG = "TELEGRAM"
     private const val PREFS_NAME = "prefs"
 
     private data class TelegramConfig(
@@ -91,7 +89,6 @@ object TelegramSender {
     ): Boolean {
         val config = getConfig(context, alert.espId)
         if (config == null) {
-            Log.w(TAG, "Telegram non configuré (token/chatId manquant)")
             return false
         }
 
@@ -142,18 +139,14 @@ object TelegramSender {
             }
 
             if (ok) {
-                Log.i(TAG, "Message Telegram envoyé (HTTP=$code)")
                 true
             } else {
-                Log.w(TAG, "Échec Telegram (HTTP=$code)")
                 false
             }
         } catch (e: IOException) {
             // ✅ Important : erreur réseau => on rethrow pour permettre retry/queue propre
-            Log.e(TAG, "Erreur réseau Telegram (${e.javaClass.simpleName})")
             throw e
         } catch (e: Exception) {
-            Log.e(TAG, "Erreur Telegram (${e.javaClass.simpleName})")
             false
         } finally {
             try {
@@ -172,7 +165,6 @@ object TelegramSender {
         message: String
     ) {
         if (!isConfigured(context, espId)) {
-            Log.w(TAG, "Telegram non configuré (token/chatId manquant)")
             return
         }
 

@@ -1,7 +1,6 @@
 package com.esp32pumpwifi.app
 
 import android.content.Context
-import android.util.Log
 import android.view.LayoutInflater
 import android.widget.TextView
 import android.widget.Toast
@@ -105,7 +104,6 @@ object NetworkHelper {
         val urlString = "http://$ip/manual?message=$encodedMessage"
 
         showSendingToast(context)
-        Log.e("ESP32_MANUAL", "➡️ $urlString")
 
         CoroutineScope(Dispatchers.IO).launch {
             var conn: HttpURLConnection? = null
@@ -134,7 +132,6 @@ object NetworkHelper {
                 }
 
             } catch (e: Exception) {
-                Log.e("ESP32_MANUAL", "❌ Erreur envoi", e)
                 showNoReturnToast(context)
             } finally {
                 try {
@@ -159,7 +156,6 @@ object NetworkHelper {
         val urlString = "http://$ip/manual_ms?message=$encodedMessage"
 
         showSendingToast(context)
-        Log.e("ESP32_MANUAL_MS", "➡️ $urlString")
 
         CoroutineScope(Dispatchers.IO).launch {
             var conn: HttpURLConnection? = null
@@ -190,7 +186,6 @@ object NetworkHelper {
                 withContext(Dispatchers.Main) { onResult(true) }
 
             } catch (e: Exception) {
-                Log.e("ESP32_MANUAL_MS", "❌ Erreur envoi", e)
                 showNoReturnToast(context)
                 withContext(Dispatchers.Main) { onResult(false) }
             } finally {
@@ -211,7 +206,6 @@ object NetworkHelper {
         onSuccess: () -> Unit = {}
     ) {
         if (message.length != 576) {
-            Log.e("ESP32_PROGRAM_MS", "❌ MESSAGE INVALIDE : ${message.length} chars (attendu 576)")
             Toast.makeText(
                 context,
                 "Erreur interne : message invalide (${message.length})",
@@ -223,20 +217,14 @@ object NetworkHelper {
         val encodedMessage = URLEncoder.encode(message, "UTF-8")
         val urlString = "http://$ip/program_ms?message=$encodedMessage"
 
-        Log.e("ESP32_PROGRAM_MS", "================ PROGRAM_MS SEND ================")
-        Log.e("ESP32_PROGRAM_MS", "IP = $ip")
-        Log.e("ESP32_PROGRAM_MS", "LENGTH = ${message.length}")
-        Log.e("ESP32_PROGRAM_MS", "URL LEN = ${urlString.length}")
 
         var idx = 0
         var lineNum = 1
         while (idx + 12 <= message.length) {
             val line = message.substring(idx, idx + 12)
-            Log.e("ESP32_PROGRAM_MS", "L$lineNum. '$line'")
             idx += 12
             lineNum += 1
         }
-        Log.e("ESP32_PROGRAM_MS", "================================================")
 
         CoroutineScope(Dispatchers.IO).launch {
             var conn: HttpURLConnection? = null
@@ -256,8 +244,6 @@ object NetworkHelper {
                     ""
                 }
 
-                Log.e("ESP32_PROGRAM_MS", "ESP32 HTTP = $responseCode")
-                Log.e("ESP32_PROGRAM_MS", "ESP32 RESPONSE = '${responseText.trim()}'")
 
                 if (responseCode == HttpURLConnection.HTTP_OK) {
                     val r = responseText.trim()
@@ -287,7 +273,6 @@ object NetworkHelper {
                 }
 
             } catch (e: Exception) {
-                Log.e("ESP32_PROGRAM_MS", "❌ ERREUR ENVOI PROGRAM_MS", e)
 
                 withContext(Dispatchers.Main) {
                     Toast.makeText(

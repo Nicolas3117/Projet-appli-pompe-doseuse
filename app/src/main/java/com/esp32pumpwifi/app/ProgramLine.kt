@@ -1,6 +1,5 @@
 package com.esp32pumpwifi.app
 
-import android.util.Log
 
 /**
  * Représente UNE ligne de programmation envoyée à l'ESP32
@@ -50,11 +49,6 @@ fun ProgramLine.toEsp12(): String {
     val result = "$e$p$hh$mm$mmmmmm"
 
     // 🔍 LOG CRUCIAL POUR DEBUG ESP32
-    Log.e(
-        "PROGRAM_LINE",
-        "➡️ ESP32 LINE = [$result] " +
-                "(pump=$p, $hh:$mm, ms=$mmmmmm, enabled=$e)"
-    )
 
     return result
 }

@@ -2,7 +2,6 @@ package com.esp32pumpwifi.app
 
 import android.content.Context
 import android.net.wifi.WifiManager
-import android.util.Log
 import kotlinx.coroutines.*
 import java.net.HttpURLConnection
 import java.net.URL
@@ -50,7 +49,6 @@ object NetworkScanner {
 
             if (response.startsWith("POMPE_NAME=")) {
                 val internal = response.removePrefix("POMPE_NAME=").trim()
-                Log.d("SCAN", "✔ ESP32 trouvé → $internal @ $ip")
                 ScannedEsp32(internalName = internal, ip = ip)
             } else null
 
@@ -70,14 +68,12 @@ object NetworkScanner {
         val foundMap = ConcurrentHashMap<String, ScannedEsp32>()
         val phoneIp = getDeviceIp(context)
 
-        Log.d("SCAN", "📱 IP téléphone = $phoneIp")
 
         // =====================================================
         // 🟦 MODE AP (téléphone connecté à la pompe)
         // =====================================================
         if (phoneIp != null && phoneIp.startsWith("192.168.4.")) {
 
-            Log.d("SCAN", "📡 Mode AP détecté")
 
             // 👉 on teste 192.168.4.1 à 192.168.4.5 (safe & rapide)
             for (host in 1..5) {
@@ -97,7 +93,6 @@ object NetworkScanner {
         if (phoneIp != null && phoneIp.contains(".")) {
 
             val subnet = phoneIp.substringBeforeLast(".") + "."
-            Log.d("SCAN", "🌐 Scan STA sur $subnet")
 
             coroutineScope {
                 (1..254).map { host ->
@@ -112,7 +107,6 @@ object NetworkScanner {
             }
         }
 
-        Log.d("SCAN", "🏁 Scan terminé → ${foundMap.size} module(s)")
         foundMap.values.toList()
     }
 }

@@ -1,11 +1,9 @@
 package com.esp32pumpwifi.app
 
-import android.util.Log
 import kotlin.math.roundToLong
 
 private const val DAY_MS: Long = 86_400_000L
 private const val MINUTE_MS: Long = 60_000L
-private const val TAG_ANTI_INTERFERENCE = "ANTI_INTERFERENCE"
 
 data class DoseInterval(
     val pump: Int,
@@ -77,19 +75,10 @@ object DoseValidationUtils {
         antiMin: Int,
         expectedEspId: Long? = null
     ): DoseValidationResult {
-        val moduleForLog = expectedEspId?.toString() ?: "unknown"
         if (newInterval.startMs < 0L || newInterval.endMs <= newInterval.startMs) {
-            Log.w(
-                TAG_ANTI_INTERFERENCE,
-                "ANTI_INTERFERENCE reason=invalid_interval moduleId=$moduleForLog pump=${newInterval.pump} blockedByPump=-1 antiMin=$antiMin nextAllowed=-1 existingCount=${existing.size}"
-            )
             return DoseValidationResult(isValid = false, reason = DoseValidationReason.INVALID_INTERVAL)
         }
         if (newInterval.endMs >= DAY_MS) {
-            Log.w(
-                TAG_ANTI_INTERFERENCE,
-                "ANTI_INTERFERENCE reason=overflow_midnight moduleId=$moduleForLog pump=${newInterval.pump} blockedByPump=-1 antiMin=$antiMin nextAllowed=${newInterval.endMs} existingCount=${existing.size}"
-            )
             return DoseValidationResult(
                 isValid = false,
                 reason = DoseValidationReason.OVERFLOW_MIDNIGHT,
@@ -108,10 +97,6 @@ object DoseValidationUtils {
             val blocking = samePumpConflicts.first()
             val maxConflictEnd = samePumpConflicts.maxOf { it.endMs }
             val nextAllowed = maxConflictEnd + antiGapMs
-            Log.w(
-                TAG_ANTI_INTERFERENCE,
-                "ANTI_INTERFERENCE reason=overlap_same_pump moduleId=$moduleForLog pump=${newInterval.pump} blockedByPump=${blocking.pump} antiMin=$antiMin nextAllowed=$nextAllowed existingCount=${existing.size}"
-            )
             return DoseValidationResult(
                 isValid = false,
                 reason = DoseValidationReason.OVERLAP_SAME_PUMP,
@@ -124,10 +109,6 @@ object DoseValidationUtils {
         }
 
         if (antiGapMs <= 0L) {
-            Log.i(
-                TAG_ANTI_INTERFERENCE,
-                "ANTI_INTERFERENCE reason=valid moduleId=$moduleForLog pump=${newInterval.pump} blockedByPump=-1 antiMin=0 nextAllowed=-1 existingCount=${existing.size}"
-            )
             return DoseValidationResult(isValid = true)
         }
 
@@ -150,10 +131,6 @@ object DoseValidationUtils {
         }
 
         if (nextAllowedStartMs != null) {
-            Log.w(
-                TAG_ANTI_INTERFERENCE,
-                "ANTI_INTERFERENCE reason=anti_gap moduleId=$moduleForLog pump=${newInterval.pump} blockedByPump=$blockingPumpNum antiMin=$antiMin nextAllowed=$nextAllowedStartMs existingCount=${existing.size}"
-            )
             return DoseValidationResult(
                 isValid = false,
                 reason = DoseValidationReason.ANTI_INTERFERENCE_GAP,
@@ -165,10 +142,6 @@ object DoseValidationUtils {
             )
         }
 
-        Log.i(
-            TAG_ANTI_INTERFERENCE,
-            "ANTI_INTERFERENCE reason=valid moduleId=$moduleForLog pump=${newInterval.pump} blockedByPump=-1 antiMin=$antiMin nextAllowed=-1 existingCount=${existing.size}"
-        )
         return DoseValidationResult(isValid = true)
     }
 }
