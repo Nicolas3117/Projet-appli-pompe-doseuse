@@ -41,22 +41,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var refillTanksButton: Button
 
     private var connectionJob: Job? = null
-
     private var uiRefreshJob: Job? = null
     private var hasShownNotFoundPopup = false
     private var hasShownOver30DaysPopup = false
 
-    // ✅ popup gratifiant J+25..29 (une seule fois par session)
+    // ✅ popup gratifiant J+2 (une seule fois par session)
     private var hasShown25to29Popup = false
 
     private var lastRtcIp: String? = null
     private var rtcFetchJob: Job? = null
+
     // pour tenter un retour STA automatique sans appuyer sur "+"
     private var lastStaProbeMs = 0L
 
     private companion object {
         private const val AP_IP = "192.168.4.1"
-        private const val DAY_MS = 86400000L
+        private const val DAY_MS = 86_400_000L
 
         private const val CONNECTION_RETRY_DELAY_MS = 400L
 
@@ -96,7 +96,8 @@ class MainActivity : AppCompatActivity() {
         if (encodedLines.isEmpty()) return FuturePlan(0, 0f)
 
         val nowLocal =
-            Instant.ofEpochMilli(System.currentTimeMillis()).atZone(ZoneId.systemDefault())
+            Instant.ofEpochMilli(System.currentTimeMillis())
+                .atZone(ZoneId.systemDefault())
                 .toLocalTime()
         val nowMinutes = nowLocal.hour * 60 + nowLocal.minute
 
@@ -118,8 +119,6 @@ class MainActivity : AppCompatActivity() {
             if (durationMs !in MIN_DURATION_MS..MAX_DURATION_MS) continue
 
             val minutes = hh * 60 + mm
-
-            // Strictement dans le futur (après maintenant)
             if (minutes <= nowMinutes) continue
 
             futureCount++
@@ -129,10 +128,6 @@ class MainActivity : AppCompatActivity() {
         return FuturePlan(futureCount, futureMl)
     }
 
-    /**
-     * Calcule le total planifié de la journée (00:00..24:00), sans filtre "now".
-     * (Conservé pour compat, mais on n'utilise plus ce total pour l'affichage du "jour en cours")
-     */
     private fun computePlannedTotalToday(espId: Long, pumpNum: Int, flow: Float): PlannedTotalToday {
         if (flow <= 0f) return PlannedTotalToday(0, 0f)
 
@@ -184,10 +179,8 @@ class MainActivity : AppCompatActivity() {
             val navBarsBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
 
             val keyboardBottom =
-                if (imeBottom == 0) max(systemBarsBottom, navBarsBottom) else max(
-                    imeBottom,
-                    systemBarsBottom
-                )
+                if (imeBottom == 0) max(systemBarsBottom, navBarsBottom)
+                else max(imeBottom, systemBarsBottom)
 
             view.updatePadding(bottom = baseBottom + keyboardBottom + extraBottomPadding)
             insets
@@ -195,7 +188,6 @@ class MainActivity : AppCompatActivity() {
 
         NotificationPermissionHelper.requestPermissionIfNeeded(this)
 
-        // ✅ utiliser applicationContext (plus stable que Activity context)
         CriticalAlarmScheduler.ensureScheduled(applicationContext)
         maybePromptForExactAlarms()
 
@@ -314,7 +306,6 @@ class MainActivity : AppCompatActivity() {
 
         val activeModule = Esp32Manager.getActive(this)
 
-        // ✅ si aucun module : comme avant
         if (activeModule == null) {
             tvActiveModule.text = "Sélectionné : aucun module"
             updateConnectionUi(null)
@@ -327,35 +318,30 @@ class MainActivity : AppCompatActivity() {
 
         tvActiveModule.text = "Sélectionné : ${activeModule.displayName}"
 
-        // ✅ Popups d'inactivité : base "par module" (sinon tu ne les verras plus)
         val moduleKey = "esp_${activeModule.id}_last_open_ms"
         val lastOpenForModule =
             prefs.getLong(moduleKey, 0L).takeIf { it != 0L }
-                ?: prefs.getLong("last_app_open_ms", 0L) // fallback "ancienne version" si besoin
+                ?: prefs.getLong("last_app_open_ms", 0L)
 
         if (lastOpenForModule != 0L) {
             val days = ((now - lastOpenForModule) / DAY_MS).toInt()
 
-            if (days in 25..29 && !hasShown25to29Popup) {
+            // ✅ TEST SEUILS : J+2 (gratifiant) et J+3 (alerte)
+            if (days == 2 && !hasShown25to29Popup) {
                 hasShown25to29Popup = true
                 AlertDialog.Builder(this)
                     .setTitle("Actualisation effectuée")
-                    .setMessage(
-                        """
-                        Suivi des réservoirs actualisé.
-                        """.trimIndent()
-                    )
+                    .setMessage("Suivi des réservoirs actualisé.")
                     .setPositiveButton("OK", null)
                     .show()
-            } else if (days >= 30 && !hasShownOver30DaysPopup) {
+            } else if (days >= 3 && !hasShownOver30DaysPopup) {
                 maybeShowOver30DaysPopup()
             }
         }
 
-        // ✅ IMPORTANT : update APRÈS le calcul/popup
         prefs.edit()
-            .putLong("last_app_open_ms", now) // conservé (compat / autres logiques)
-            .putLong(moduleKey, now)          // clé par module (source pour inactivité par module)
+            .putLong("last_app_open_ms", now)
+            .putLong(moduleKey, now)
             .apply()
 
         TankScheduleHelper.recalculateFromLastTime(this, activeModule.id)
@@ -706,23 +692,23 @@ class MainActivity : AppCompatActivity() {
         var conn: HttpURLConnection? = null
         return@withContext try {
             conn = URL("http://$ip/read_ms").openConnection() as HttpURLConnection
-            conn?.requestMethod = "GET"
-            conn?.connectTimeout = HTTP_TIMEOUT_MS
-            conn?.readTimeout = HTTP_TIMEOUT_MS
-            conn?.useCaches = false
-            conn?.setRequestProperty("Connection", "close")
+            conn.requestMethod = "GET"
+            conn.connectTimeout = HTTP_TIMEOUT_MS
+            conn.readTimeout = HTTP_TIMEOUT_MS
+            conn.useCaches = false
+            conn.setRequestProperty("Connection", "close")
 
-            if (conn?.responseCode != HttpURLConnection.HTTP_OK) return@withContext null
+            if (conn.responseCode != HttpURLConnection.HTTP_OK) return@withContext null
 
-            val lines = conn?.inputStream
-                ?.bufferedReader()
-                ?.use { reader ->
-                    reader
-                        .lineSequence()
-                        .map { it.trim() }
-                        .toList()
-                }
-                ?: return@withContext null
+            val lines =
+                conn.inputStream
+                    .bufferedReader()
+                    .use { reader ->
+                        reader
+                            .lineSequence()
+                            .map { it.trim() }
+                            .toList()
+                    }
 
             if (lines.size != 48) return@withContext null
             if (!lines.all { it.matches(LINE_12_DIGITS_REGEX) }) return@withContext null
@@ -770,7 +756,8 @@ class MainActivity : AppCompatActivity() {
         if (entries.isEmpty()) return "Aucune dose prévue"
 
         val nowLocal =
-            Instant.ofEpochMilli(System.currentTimeMillis()).atZone(ZoneId.systemDefault())
+            Instant.ofEpochMilli(System.currentTimeMillis())
+                .atZone(ZoneId.systemDefault())
                 .toLocalTime()
         val nowMinutes = nowLocal.hour * 60 + nowLocal.minute
 
@@ -810,7 +797,9 @@ class MainActivity : AppCompatActivity() {
         val plannedMlToday = doneMlToday + future.ml
 
         val progressValue =
-            if (plannedMlToday <= 0f || doneMlToday <= 0f) 0 else (doneMlToday / plannedMlToday * 100f).roundToInt()
+            if (plannedMlToday <= 0f || doneMlToday <= 0f) 0
+            else (doneMlToday / plannedMlToday * 100f).roundToInt()
+
         val doseText = "Dose : $doneDoseCountToday/$plannedDoseCountToday"
 
         val insideText =

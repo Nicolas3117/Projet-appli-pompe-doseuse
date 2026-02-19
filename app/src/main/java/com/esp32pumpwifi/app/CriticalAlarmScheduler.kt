@@ -14,6 +14,7 @@ import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
 
 object CriticalAlarmScheduler {
+
     private const val INACTIVITY_ACTION = "com.esp32pumpwifi.app.action.CHECK_INACTIVITY"
     private const val TANK_ACTION = "com.esp32pumpwifi.app.action.CHECK_TANK"
 
@@ -23,31 +24,40 @@ object CriticalAlarmScheduler {
     private const val TANK_WORK_NAME = "tank_recalc"
     private const val INACTIVITY_WORK_NAME = "app_inactivity"
 
+    /**
+     * Production scheduling:
+     * - Android < 12 : exact alarms OK
+     * - Android 12+ : exact alarms if permitted, else fallback WorkManager
+     */
     fun ensureScheduled(context: Context) {
+        val appContext = context.applicationContext
+
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            cancelCriticalPeriodicWorks(context)
-            scheduleInactivityAlarmDaily(context)
-            scheduleTankAlarmEvery15Min(context)
-        } else if (ExactAlarmPermissionHelper.canScheduleExactAlarms(context)) {
-            cancelCriticalPeriodicWorks(context)
-            scheduleInactivityAlarmDaily(context)
-            scheduleTankAlarmEvery15Min(context)
+            cancelCriticalPeriodicWorks(appContext)
+            scheduleInactivityAlarmDaily(appContext)
+            scheduleTankAlarmEvery15Min(appContext)
+        } else if (ExactAlarmPermissionHelper.canScheduleExactAlarms(appContext)) {
+            cancelCriticalPeriodicWorks(appContext)
+            scheduleInactivityAlarmDaily(appContext)
+            scheduleTankAlarmEvery15Min(appContext)
         } else {
-            scheduleBestEffortWork(context)
+            scheduleBestEffortWork(appContext)
         }
     }
 
     fun scheduleInactivityAlarmDaily(context: Context) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val appContext = context.applicationContext
+        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val triggerAtMillis = nextNoonMillis()
-        val pendingIntent = inactivityPendingIntent(context)
+        val pendingIntent = inactivityPendingIntent(appContext)
         scheduleExact(alarmManager, triggerAtMillis, pendingIntent)
     }
 
     fun scheduleTankAlarmEvery15Min(context: Context) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val appContext = context.applicationContext
+        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val triggerAtMillis = nextQuarterHourMillis()
-        val pendingIntent = tankPendingIntent(context)
+        val pendingIntent = tankPendingIntent(appContext)
         scheduleExact(alarmManager, triggerAtMillis, pendingIntent)
     }
 
@@ -56,9 +66,10 @@ object CriticalAlarmScheduler {
     }
 
     fun cancelAll(context: Context) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        alarmManager.cancel(inactivityPendingIntent(context))
-        alarmManager.cancel(tankPendingIntent(context))
+        val appContext = context.applicationContext
+        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.cancel(inactivityPendingIntent(appContext))
+        alarmManager.cancel(tankPendingIntent(appContext))
     }
 
     private fun scheduleExact(
@@ -100,7 +111,9 @@ object CriticalAlarmScheduler {
         )
     }
 
-    private fun nextNoonMillis(now: ZonedDateTime = ZonedDateTime.now(ZoneId.systemDefault())): Long {
+    private fun nextNoonMillis(
+        now: ZonedDateTime = ZonedDateTime.now(ZoneId.systemDefault())
+    ): Long {
         var target = now.withHour(12).withMinute(0).withSecond(0).withNano(0)
         if (!now.isBefore(target)) {
             target = target.plusDays(1)
@@ -108,7 +121,9 @@ object CriticalAlarmScheduler {
         return target.toInstant().toEpochMilli()
     }
 
-    private fun nextQuarterHourMillis(now: ZonedDateTime = ZonedDateTime.now(ZoneId.systemDefault())): Long {
+    private fun nextQuarterHourMillis(
+        now: ZonedDateTime = ZonedDateTime.now(ZoneId.systemDefault())
+    ): Long {
         val currentMinute = now.minute
         val nextMinute = ((currentMinute / 15) + 1) * 15
         val target = if (nextMinute >= 60) {
@@ -120,12 +135,14 @@ object CriticalAlarmScheduler {
     }
 
     private fun scheduleBestEffortWork(context: Context) {
+        val appContext = context.applicationContext
+
         val tankWork =
             PeriodicWorkRequestBuilder<TankRecalcWorker>(15, TimeUnit.MINUTES)
                 .addTag(TANK_WORK_NAME)
                 .build()
 
-        WorkManager.getInstance(context)
+        WorkManager.getInstance(appContext)
             .enqueueUniquePeriodicWork(
                 TANK_WORK_NAME,
                 ExistingPeriodicWorkPolicy.KEEP,
@@ -143,7 +160,7 @@ object CriticalAlarmScheduler {
                 .addTag(INACTIVITY_WORK_NAME)
                 .build()
 
-        WorkManager.getInstance(context)
+        WorkManager.getInstance(appContext)
             .enqueueUniquePeriodicWork(
                 INACTIVITY_WORK_NAME,
                 ExistingPeriodicWorkPolicy.KEEP,
@@ -152,7 +169,8 @@ object CriticalAlarmScheduler {
     }
 
     fun cancelCriticalPeriodicWorks(context: Context) {
-        WorkManager.getInstance(context).cancelUniqueWork(TANK_WORK_NAME)
-        WorkManager.getInstance(context).cancelUniqueWork(INACTIVITY_WORK_NAME)
+        val appContext = context.applicationContext
+        WorkManager.getInstance(appContext).cancelUniqueWork(TANK_WORK_NAME)
+        WorkManager.getInstance(appContext).cancelUniqueWork(INACTIVITY_WORK_NAME)
     }
 }
