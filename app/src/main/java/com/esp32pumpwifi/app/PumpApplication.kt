@@ -18,7 +18,8 @@ class PumpApplication : Application() {
         // (utile après reboot / si l'app n'est pas relancée au bon moment)
         TelegramAlertQueue.scheduleFlush(this)
 
-        CriticalAlarmScheduler.ensureScheduled(this)
+        // ✅ Planification des alarmes critiques (et annulation des periodic works critiques si exact alarms autorisées)
+        CriticalAlarmScheduler.ensureScheduled(applicationContext)
     }
 
     private fun ensureInactivityChannel() = InactivityChecker.ensureChannel(this)

@@ -195,7 +195,8 @@ class MainActivity : AppCompatActivity() {
 
         NotificationPermissionHelper.requestPermissionIfNeeded(this)
 
-        CriticalAlarmScheduler.ensureScheduled(this)
+        // ✅ utiliser applicationContext (plus stable que Activity context)
+        CriticalAlarmScheduler.ensureScheduled(applicationContext)
         maybePromptForExactAlarms()
 
         findViewById<Button>(R.id.btn_materials).setOnClickListener {
@@ -300,6 +301,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+
+        CriticalAlarmScheduler.ensureScheduled(applicationContext)
 
         tvRtcTime.text = "RTC : --:--"
         lastRtcIp = null
