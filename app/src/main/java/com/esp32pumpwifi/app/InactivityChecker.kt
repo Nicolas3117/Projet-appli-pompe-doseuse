@@ -3,6 +3,8 @@ package com.esp32pumpwifi.app
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -129,6 +131,8 @@ object InactivityChecker {
     }
 
     private fun showNotification(context: Context, moduleId: Long, message: String) {
+        ensureChannel(context)
+
         // requestCode stable par module -> évite tout effet de bord entre modules
         val requestCode = (moduleId % 10000).toInt()
 
@@ -164,8 +168,21 @@ object InactivityChecker {
         val channel = NotificationChannel(
             CHANNEL_ID,
             CHANNEL_NAME,
-            NotificationManager.IMPORTANCE_DEFAULT
-        )
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            val soundUri =
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 400, 200, 400)
+            setSound(soundUri, audioAttributes)
+        }
+
         manager.createNotificationChannel(channel)
     }
 }
