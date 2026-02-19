@@ -2,7 +2,6 @@ package com.esp32pumpwifi.app
 
 import android.content.Intent
 import android.os.Bundle
-import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
@@ -16,9 +15,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -30,7 +26,6 @@ import java.net.URL
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
-import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -199,17 +194,8 @@ class MainActivity : AppCompatActivity() {
 
         NotificationPermissionHelper.requestPermissionIfNeeded(this)
 
-        val periodicWork =
-            PeriodicWorkRequestBuilder<TankRecalcWorker>(15, TimeUnit.MINUTES)
-                .addTag("tank_recalc")
-                .build()
-
-        WorkManager.getInstance(this)
-            .enqueueUniquePeriodicWork(
-                "tank_recalc",
-                ExistingPeriodicWorkPolicy.KEEP,
-                periodicWork
-            )
+        CriticalAlarmScheduler.ensureScheduled(this)
+        maybePromptForExactAlarms()
 
         findViewById<Button>(R.id.btn_materials).setOnClickListener {
             startActivity(Intent(this, MaterielsActivity::class.java))
@@ -294,6 +280,21 @@ class MainActivity : AppCompatActivity() {
         manualDoseButton.setOnClickListener {
             startActivity(Intent(this, ManualDoseTabsActivity::class.java))
         }
+    }
+
+    private fun maybePromptForExactAlarms() {
+        if (ExactAlarmPermissionHelper.canScheduleExactAlarms(this)) return
+
+        AlertDialog.Builder(this)
+            .setTitle("Autoriser alarmes exactes")
+            .setMessage(
+                "Pour garantir les alertes critiques en veille, autorisez les alarmes exactes dans les réglages Android."
+            )
+            .setPositiveButton("Autoriser") { _, _ ->
+                ExactAlarmPermissionHelper.openExactAlarmSettings(this)
+            }
+            .setNegativeButton("Plus tard", null)
+            .show()
     }
 
     override fun onResume() {

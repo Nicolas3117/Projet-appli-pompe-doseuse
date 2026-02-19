@@ -16,6 +16,10 @@
     <uses-permission
         android:name="android.permission.POST_NOTIFICATIONS"
         tools:targetApi="33" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        tools:targetApi="31" />
 
     <application
         android:name=".PumpApplication"
@@ -99,6 +103,24 @@
             android:name=".PlanningActivity"
             android:exported="false"
             android:windowSoftInputMode="stateHidden|adjustResize" />
+
+        <receiver
+            android:name=".InactivityAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".TankAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".CriticalAlarmsBootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 
