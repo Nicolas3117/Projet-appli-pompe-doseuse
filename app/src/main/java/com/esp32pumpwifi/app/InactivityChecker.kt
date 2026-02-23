@@ -26,8 +26,8 @@ object InactivityChecker {
     private const val CHANNEL_NAME = "Rappels d'ouverture"
 
     private const val NOTIF_BASE = 70123
-    private const val MIN_INACTIVITY_DAYS = 25
-    private const val MAX_INACTIVITY_DAYS = 32
+    private const val MIN_INACTIVITY_DAYS = 1
+    private const val MAX_INACTIVITY_DAYS = 4
 
     suspend fun run(context: Context) {
         val appContext = context.applicationContext
@@ -71,7 +71,7 @@ object InactivityChecker {
             if (prefs.getString(moduleLastSentDayKey, "") == todayKey) continue
 
             val baseMessage =
-                if (days in 25..29) {
+                if (days in 1..2) {
                     "Appli non ouverte depuis $days jours.\n" +
                             "Ouvrez « Contrôle des pompes » du module concerné pour actualiser le suivi."
                 } else {

@@ -43,10 +43,12 @@ class MainActivity : AppCompatActivity() {
     private var connectionJob: Job? = null
     private var uiRefreshJob: Job? = null
     private var hasShownNotFoundPopup = false
-    private var hasShownOver30DaysPopup = false
 
-    // ✅ popup gratifiant J+2 (une seule fois par session)
-    private var hasShown25to29Popup = false
+    // ✅ popup fenêtre 2 (J+3 à J+4) – une seule fois par session
+    private var hasShownSecondInactivityPopup = false
+
+    // ✅ popup fenêtre 1 (J+1 à J+2) – une seule fois par session
+    private var hasShownFirstInactivityPopup = false
 
     private var lastRtcIp: String? = null
     private var rtcFetchJob: Job? = null
@@ -326,15 +328,15 @@ class MainActivity : AppCompatActivity() {
         if (lastOpenForModule != 0L) {
             val days = ((now - lastOpenForModule) / DAY_MS).toInt()
 
-            // ✅ TEST SEUILS : J+2 (gratifiant) et J+3 (alerte)
-            if (days == 2 && !hasShown25to29Popup) {
-                hasShown25to29Popup = true
+            // ✅ TEST: popup alignée avec les fenêtres de notif
+            if (days in 1..2 && !hasShownFirstInactivityPopup) {
+                hasShownFirstInactivityPopup = true
                 AlertDialog.Builder(this)
                     .setTitle("Actualisation effectuée")
                     .setMessage("Suivi des réservoirs actualisé.")
                     .setPositiveButton("OK", null)
                     .show()
-            } else if (days >= 3 && !hasShownOver30DaysPopup) {
+            } else if (days in 3..4 && !hasShownSecondInactivityPopup) {
                 maybeShowOver30DaysPopup()
             }
         }
@@ -579,8 +581,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun maybeShowOver30DaysPopup() {
-        if (hasShownOver30DaysPopup) return
-        hasShownOver30DaysPopup = true
+        // ✅ on réutilise le flag "fenêtre 2"
+        if (hasShownSecondInactivityPopup) return
+        hasShownSecondInactivityPopup = true
 
         AlertDialog.Builder(this)
             .setTitle("Application non ouverte longtemps")
