@@ -20,8 +20,6 @@ import kotlinx.coroutines.withContext
 object InactivityChecker {
 
     private const val PREFS_NAME = "prefs"
-    private const val KEY_LAST_APP_OPEN_MS = "last_app_open_ms"
-
     private const val CHANNEL_ID = "app_inactivity_reminders"
     private const val CHANNEL_NAME = "Rappels d'ouverture"
 
@@ -51,14 +49,7 @@ object InactivityChecker {
             val moduleLastOpenKey = "esp_${moduleId}_last_open_ms"
             val moduleLastSentDayKey = "esp_${moduleId}_inactivity_last_sent_day"
 
-            var lastOpen = prefs.getLong(moduleLastOpenKey, 0L)
-            if (lastOpen == 0L) {
-                lastOpen = prefs.getLong(KEY_LAST_APP_OPEN_MS, 0L)
-                if (lastOpen != 0L) {
-                    prefs.edit().putLong(moduleLastOpenKey, lastOpen).apply()
-                }
-            }
-
+            val lastOpen = prefs.getLong(moduleLastOpenKey, 0L)
             if (lastOpen == 0L) continue
 
             val lastOpenDate = Instant.ofEpochMilli(lastOpen)

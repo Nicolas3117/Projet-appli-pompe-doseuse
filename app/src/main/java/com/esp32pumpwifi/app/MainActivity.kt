@@ -356,9 +356,7 @@ class MainActivity : AppCompatActivity() {
         tvActiveModule.text = "Sélectionné : ${activeModule.displayName}"
 
         val moduleKey = "esp_${activeModule.id}_last_open_ms"
-        val lastOpenForModule =
-            prefs.getLong(moduleKey, 0L).takeIf { it != 0L }
-                ?: prefs.getLong("last_app_open_ms", 0L)
+        val lastOpenForModule = prefs.getLong(moduleKey, 0L)
 
         if (lastOpenForModule != 0L) {
             val lastOpenDate = Instant.ofEpochMilli(lastOpenForModule)
@@ -451,9 +449,7 @@ class MainActivity : AppCompatActivity() {
         dailySummaryContainer.visibility = View.VISIBLE
 
         val moduleKey = "esp_${activeModule.id}_last_open_ms"
-        val lastOpenForModule =
-            prefs.getLong(moduleKey, 0L).takeIf { it != 0L }
-                ?: prefs.getLong("last_app_open_ms", 0L)
+        val lastOpenForModule = prefs.getLong(moduleKey, 0L)
 
         if (lastOpenForModule != 0L) {
             val lastOpenDate = Instant.ofEpochMilli(lastOpenForModule)
