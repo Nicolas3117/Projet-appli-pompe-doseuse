@@ -295,7 +295,20 @@ class MainActivity : AppCompatActivity() {
 
         val modules = Esp32Manager.getAll(this)
         val targetExists = modules.any { it.id == targetId }
-        if (!targetExists) return
+        if (!targetExists) {
+            var changed = false
+            modules.forEach { module ->
+                if (module.isActive) {
+                    module.isActive = false
+                    changed = true
+                }
+            }
+
+            if (changed) {
+                modules.forEach { Esp32Manager.update(this, it) }
+            }
+            return
+        }
 
         var changed = false
         modules.forEach { module ->
