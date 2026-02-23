@@ -280,7 +280,13 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+
+        // 1) applique le module ciblé par la notif (si présent)
         applyTargetModuleFromIntent(intent)
+
+        // 2) sécurisation : si l’Activity est déjà visible et que onResume ne se relance pas,
+        //    on force un refresh immédiat sur le module actif (sans relancer de boucle, sans casser le reste).
+        refreshImmediatelyForActiveModule()
     }
 
     private fun applyTargetModuleFromIntent(intent: Intent?) {
@@ -325,6 +331,7 @@ class MainActivity : AppCompatActivity() {
 
         CriticalAlarmScheduler.ensureScheduled(applicationContext)
 
+        // reset RTC UI fetch state
         tvRtcTime.text = "RTC : --:--"
         lastRtcIp = null
         rtcFetchJob?.cancel()
@@ -406,6 +413,88 @@ class MainActivity : AppCompatActivity() {
                     delay(UI_REFRESH_MS)
                 }
             }
+    }
+
+    /**
+     * Sécurisation : forcer immédiatement l’affichage / recalc / watcher sur le module actif
+     * quand on arrive via notif alors que l’activité est déjà au premier plan.
+     *
+     * - Ne relance pas de boucle uiRefreshJob
+     * - Annule proprement l’ancien watcher + RTC fetch
+     * - Rejoue exactement le flux “onResume” utile (popup + prefs + recalc + UI + watcher)
+     */
+    private fun refreshImmediatelyForActiveModule() {
+        // stop/cleanup ce qui pourrait encore tourner pour un ancien module
+        stopConnectionWatcher()
+        rtcFetchJob?.cancel()
+        rtcFetchJob = null
+        lastRtcIp = null
+        tvRtcTime.text = "RTC : --:--"
+
+        val now = System.currentTimeMillis()
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val todayKey = LocalDate.now(ZoneId.systemDefault()).toString()
+
+        val activeModule = Esp32Manager.getActive(this)
+
+        if (activeModule == null) {
+            tvActiveModule.text = "Sélectionné : aucun module"
+            updateConnectionUi(null)
+            setManualButtonsEnabled(false)
+            tankSummaryContainer.visibility = View.GONE
+            dailySummaryContainer.visibility = View.GONE
+            return
+        }
+
+        tvActiveModule.text = "Sélectionné : ${activeModule.displayName}"
+        tankSummaryContainer.visibility = View.VISIBLE
+        dailySummaryContainer.visibility = View.VISIBLE
+
+        val moduleKey = "esp_${activeModule.id}_last_open_ms"
+        val lastOpenForModule =
+            prefs.getLong(moduleKey, 0L).takeIf { it != 0L }
+                ?: prefs.getLong("last_app_open_ms", 0L)
+
+        if (lastOpenForModule != 0L) {
+            val lastOpenDate = Instant.ofEpochMilli(lastOpenForModule)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+            val todayDate = LocalDate.parse(todayKey)
+            val days = ChronoUnit.DAYS.between(lastOpenDate, todayDate).toInt()
+
+            val popup1ShownKey = "esp_${activeModule.id}_popup1_last_day_shown"
+            val popup2ShownKey = "esp_${activeModule.id}_popup2_last_day_shown"
+            val popup1AlreadyShownToday = prefs.getString(popup1ShownKey, "") == todayKey
+            val popup2AlreadyShownToday = prefs.getString(popup2ShownKey, "") == todayKey
+
+            if (days in 1..2 && !popup1AlreadyShownToday) {
+                AlertDialog.Builder(this)
+                    .setTitle("Actualisation effectuée")
+                    .setMessage("Suivi des réservoirs actualisé.")
+                    .setPositiveButton("OK", null)
+                    .show()
+
+                prefs.edit().putString(popup1ShownKey, todayKey).apply()
+            } else if (days in 3..4 && !popup2AlreadyShownToday) {
+                maybeShowOver30DaysPopup()
+                prefs.edit().putString(popup2ShownKey, todayKey).apply()
+            }
+        }
+
+        // Marque “ouvert maintenant” (module + global)
+        prefs.edit()
+            .putLong("last_app_open_ms", now)
+            .putLong(moduleKey, now)
+            .apply()
+
+        // Recalc + UI + watcher sur le bon module
+        TankScheduleHelper.recalculateFromLastTime(this, activeModule.id)
+        updateTankSummary(activeModule)
+        updateDailySummary(activeModule)
+
+        updateConnectionUi(null)
+        setManualButtonsEnabled(false)
+        startConnectionWatcher(activeModule)
     }
 
     override fun onPause() {
