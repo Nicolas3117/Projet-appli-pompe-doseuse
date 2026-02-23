@@ -134,13 +134,14 @@ object InactivityChecker {
         ensureChannel(context)
 
         // requestCode stable par module -> évite tout effet de bord entre modules
-        val requestCode = (moduleId % 10000).toInt()
+        val requestCode = moduleRequestCode(moduleId)
 
         val pendingIntent = PendingIntent.getActivity(
             context,
             requestCode,
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(MainActivity.EXTRA_TARGET_MODULE_ID, moduleId)
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -155,8 +156,13 @@ object InactivityChecker {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        val notifId = NOTIF_BASE + (moduleId % 10000).toInt()
+        val notifId = NOTIF_BASE + requestCode
         NotificationManagerCompat.from(context).notify(notifId, notification)
+    }
+
+    private fun moduleRequestCode(moduleId: Long): Int {
+        val mixed = moduleId xor (moduleId ushr 32)
+        return (mixed and 0x7FFFFFFF).toInt()
     }
 
     fun ensureChannel(context: Context) {

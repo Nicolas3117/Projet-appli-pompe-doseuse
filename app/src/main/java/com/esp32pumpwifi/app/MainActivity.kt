@@ -25,7 +25,9 @@ import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -44,21 +46,16 @@ class MainActivity : AppCompatActivity() {
     private var uiRefreshJob: Job? = null
     private var hasShownNotFoundPopup = false
 
-    // ✅ popup fenêtre 2 (J+3 à J+4) – une seule fois par session
-    private var hasShownSecondInactivityPopup = false
-
-    // ✅ popup fenêtre 1 (J+1 à J+2) – une seule fois par session
-    private var hasShownFirstInactivityPopup = false
-
     private var lastRtcIp: String? = null
     private var rtcFetchJob: Job? = null
 
     // pour tenter un retour STA automatique sans appuyer sur "+"
     private var lastStaProbeMs = 0L
 
-    private companion object {
+    companion object {
+        const val EXTRA_TARGET_MODULE_ID = "extra_target_module_id"
+
         private const val AP_IP = "192.168.4.1"
-        private const val DAY_MS = 86_400_000L
 
         private const val CONNECTION_RETRY_DELAY_MS = 400L
 
@@ -163,6 +160,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        applyTargetModuleFromIntent(intent)
 
         val scrollView = findViewById<ScrollView>(R.id.pump_scroll)
         tvActiveModule = findViewById(R.id.tv_active_module)
@@ -278,6 +277,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyTargetModuleFromIntent(intent)
+    }
+
+    private fun applyTargetModuleFromIntent(intent: Intent?) {
+        val targetId = intent?.getLongExtra(EXTRA_TARGET_MODULE_ID, Long.MIN_VALUE) ?: return
+        if (targetId == Long.MIN_VALUE) return
+
+        val modules = Esp32Manager.getAll(this)
+        val targetExists = modules.any { it.id == targetId }
+        if (!targetExists) return
+
+        var changed = false
+        modules.forEach { module ->
+            val shouldBeActive = module.id == targetId
+            if (module.isActive != shouldBeActive) {
+                module.isActive = shouldBeActive
+                changed = true
+            }
+        }
+
+        if (changed) {
+            modules.forEach { Esp32Manager.update(this, it) }
+        }
+    }
+
     private fun maybePromptForExactAlarms() {
         if (ExactAlarmPermissionHelper.canScheduleExactAlarms(this)) return
 
@@ -305,6 +332,7 @@ class MainActivity : AppCompatActivity() {
 
         val now = System.currentTimeMillis()
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val todayKey = LocalDate.now(ZoneId.systemDefault()).toString()
 
         val activeModule = Esp32Manager.getActive(this)
 
@@ -326,18 +354,28 @@ class MainActivity : AppCompatActivity() {
                 ?: prefs.getLong("last_app_open_ms", 0L)
 
         if (lastOpenForModule != 0L) {
-            val days = ((now - lastOpenForModule) / DAY_MS).toInt()
+            val lastOpenDate = Instant.ofEpochMilli(lastOpenForModule)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+            val todayDate = LocalDate.parse(todayKey)
+            val days = ChronoUnit.DAYS.between(lastOpenDate, todayDate).toInt()
 
-            // ✅ TEST: popup alignée avec les fenêtres de notif
-            if (days in 1..2 && !hasShownFirstInactivityPopup) {
-                hasShownFirstInactivityPopup = true
+            val popup1ShownKey = "esp_${activeModule.id}_popup1_last_day_shown"
+            val popup2ShownKey = "esp_${activeModule.id}_popup2_last_day_shown"
+            val popup1AlreadyShownToday = prefs.getString(popup1ShownKey, "") == todayKey
+            val popup2AlreadyShownToday = prefs.getString(popup2ShownKey, "") == todayKey
+
+            if (days in 1..2 && !popup1AlreadyShownToday) {
                 AlertDialog.Builder(this)
                     .setTitle("Actualisation effectuée")
                     .setMessage("Suivi des réservoirs actualisé.")
                     .setPositiveButton("OK", null)
                     .show()
-            } else if (days in 3..4 && !hasShownSecondInactivityPopup) {
+
+                prefs.edit().putString(popup1ShownKey, todayKey).apply()
+            } else if (days in 3..4 && !popup2AlreadyShownToday) {
                 maybeShowOver30DaysPopup()
+                prefs.edit().putString(popup2ShownKey, todayKey).apply()
             }
         }
 
@@ -581,10 +619,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun maybeShowOver30DaysPopup() {
-        // ✅ on réutilise le flag "fenêtre 2"
-        if (hasShownSecondInactivityPopup) return
-        hasShownSecondInactivityPopup = true
-
         AlertDialog.Builder(this)
             .setTitle("Application non ouverte longtemps")
             .setMessage(
