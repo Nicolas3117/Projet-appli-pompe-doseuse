@@ -324,10 +324,17 @@ class CalibrationPumpFragment : Fragment() {
             values["BUILD"] = buildValue
         }
 
-        val orderedKeys = listOf("ID", "FW", "MODE", "IP", "PUMP_ID", "MAC", "BUILD")
+        val orderedKeys = listOf("ID", "FW", "MODE", "IP", "RSSI", "PUMP_ID", "MAC", "BUILD")
         val lines = orderedKeys.mapNotNull { key ->
             val value = values[key]
-            if (value.isNullOrBlank()) null else "$key : $value"
+            if (value.isNullOrBlank()) {
+                null
+            } else if (key == "RSSI") {
+                val rssiInt = value.toIntOrNull()
+                if (rssiInt != null && rssiInt != 0) "$key : $value dBm" else "$key : $value"
+            } else {
+                "$key : $value"
+            }
         }
 
         return if (lines.isEmpty()) trimmed else lines.joinToString("\n")
